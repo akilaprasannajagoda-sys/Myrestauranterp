@@ -17,8 +17,12 @@
     "appId": "com.restauranterp.pos",
     "productName": "Restaurant ERP POS",
     "win": {
-      "target": "nsis",
-      "icon": "icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
