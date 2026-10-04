@@ -22,7 +22,9 @@ jobs:
       run: npm install
 
     - name: Build Windows Executable Installer
-      run: npx electron-builder --win
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: npx electron-builder --win --publish never
 
     - name: Upload .EXE Artifact for Download
       uses: actions/upload-artifact@v4
