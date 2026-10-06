@@ -5,11 +5,11 @@
 import { erpState, currentTenantInfo } from './state.js';
 import { showLiveToast } from './utils.js';
 
-// ESC/POS Commands
+// ESC/POS Standard Commands
 const ESC = "\x1B";
 const GS = "\x1D";
 const CMD_INIT = ESC + "@";
-const CMD_CUT = GS + "V\x41\x00"; // Full Cut
+const CMD_CUT = GS + "V\x41\x03"; // Feed & Full Cut
 const CMD_DRAWER = ESC + "p\x00\x19\xFA"; // Kick Cash Drawer
 const CMD_BOLD_ON = ESC + "E\x01";
 const CMD_BOLD_OFF = ESC + "E\x00";
@@ -81,7 +81,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   }
   
   text += CMD_CENTER + "\n" + footer + "\n";
-  text += "Software by Restaurant ERP Enterprise\n\n\n\n";
+  text += "Software by Restaurant ERP Enterprise\n\n\n\n\n\n";
   text += CMD_DRAWER; // Pop open cash drawer
   text += CMD_CUT; // Cut paper
   
@@ -110,7 +110,7 @@ export function formatKOTRawText(kot, stationLabel = "") {
   });
   
   text += "================================================\n";
-  text += CMD_CENTER + "PREPARE FRESH & QUICK\n\n\n\n";
+  text += CMD_CENTER + "PREPARE FRESH & QUICK\n\n\n\n\n\n";
   text += CMD_CUT;
   
   return text;
@@ -118,26 +118,28 @@ export function formatKOTRawText(kot, stationLabel = "") {
 
 // 3. SILENT DIRECT PRINT DISPATCHER (.EXE IPC / WEB FALLBACK)
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
-  // Check if running inside Electron .exe Desktop Environment
+  // 1. Check if running inside Electron Desktop App (.exe)
   if (window.electronAPI && window.electronAPI.printSilent) {
     try {
-      await window.electronAPI.printSilent({
+      const res = await window.electronAPI.printSilent({
         printerName: targetDeviceName,
         rawText: rawContent,
         htmlId: htmlElementId
       });
-      return true;
+      if (res && res.success) return true;
     } catch (e) {
-      console.warn("Electron silent print failed, falling back:", e);
+      console.warn("Electron direct print fallback:", e);
     }
   }
   
-  // Fallback for Web Browser
+  // 2. Fallback for Web Browser with delay for DOM rendering
   if (htmlElementId) {
     const el = document.getElementById(htmlElementId);
     if (el) {
       el.style.display = "block";
+      await new Promise(resolve => setTimeout(resolve, 80)); // Allow styles to calculate
       window.print();
+      await new Promise(resolve => setTimeout(resolve, 100));
       el.style.display = "none";
     }
   }
@@ -156,7 +158,7 @@ export async function testDirectPrinter(slotKey) {
     `Label: ${labelName}\n` +
     `Windows Device: ${devName}\n` +
     `Status: 100% DIRECT CONNECTION OK\n` +
-    `Time: ${new Date().toLocaleString()}\n\n\n\n` + CMD_CUT;
+    `Time: ${new Date().toLocaleString()}\n\n\n\n\n\n` + CMD_CUT;
   
   try {
     await sendDirectSilentPrint(devName, testContent, "receiptModal");
