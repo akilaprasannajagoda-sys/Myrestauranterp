@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 09: STAFF, ATTENDANCE KIOSK (WAKE-LOCK & AUTO-RETRY), PAYROLL ENGINE
+// MODULE 09: STAFF, ATTENDANCE KIOSK (OVERNIGHT SHIFTS SAFE), PAYROLL ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans } from './state.js';
@@ -105,6 +105,7 @@ export function captureInstantCameraSnapshot() {
   }
 }
 
+// 🔒 ROBUST ATTENDANCE ENGINE (SUPPORTS OVERNIGHT & MIDNIGHT CROSSOVER SHIFTS)
 export async function submitKioskAttendance(mode) {
   const pinInput = document.getElementById("kioskPinInput");
   const enteredPin = (pinInput?.value || "").trim();
@@ -129,17 +130,25 @@ export async function submitKioskAttendance(mode) {
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
   const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const stdShift = parseFloat(erpState.settings.shiftHours || 8.0);
+  const stdShift = parseFloat(erpState.settings?.shiftHours || 8.0);
 
-  const existingAttKey = Object.keys(erpState.attendance || {}).find(k => {
-    const a = erpState.attendance[k];
-    return a.employeeId === empKey && a.date === dateStr;
+  // Find any active uncompleted Check-In record (Within the last 36 hours for overnight shifts)
+  const openAttendanceEntries = Object.entries(erpState.attendance || {}).filter(([k, a]) => {
+    if (a.employeeId !== empKey) return false;
+    if (a.status !== "Present" || a.outTime) return false;
+    const inTimeMs = new Date(a.inTimestamp || (a.date + " " + (a.inTime || "00:00"))).getTime();
+    const hoursElapsed = (now.getTime() - inTimeMs) / (1000 * 60 * 60);
+    return hoursElapsed <= 36; // Valid open shift window
   });
+
+  // Sort to pick the latest open Check-In
+  openAttendanceEntries.sort((a, b) => new Date(b[1].inTimestamp || b[1].createdAt).getTime() - new Date(a[1].inTimestamp || a[1].createdAt).getTime());
+  const activeOpenRecord = openAttendanceEntries.length > 0 ? openAttendanceEntries[0] : null;
 
   try {
     if (mode === "in") {
-      if (existingAttKey) {
-        alert(`⚠️ ${emp.name} අද දිනට දැනටමත් Check-In වී ඇත.`);
+      if (activeOpenRecord) {
+        alert(`⚠️ ${emp.name} දැනටමත් Check-In වී ඇත (${activeOpenRecord[1].date} දින ${activeOpenRecord[1].inTime}). පළමුව Check-Out වන්න.`);
         if (pinInput) pinInput.value = "";
         return;
       }
@@ -166,14 +175,15 @@ export async function submitKioskAttendance(mode) {
       }
       showLiveToast("🟢 Check-In Successful", `${emp.name} (${emp.role}) පැමිණීම සටහන් විය.`, "success", "fa-circle-check");
     } else {
-      if (!existingAttKey) {
-        alert(`⚠️ ${emp.name} අද දින Check-In වී නොමැත.`);
+      // Check-Out Action
+      if (!activeOpenRecord) {
+        alert(`⚠️ ${emp.name} සක්‍රීය Check-In එකක් හමු නොවීය. කරුණාකර පළමුව Check-In වන්න.`);
         if (pinInput) pinInput.value = "";
         return;
       }
 
-      const attRec = erpState.attendance[existingAttKey];
-      const inMs = new Date(attRec.inTimestamp || attRec.createdAt).getTime();
+      const [existingAttKey, attRec] = activeOpenRecord;
+      const inMs = new Date(attRec.inTimestamp || (attRec.date + " " + attRec.inTime)).getTime();
       const outMs = now.getTime();
       const workedHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
       const otHours = Math.max(0, workedHours - stdShift);
@@ -182,6 +192,7 @@ export async function submitKioskAttendance(mode) {
         await updateFn(dbRef(`tenants/${currentTenant}/attendance/${existingAttKey}`), {
           outTime: timeStr,
           outTimestamp: now.toISOString(),
+          outDate: dateStr, // Captures cross-day checkout date
           outSnapshot: snapshotDataUrl,
           totalWorkedHours: parseFloat(workedHours.toFixed(2)),
           otHours: parseFloat(otHours.toFixed(2)),
@@ -189,7 +200,7 @@ export async function submitKioskAttendance(mode) {
         });
       }
 
-      showLiveToast("🔴 Check-Out Successful", `${emp.name} පිටවීම සටහන් විය. (${workedHours.toFixed(1)} hrs)`, "success", "fa-door-open");
+      showLiveToast("🔴 Check-Out Successful", `${emp.name} පිටවීම සටහන් විය. (${workedHours.toFixed(1)} hrs worked)`, "success", "fa-door-open");
     }
 
     todayLiveScans.unshift({
@@ -551,7 +562,7 @@ export function renderAttendanceLogsTable() {
     return;
   }
 
-  list.sort((a, b) => new Date(b[1].date + " " + (b[1].inTime || "00:00")).getTime() - new Date(a[1].date + " " + (a[1].inTime || "00:00")).getTime());
+  list.sort((a, b) => new Date(b[1].inTimestamp || (b[1].date + " " + (b[1].inTime || "00:00"))).getTime() - new Date(a[1].inTimestamp || (a[1].date + " " + (a[1].inTime || "00:00"))).getTime());
 
   tbody.innerHTML = "";
   list.forEach(([id, att]) => {
@@ -562,7 +573,7 @@ export function renderAttendanceLogsTable() {
       <td class="p-2">
         ${att.snapshot ? `<img src="${att.snapshot}" class="w-7 h-7 rounded-lg object-cover border">` : `<div class="w-7 h-7 rounded-lg bg-gray-200 flex items-center justify-center text-[10px]"><i class="fa-solid fa-user"></i></div>`}
       </td>
-      <td class="p-3.5 font-semibold text-gray-600">${att.date}</td>
+      <td class="p-3.5 font-semibold text-gray-600">${att.date}${att.outDate && att.outDate !== att.date ? ' &rarr; ' + att.outDate : ''}</td>
       <td class="p-3.5 font-mono font-bold text-blue-600">${att.empId || 'EMP'}</td>
       <td class="p-3.5 font-bold text-gray-800">${att.employeeName}</td>
       <td class="p-3.5 font-mono text-green-700 font-bold">${att.inTime || '--:--'}</td>
