@@ -1,5 +1,3 @@
-
-
 // ==========================================================================
 // RESTAURANT ERP - ENTERPRISE 10/10 ZERO-LAG HIGH-SPEED RESTAURANT PLATFORM
 // ==========================================================================
@@ -84,21 +82,24 @@ function updateDeviceTerminalBadgeUI() {
   }
 }
 
-// BULLETPROOF SECONDARY AUTH ENGINE
+// 🔒 BULLETPROOF SECONDARY AUTH ENGINE (NO UI FREEZE / NO OWNER LOGOUT)
 async function createStaffAuthAccount(email, password, role, staffName, tenantId) {
-  const tempAppName = "SecondaryAuthApp_" + Date.now();
+  const tempAppName = "SecondaryAuthApp_" + Date.now() + "_" + Math.random().toString(36).substring(7);
   const tempApp = initializeApp(firebaseConfig, tempAppName);
   const tempAuth = getAuth(tempApp);
+  const tempDb = getDatabase(tempApp);
   
   try {
     const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
     const subUser = cred.user;
 
-    await set(ref(dbInstance, `users/${subUser.uid}`), {
+    // Write user profile directly via temp instance context
+    await set(ref(tempDb, `users/${subUser.uid}`), {
       email: email,
       tenantId: tenantId,
       ownerName: staffName,
-      role: role
+      role: role,
+      createdAt: new Date().toISOString()
     });
 
     await signOut(tempAuth);
@@ -1110,4 +1111,3 @@ window.executeItemSplitToNewBill = POS.executeItemSplitToNewBill;
 window.openShiftFloatModal = POS.openShiftFloatModal;
 window.closeShiftFloatModal = POS.closeShiftFloatModal;
 window.handleShiftFloatSubmit = POS.handleShiftFloatSubmit;
-
