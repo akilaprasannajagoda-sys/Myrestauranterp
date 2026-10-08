@@ -1,33 +1,30 @@
-name: Build Windows EXE
+name: Build and Auto-Release POS
 
 on:
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches:
+      - main
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js Environment
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-    - name: Install Dependencies
-      run: npm install
+      - name: Install dependencies
+        run: npm install
 
-    - name: Build Windows Executable Installer
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: npx electron-builder --win --publish never
-
-    - name: Upload .EXE Artifact for Download
-      uses: actions/upload-artifact@v4
-      with:
-        name: Restaurant-ERP-Windows-Setup
-        path: dist/*.exe
+      - name: Build and Publish Electron App
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build -- --publish always
