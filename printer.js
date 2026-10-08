@@ -82,13 +82,13 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   
   text += CMD_CENTER + "\n" + footer + "\n";
   text += "Software by Restaurant ERP Enterprise\n\n\n\n\n\n";
-  text += CMD_DRAWER; // Pop open cash drawer
-  text += CMD_CUT; // Cut paper
+  text += CMD_DRAWER;
+  text += CMD_CUT;
   
   return text;
 }
 
-// 2. FORMAT RAW TEXT KOT TICKET WITH COOKING NOTES
+// 2. FORMAT RAW TEXT KOT TICKET
 export function formatKOTRawText(kot, stationLabel = "") {
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `*** KITCHEN ORDER TICKET (KOT) ***\n` + CMD_BOLD_OFF;
@@ -116,8 +116,16 @@ export function formatKOTRawText(kot, stationLabel = "") {
   return text;
 }
 
-// 3. SILENT DIRECT PRINT DISPATCHER (.EXE IPC / WEB FALLBACK)
+// 3. SILENT DIRECT PRINT DISPATCHER
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
+  const el = htmlElementId ? document.getElementById(htmlElementId) : null;
+  
+  // 🟢 Print එක යැවීමට පෙර Modal එක Render කර ගැනීම
+  if (el) {
+    el.style.display = "block";
+    await new Promise(r => setTimeout(r, 200));
+  }
+  
   // 1. Check if running inside Electron Desktop App (.exe)
   if (window.electronAPI && window.electronAPI.printSilent) {
     try {
@@ -126,42 +134,62 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
         rawText: rawContent,
         htmlId: htmlElementId
       });
+      if (el) el.style.display = "none";
       if (res && res.success) return true;
     } catch (e) {
       console.warn("Electron direct print fallback:", e);
+      if (el) el.style.display = "none";
     }
   }
   
-  // 2. Fallback for Web Browser with delay for DOM rendering
-  if (htmlElementId) {
-    const el = document.getElementById(htmlElementId);
-    if (el) {
-      el.style.display = "block";
-      await new Promise(resolve => setTimeout(resolve, 80)); // Allow styles to calculate
-      window.print();
-      await new Promise(resolve => setTimeout(resolve, 100));
-      el.style.display = "none";
-    }
+  // 2. Fallback for Web Browser
+  if (el) {
+    window.print();
+    await new Promise(r => setTimeout(r, 100));
+    el.style.display = "none";
   }
   return true;
 }
 
-// 4. TEST PRINT HARDWARE PRINTER
+// 4. TEST PRINT HARDWARE PRINTER (WITH SAMPLE BILL DATA)
 export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
   const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "POS-80";
   const labelName = document.getElementById(`${slotKey}_name`)?.value.trim() || pr?.name || slotKey;
   
-  const testContent = CMD_INIT + CMD_CENTER + CMD_BOLD_ON +
-    `*** HARDWARE TEST PRINT ***\n` + CMD_BOLD_OFF +
-    `Slot: ${slotKey.toUpperCase()}\n` +
-    `Label: ${labelName}\n` +
-    `Windows Device: ${devName}\n` +
-    `Status: 100% DIRECT CONNECTION OK\n` +
-    `Time: ${new Date().toLocaleString()}\n\n\n\n\n\n` + CMD_CUT;
+  const rHotel = document.getElementById("receiptHotel");
+  const rOrderId = document.getElementById("receiptOrderId");
+  const rDate = document.getElementById("receiptDate");
+  const rType = document.getElementById("receiptType");
+  const rItems = document.getElementById("receiptItems");
+  const rSub = document.getElementById("receiptSubtotal");
+  const rTotal = document.getElementById("receiptTotal");
+  const rPay = document.getElementById("receiptPayDetails");
+  
+  if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
+  if (rOrderId) rOrderId.innerText = `HARDWARE TEST PRINT`;
+  if (rDate) rDate.innerText = `Date: ${new Date().toLocaleString()}`;
+  if (rType) rType.innerText = `Station: ${labelName} (${devName})`;
+  if (rItems) {
+    rItems.innerHTML = `
+      <div class="flex justify-between py-1 border-b border-black">
+        <span class="w-1/2 font-bold">1. Printer Connection</span>
+        <span class="w-1/4 text-right">OK</span>
+        <span class="w-1/4 text-right font-bold">100%</span>
+      </div>
+      <div class="flex justify-between py-1 border-b border-black">
+        <span class="w-1/2 font-bold">2. Thermal Head Test</span>
+        <span class="w-1/4 text-right">OK</span>
+        <span class="w-1/4 text-right font-bold">PASS</span>
+      </div>
+    `;
+  }
+  if (rSub) rSub.innerText = `Rs. 0.00`;
+  if (rTotal) rTotal.innerText = `TEST PASSED`;
+  if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** HARDWARE TEST SUCCESSFUL ***</div>`;
   
   try {
-    await sendDirectSilentPrint(devName, testContent, "receiptModal");
+    await sendDirectSilentPrint(devName, "", "receiptModal");
     showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
   } catch (err) {
     alert("Test Print Error: " + err.message);
