@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
 let mainWindow;
@@ -10,33 +11,56 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: "Restaurant ERP - SME Enterprise Edition",
-    autoHideMenuBar: true, // වින්ඩෝස් Menu bar එක සඟවයි (Clean POS Screen)
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false // Local ES Modules සහ Offline DB සඳහා සහය
+      sandbox: false
     }
   });
   
-  mainWindow.maximize(); // ඇප් එක Open වන විටම Fullscreen මැක්සිමයිස් වේ
+  mainWindow.maximize();
   mainWindow.loadFile('index.html');
   
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // 🔄 App එක Open වූ විට පසුබිමෙන් GitHub Updates පරීක්ෂා කිරීම
+  mainWindow.once('ready-to-show', () => {
+    autoUpdater.autoDownload = true; // Background එකේ තනියම Download වීම
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.log("Update check error:", err);
+    });
+  });
 }
+
+// 🔔 Update එකක් Download වී අවසන් වූ විට Cashier ගෙන් විමසීම
+autoUpdater.on('update-downloaded', (info) => {
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: '🎉 Update Ready!',
+    message: `පද්ධතියේ නව Version (${info.version}) එක සාර්ථකව Download විය.`,
+    detail: 'නව වෙනස්කම් සහිතව App එක දැන්ම Restart කිරීමට කැමතිද?',
+    buttons: ['දැන්ම Restart කරන්න', 'පසුව (Later)'],
+    defaultId: 0,
+    cancelId: 1
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+});
 
 // 🖨️ DIRECT SILENT PRINTING IPC HANDLER (ELECTRON .EXE MODE)
 ipcMain.handle('print-silent', async (event, { printerName, htmlId, rawText }) => {
   try {
     if (!mainWindow) return { success: false, error: "Main window not found" };
     
-    // Printers ලැයිස්තුව ලබාගැනීම
     const printers = await mainWindow.webContents.getPrintersAsync();
     let targetDevice = printerName;
     
-    // Default printer එකක් නොදුන් විට පද්ධතියේ default printer එක තෝරාගනී
     if (!targetDevice) {
       const def = printers.find(p => p.isDefault);
       targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
@@ -51,7 +75,6 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlId, rawText }) =
       }
     };
     
-    // Print ක්‍රියාවලිය Direct සිදු කිරීම
     await mainWindow.webContents.print(printOptions);
     return { success: true };
   } catch (err) {
@@ -60,7 +83,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlId, rawText }) =
   }
 });
 
-// වින්ඩෝස් පරිගණකයට සම්බන්ධ සියලුම Printers ලබාගැනීම
+// Windows පරිගණකයේ Printers ලබා ගැනීම
 ipcMain.handle('get-printers', async () => {
   if (!mainWindow) return [];
   return await mainWindow.webContents.getPrintersAsync();
