@@ -1,6 +1,6 @@
 {
   "name": "restaurant-erp-pos",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Professional Restaurant ERP & POS System",
   "main": "main.js",
   "author": "Restaurant ERP Enterprise",
@@ -38,7 +38,6 @@
     },
     "files": [
       "**/*",
-      "!node_modules/**/*",
       "!.github/**/*"
     ]
   }
