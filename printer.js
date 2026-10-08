@@ -82,13 +82,13 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   
   text += CMD_CENTER + "\n" + footer + "\n";
   text += "Software by Restaurant ERP Enterprise\n\n\n\n\n\n";
-  text += CMD_DRAWER;
-  text += CMD_CUT;
+  text += CMD_DRAWER; // Pop open cash drawer
+  text += CMD_CUT; // Cut paper
   
   return text;
 }
 
-// 2. FORMAT RAW TEXT KOT TICKET
+// 2. FORMAT RAW TEXT KOT TICKET WITH COOKING NOTES
 export function formatKOTRawText(kot, stationLabel = "") {
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `*** KITCHEN ORDER TICKET (KOT) ***\n` + CMD_BOLD_OFF;
@@ -116,36 +116,30 @@ export function formatKOTRawText(kot, stationLabel = "") {
   return text;
 }
 
-// 3. SILENT DIRECT PRINT DISPATCHER
+// 3. SILENT DIRECT PRINT DISPATCHER (DEDICATED 80MM HTML CONTENT DISPATCH)
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
-  
-  // 🟢 Print එක යැවීමට පෙර Modal එක Render කර ගැනීම
-  if (el) {
-    el.style.display = "block";
-    await new Promise(r => setTimeout(r, 200));
-  }
-  
+  const contentToPrint = el ? el.innerHTML : rawContent;
+
   // 1. Check if running inside Electron Desktop App (.exe)
   if (window.electronAPI && window.electronAPI.printSilent) {
     try {
       const res = await window.electronAPI.printSilent({
         printerName: targetDeviceName,
-        rawText: rawContent,
-        htmlId: htmlElementId
+        htmlContent: contentToPrint
       });
-      if (el) el.style.display = "none";
       if (res && res.success) return true;
     } catch (e) {
       console.warn("Electron direct print fallback:", e);
-      if (el) el.style.display = "none";
     }
   }
   
-  // 2. Fallback for Web Browser
+  // 2. Fallback for Web Browser with delay for DOM rendering
   if (el) {
+    el.style.display = "block";
+    await new Promise(resolve => setTimeout(resolve, 80));
     window.print();
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(resolve => setTimeout(resolve, 100));
     el.style.display = "none";
   }
   return true;
@@ -156,7 +150,7 @@ export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
   const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "POS-80";
   const labelName = document.getElementById(`${slotKey}_name`)?.value.trim() || pr?.name || slotKey;
-  
+
   const rHotel = document.getElementById("receiptHotel");
   const rOrderId = document.getElementById("receiptOrderId");
   const rDate = document.getElementById("receiptDate");
@@ -165,7 +159,7 @@ export async function testDirectPrinter(slotKey) {
   const rSub = document.getElementById("receiptSubtotal");
   const rTotal = document.getElementById("receiptTotal");
   const rPay = document.getElementById("receiptPayDetails");
-  
+
   if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   if (rOrderId) rOrderId.innerText = `HARDWARE TEST PRINT`;
   if (rDate) rDate.innerText = `Date: ${new Date().toLocaleString()}`;
@@ -187,7 +181,7 @@ export async function testDirectPrinter(slotKey) {
   if (rSub) rSub.innerText = `Rs. 0.00`;
   if (rTotal) rTotal.innerText = `TEST PASSED`;
   if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** HARDWARE TEST SUCCESSFUL ***</div>`;
-  
+
   try {
     await sendDirectSilentPrint(devName, "", "receiptModal");
     showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
