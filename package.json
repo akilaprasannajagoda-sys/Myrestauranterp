@@ -8,7 +8,9 @@
     "start": "electron .",
     "build": "electron-builder --win"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
   "devDependencies": {
     "electron": "^28.2.0",
     "electron-builder": "^24.9.1"
@@ -16,13 +18,16 @@
   "build": {
     "appId": "com.restauranterp.pos",
     "productName": "Restaurant ERP POS",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "akilaprasannajagoda-sys",
+        "repo": "Myrestauranterp"
+      }
+    ],
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ]
+      "target": "nsis",
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,
