@@ -26,7 +26,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-
+  
   // 🔄 App එක Open වූ විට පසුබිමෙන් GitHub Updates පරීක්ෂා කිරීම
   mainWindow.once('ready-to-show', () => {
     autoUpdater.autoDownload = true;
@@ -53,32 +53,55 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE
+// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (BULLETPROOF HARDWARE SPOOLER)
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
+    let printWin = null;
     try {
       if (!mainWindow) return resolve({ success: false, error: "Main window not found" });
-
-      const printers = await mainWindow.webContents.getPrintersAsync();
-      let targetDevice = printerName;
       
-      // Default printer එකක් නොදුන් විට පද්ධතියේ default printer එක තෝරාගනී
-      if (!targetDevice) {
-        const def = printers.find(p => p.isDefault);
-        targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
+      const osPrinters = await mainWindow.webContents.getPrintersAsync();
+      let targetDevice = "";
+      
+      // 🔍 1. SMART PRINTER NAME MATCHER (Exact / Case-Insensitive / Space-Hyphen Neutral)
+      if (printerName && printerName.trim()) {
+        const cleanSearch = printerName.toLowerCase().replace(/[\s\-_]/g, '');
+        const matched = osPrinters.find(p => p.name.toLowerCase().replace(/[\s\-_]/g, '') === cleanSearch);
+        if (matched) {
+          targetDevice = matched.name;
+        } else {
+          // Partial search fallback (e.g. searching 'pos 80' inside 'POS-80 Series')
+          const partialMatch = osPrinters.find(p => p.name.toLowerCase().includes("pos") || p.name.toLowerCase().includes("80"));
+          if (partialMatch) {
+            targetDevice = partialMatch.name;
+          }
+        }
       }
-
-      // පසුබිමෙන් පමණක් ධාවනය වන කුඩා 80mm Print Buffer Window එකක් සෑදීම
-      const printWin = new BrowserWindow({
+      
+      // If still no exact device found, fallback safely to default Windows printer
+      if (!targetDevice) {
+        const def = osPrinters.find(p => p.isDefault);
+        targetDevice = def ? def.name : (osPrinters.length > 0 ? osPrinters[0].name : "");
+      }
+      
+      if (!targetDevice) {
+        return resolve({ success: false, error: "Windows OS තුළ කිසිදු Printer එකක් හමු නොවීය." });
+      }
+      
+      console.log(`[Silent Print Engine] Target Printer: "${targetDevice}"`);
+      
+      // 🖥️ 2. BACKGROUND PRINT WINDOW WITH NO THROTTLING
+      printWin = new BrowserWindow({
         width: 320,
         height: 600,
         show: false,
         webPreferences: {
           nodeIntegration: false,
-          contextIsolation: true
+          contextIsolation: true,
+          backgroundThrottling: false // Prevents Chromium from freezing print rendering
         }
       });
-
+      
       const fullPrintHtml = `
         <!DOCTYPE html>
         <html>
@@ -86,6 +109,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
           <meta charset="UTF-8">
           <style>
             @page { margin: 0; size: 80mm auto; }
+            * { box-sizing: border-box; }
             body {
               margin: 0 !important;
               padding: 2mm 2mm 15mm 2mm !important;
@@ -99,9 +123,12 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .font-bold { font-weight: bold; }
-            .flex { display: flex; justify-content: space-between; }
+            .flex { display: flex; justify-content: space-between; align-items: center; }
+            .w-1\\/2 { width: 50%; }
+            .w-1\\/4 { width: 25%; }
+            .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .border-b { border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 3px; }
-            .cut-spacer { height: 20mm; display: block; }
+            .cut-spacer { height: 18mm; display: block; }
           </style>
         </head>
         <body>
@@ -110,27 +137,43 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         </body>
         </html>
       `;
-
+      
       printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
-
+      
       printWin.webContents.on('did-finish-load', () => {
+        // Wait slightly for DOM layout to compute fully
         setTimeout(async () => {
           try {
-            await printWin.webContents.print({
+            printWin.webContents.print({
               silent: true,
               printBackground: true,
               deviceName: targetDevice,
               margins: { marginType: 'none' }
+            }, (success, failureReason) => {
+              // 🔒 Safe Spool Delay: Do NOT close immediately! Allow Windows spooler 1.5 seconds to pipe to USB
+              setTimeout(() => {
+                if (printWin && !printWin.isDestroyed()) {
+                  printWin.close();
+                  printWin = null;
+                }
+              }, 1500);
+              
+              if (success) {
+                resolve({ success: true, deviceName: targetDevice });
+              } else {
+                console.error("[Silent Print Failed]:", failureReason);
+                resolve({ success: false, error: failureReason || "Print job failed by OS driver." });
+              }
             });
-            printWin.close();
-            resolve({ success: true });
           } catch (printErr) {
-            printWin.close();
+            if (printWin && !printWin.isDestroyed()) printWin.close();
             resolve({ success: false, error: printErr.message });
           }
-        }, 200);
+        }, 300);
       });
+      
     } catch (err) {
+      if (printWin && !printWin.isDestroyed()) printWin.close();
       resolve({ success: false, error: err.message });
     }
   });
