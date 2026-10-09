@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
@@ -53,7 +53,21 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (BULLETPROOF HARDWARE SPOOLER)
+// 🌐 BROWSER & WHATSAPP EXTERNAL URL OPENER (NO ELECTRON CRASH)
+ipcMain.handle('open-external', async (event, url) => {
+  try {
+    if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      await shell.openExternal(url);
+      return { success: true };
+    }
+    return { success: false, error: 'Invalid URL format' };
+  } catch (err) {
+    console.error('[Open External Error]:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (HIGH DENSITY CRISP BLACK)
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let printWin = null;
@@ -108,27 +122,41 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         <head>
           <meta charset="UTF-8">
           <style>
-            @page { margin: 0; size: 80mm auto; }
-            * { box-sizing: border-box; }
+            @page { 
+              margin: 0 !important; 
+              size: 80mm auto !important; 
+            }
+            * { 
+              box-sizing: border-box !important; 
+              -webkit-print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
             body {
               margin: 0 !important;
-              padding: 2mm 2mm 15mm 2mm !important;
+              padding: 1mm 1mm 2mm 1mm !important;
               width: 72mm !important;
-              font-family: 'Courier New', Courier, monospace, sans-serif !important;
-              font-size: 12px !important;
-              line-height: 1.3 !important;
-              color: #000 !important;
-              background: #fff !important;
+              font-family: Consolas, 'Lucida Console', 'Segoe UI', Arial, sans-serif !important;
+              font-size: 12.5px !important;
+              font-weight: 700 !important;
+              line-height: 1.25 !important;
+              color: #000000 !important;
+              background: #ffffff !important;
+              text-rendering: geometricPrecision !important;
+              -webkit-font-smoothing: antialiased !important;
             }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .flex { display: flex; justify-content: space-between; align-items: center; }
-            .w-1\\/2 { width: 50%; }
-            .w-1\\/4 { width: 25%; }
-            .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .border-b { border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 3px; }
-            .cut-spacer { height: 18mm; display: block; }
+            .text-center { text-align: center !important; }
+            .text-right { text-align: right !important; }
+            .font-bold { font-weight: 900 !important; }
+            .font-black { font-weight: 900 !important; }
+            .uppercase { text-transform: uppercase !important; }
+            .flex { display: flex !important; justify-content: space-between !important; align-items: center !important; }
+            .w-1\\/2 { width: 50% !important; }
+            .w-1\\/4 { width: 25% !important; }
+            .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+            .border-b { border-bottom: 1px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
+            .border-b-2 { border-bottom: 2px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
+            /* Safe minimal cut clearance (just clears tear bar without wasting paper) */
+            .cut-spacer { height: 4mm !important; display: block !important; }
           </style>
         </head>
         <body>
