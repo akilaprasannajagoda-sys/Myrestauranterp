@@ -20,21 +20,26 @@
     .hidden { display: none !important; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     
-    /* 🖨️ ADVANCED THERMAL PRINTER STYLES (NO COLLISION / ISOLATED MODALS) */
+    /* 🖨️ ULTRA-CRISP HIGH-CONTRAST THERMAL PRINTER ENGINE (NO PAPER WASTE) */
     @media print {
       @page {
-        margin: 0;
-        size: 80mm auto;
+        margin: 0 !important;
+        size: 80mm auto !important;
+      }
+      * {
+        box-sizing: border-box !important;
+        -webkit-print-color-adjust: exact !important;
+        color-adjust: exact !important;
       }
       body {
         margin: 0 !important;
         padding: 0 !important;
-        background: #fff !important;
-        -webkit-print-color-adjust: exact;
+        background: #ffffff !important;
+        color: #000000 !important;
       }
       body * { visibility: hidden !important; }
 
-      /* පද්ධතියේ Print වෙන මොහොතේ සක්‍රීය Modals පමණක් පෙන්වීම (එක මත එක වැටීම සම්පූර්ණයෙන් වළකයි) */
+      /* පද්ධතියේ Print වෙන මොහොතේ සක්‍රීය Modals පමණක් පෙන්වීම */
       #receiptModal:not([style*="display: none"]),
       #receiptModal:not([style*="display: none"]) *,
       #kotPrintModal:not([style*="display: none"]),
@@ -48,6 +53,7 @@
         visibility: visible !important; 
       }
 
+      /* High-Contrast Bold Thermal Font & Zero Waste Compact Area */
       #receiptModal:not([style*="display: none"]),
       #kotPrintModal:not([style*="display: none"]),
       #zReportPrintModal:not([style*="display: none"]),
@@ -59,13 +65,16 @@
         min-height: auto !important;
         max-height: none !important;
         overflow: visible !important;
-        padding: 2mm 2mm 10mm 2mm !important; 
+        padding: 1mm 1mm 2mm 1mm !important; 
         margin: 0 !important; 
-        font-family: 'Courier New', Courier, monospace, sans-serif !important;
-        color: #000 !important;
-        font-size: 12px !important;
-        line-height: 1.3 !important;
+        font-family: Consolas, 'Lucida Console', 'Segoe UI', Arial, sans-serif !important;
+        color: #000000 !important;
+        font-size: 12.5px !important;
+        font-weight: 700 !important;
+        line-height: 1.25 !important;
         display: block !important;
+        text-rendering: geometricPrecision !important;
+        -webkit-font-smoothing: antialiased !important;
       }
 
       #payslipModal:not(.hidden) { 
@@ -80,7 +89,9 @@
       }
 
       .no-print { display: none !important; }
-      .thermal-cut-spacer { height: 18mm !important; display: block !important; }
+
+      /* අමතර කොළ නාස්තිය සහ Extra Paper Curl Cut සම්පූර්ණයෙන්ම වළක්වයි */
+      .thermal-cut-spacer { height: 0px !important; display: none !important; }
 
       /* 80mm Grid & Column Safeguards */
       .flex { display: flex !important; justify-content: space-between !important; align-items: center !important; }
@@ -88,8 +99,11 @@
       .w-1\/4 { width: 25% !important; }
       .text-right { text-align: right !important; }
       .text-center { text-align: center !important; }
-      .font-bold { font-weight: bold !important; }
+      .font-bold { font-weight: 900 !important; }
+      .font-black { font-weight: 900 !important; }
       .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+      .border-b { border-bottom: 1px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
+      .border-b-2 { border-bottom: 2px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
     }
 
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -1968,11 +1982,15 @@
                 </div>
               </div>
 
-              <div class="pt-2 flex justify-end">
-                <button type="submit" id="saveTaxSettingsBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-floppy-disk"></i> Save Taxes & Shifts
-                </button>
-              </div>
+             <div class="pt-3 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-2">
+  <span class="text-[10px] text-gray-500 font-bold flex items-center gap-1">
+    <i class="fa-solid fa-circle-check text-green-600"></i> Checkbox ටික් කළ සැණින් Auto-Save ද වේ.
+  </span>
+  <button type="submit" id="saveTaxSettingsBtn" style="background-color: #059669 !important; color: #ffffff !important;" class="bg-green-600 hover:bg-green-700 text-white font-black px-6 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-2 cursor-pointer">
+    <i class="fa-solid fa-floppy-disk text-sm"></i>
+    <span>Save Taxes & Shifts</span>
+  </button>
+</div>
             </form>
           </div>
 
@@ -3116,17 +3134,20 @@
       </div>
 
       <form id="shiftHandoverForm" class="space-y-3.5 text-xs font-bold">
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරදෙන Cashier (Outgoing)</label>
-            <input type="text" id="handoverOutgoingCashier" required placeholder="Kasun (Morning)" class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none">
-          </div>
-          <div>
-            <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරගන්නා Cashier (Incoming)</label>
-            <input type="text" id="handoverIncomingCashier" required placeholder="Nimal (Evening)" class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none">
-          </div>
-        </div>
-
+       <div class="grid grid-cols-2 gap-2">
+  <div>
+    <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරදෙන Cashier (Outgoing)</label>
+    <select id="handoverOutgoingCashier" required class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none font-bold text-xs text-gray-800">
+      <option value="">-- සේවකයා තෝරන්න --</option>
+    </select>
+  </div>
+  <div>
+    <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරගන්නා Cashier (Incoming)</label>
+    <select id="handoverIncomingCashier" required class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none font-bold text-xs text-gray-800">
+      <option value="">-- සේවකයා තෝරන්න --</option>
+    </select>
+  </div>
+</div>
         <div class="bg-yellow-50 border border-yellow-200 p-3 rounded-2xl space-y-1.5 text-yellow-950">
           <div class="flex justify-between items-center">
             <span>Today's Total Cash In Drawer:</span>
@@ -3210,24 +3231,51 @@
   </div>
 
   <!-- SCREEN: INACTIVITY AUTO PIN LOCK -->
-  <div id="inactivityLockScreen" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-50 flex flex-col items-center justify-center p-4 text-white">
-    <div class="bg-gray-800 border border-gray-700 p-6 sm:p-8 rounded-3xl max-w-sm w-full shadow-2xl text-center space-y-4">
-      <div class="w-14 h-14 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center mx-auto text-2xl">
-        <i class="fa-solid fa-lock"></i>
-      </div>
-      <div>
-        <h3 class="font-black text-lg text-white">Counter Screen Locked</h3>
-        <p class="text-xs text-gray-400 mt-0.5">නැවත වැඩ ආරම්භ කිරීමට ඔබගේ PIN අංකය ඇතුළත් කරන්න</p>
-      </div>
-      
-      <input type="password" id="unlockScreenPinInput" maxlength="6" placeholder="****" class="w-full text-center text-3xl font-mono font-black tracking-widest p-3 bg-gray-900 border-2 border-blue-500 rounded-2xl outline-none text-white">
-      
-      <button type="button" onclick="submitCounterUnlock()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
-        <i class="fa-solid fa-unlock"></i> Unlock Terminal
+<div id="inactivityLockScreen" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-50 flex flex-col items-center justify-center p-4 text-white">
+  <div class="bg-gray-800 border border-gray-700 p-6 sm:p-8 rounded-3xl max-w-sm w-full shadow-2xl text-center space-y-4">
+    <div class="w-14 h-14 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center mx-auto text-2xl">
+      <i class="fa-solid fa-lock"></i>
+    </div>
+    <div>
+      <h3 class="font-black text-lg text-white">Counter Screen Locked</h3>
+      <p class="text-xs text-gray-400 mt-0.5">නැවත වැඩ ආරම්භ කිරීමට ඔබගේ PIN අංකය ඇතුළත් කරන්න</p>
+    </div>
+    
+    <input type="password" id="unlockScreenPinInput" maxlength="6" placeholder="****" class="w-full text-center text-3xl font-mono font-black tracking-widest p-3 bg-gray-900 border-2 border-blue-500 rounded-2xl outline-none text-white">
+    
+    <button type="button" onclick="submitCounterUnlock()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
+      <i class="fa-solid fa-unlock"></i> Unlock Terminal
+    </button>
+  </div>
+</div>
+
+<!-- MODAL: DEDICATED WHATSAPP PHONE NUMBER INPUT (REPLACES DISABLED PROMPT) -->
+<div id="whatsAppPhoneModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
+  <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-green-200 p-5 space-y-4 text-center">
+    <div class="w-14 h-14 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center mx-auto text-3xl shadow-sm">
+      <i class="fa-brands fa-whatsapp"></i>
+    </div>
+    <div>
+      <h3 class="font-black text-gray-800 text-base">Send WhatsApp Digital Bill</h3>
+      <p class="text-xs text-gray-400 mt-0.5">පාරිභෝගිකයාගේ WhatsApp දුරකථන අංකය ඇතුළත් කරන්න</p>
+    </div>
+    
+    <div>
+      <input type="tel" id="whatsAppModalPhoneInput" placeholder="0771234567" class="w-full text-center text-lg font-bold font-mono p-3 bg-gray-50 border-2 border-green-300 rounded-2xl outline-none focus:border-green-600">
+      <span class="text-[10px] text-gray-400 mt-1 block">උදා: 0771234567 හෝ 94771234567</span>
+    </div>
+    
+    <div class="flex justify-end gap-2 pt-2 border-t border-gray-100 text-xs font-bold">
+      <button type="button" onclick="closeWhatsAppModal()" class="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition cursor-pointer">
+        Cancel
+      </button>
+      <button type="button" onclick="submitWhatsAppModalSend()" style="background-color: #059669 !important; color: #ffffff !important;" class="bg-green-600 hover:bg-green-700 text-white font-black px-5 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer">
+        <i class="fa-brands fa-whatsapp text-sm"></i>
+        <span>Send Bill</span>
       </button>
     </div>
   </div>
-
+</div>
   <!-- MAIN JS APP MODULE SCRIPT -->
   <script type="module" src="./app.js"></script>
 </body>
