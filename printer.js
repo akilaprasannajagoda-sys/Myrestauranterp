@@ -120,26 +120,35 @@ export function formatKOTRawText(kot, stationLabel = "") {
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
   const contentToPrint = el ? el.innerHTML : rawContent;
-
+  
   // 1. Check if running inside Electron Desktop App (.exe)
-  if (window.electronAPI && window.electronAPI.printSilent) {
+  if (window.electronAPI && typeof window.electronAPI.printSilent === 'function') {
     try {
       const res = await window.electronAPI.printSilent({
-        printerName: targetDeviceName,
+        printerName: targetDeviceName || "",
         htmlContent: contentToPrint
       });
-      if (res && res.success) return true;
+      
+      if (res && res.success) {
+        return true;
+      } else {
+        console.warn("[Electron Silent Print Warning]:", res?.error);
+        showLiveToast("⚠️ Printer Notice", res?.error || "Print driver response failed.", "warning", "fa-print");
+        return false;
+      }
     } catch (e) {
-      console.warn("Electron direct print fallback:", e);
+      console.error("[Electron direct print exception]:", e);
+      showLiveToast("❌ Print Error", e.message, "warning", "fa-triangle-exclamation");
+      return false;
     }
   }
   
-  // 2. Fallback for Web Browser with delay for DOM rendering
+  // 2. Fallback ONLY for Pure Web Browser environment (if not running in Electron .exe)
   if (el) {
     el.style.display = "block";
     await new Promise(resolve => setTimeout(resolve, 80));
     window.print();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 150));
     el.style.display = "none";
   }
   return true;
@@ -150,7 +159,7 @@ export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
   const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "POS-80";
   const labelName = document.getElementById(`${slotKey}_name`)?.value.trim() || pr?.name || slotKey;
-
+  
   const rHotel = document.getElementById("receiptHotel");
   const rOrderId = document.getElementById("receiptOrderId");
   const rDate = document.getElementById("receiptDate");
@@ -159,7 +168,7 @@ export async function testDirectPrinter(slotKey) {
   const rSub = document.getElementById("receiptSubtotal");
   const rTotal = document.getElementById("receiptTotal");
   const rPay = document.getElementById("receiptPayDetails");
-
+  
   if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   if (rOrderId) rOrderId.innerText = `HARDWARE TEST PRINT`;
   if (rDate) rDate.innerText = `Date: ${new Date().toLocaleString()}`;
@@ -181,10 +190,12 @@ export async function testDirectPrinter(slotKey) {
   if (rSub) rSub.innerText = `Rs. 0.00`;
   if (rTotal) rTotal.innerText = `TEST PASSED`;
   if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** HARDWARE TEST SUCCESSFUL ***</div>`;
-
+  
   try {
-    await sendDirectSilentPrint(devName, "", "receiptModal");
-    showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
+    const success = await sendDirectSilentPrint(devName, "", "receiptModal");
+    if (success) {
+      showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
+    }
   } catch (err) {
     alert("Test Print Error: " + err.message);
   }
