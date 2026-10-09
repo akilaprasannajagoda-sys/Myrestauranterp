@@ -1,5 +1,3 @@
-
-
 // ==========================================================================
 // MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & WHATSAPP
 // ==========================================================================
@@ -281,7 +279,7 @@ export function renderInvoiceReportsList() {
 }
 
 // ==========================================================================
-// 2. 🔥 NEW: ESTIMATED PROFIT & LOSS (P&L) STATEMENT REPORT
+// 2. ESTIMATED PROFIT & LOSS (P&L) STATEMENT REPORT
 // ==========================================================================
 export function renderPnLStatement() {
   const fromVal = document.getElementById("repFromDate")?.value;
@@ -294,7 +292,6 @@ export function renderPnLStatement() {
   let totalDiscounts = 0;
   let totalFoodCostCOGS = 0;
 
-  // 1. Calculate Gross Revenue, Discounts and BOM Recipe Food Cost
   Object.values(erpState.invoices || {}).forEach(inv => {
     if (inv.status === "Voided") return;
 
@@ -326,7 +323,6 @@ export function renderPnLStatement() {
     });
   });
 
-  // 2. Calculate Operating Petty Cash Expenses within filter window
   let totalPettyExpenses = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     const pTime = new Date(p.timestamp || 0).getTime();
@@ -344,7 +340,6 @@ export function renderPnLStatement() {
   const netProfitMarginPct = netSalesRevenue > 0 ? ((estimatedNetProfit / netSalesRevenue) * 100).toFixed(1) : "0.0";
   const foodCostPct = netSalesRevenue > 0 ? ((totalFoodCostCOGS / netSalesRevenue) * 100).toFixed(1) : "0.0";
 
-  // Update Visual Summary Cards
   const revEl = document.getElementById("pnlNetRevenueVal");
   const cogsEl = document.getElementById("pnlFoodCostVal");
   const cogsPctEl = document.getElementById("pnlFoodCostPctVal");
@@ -362,7 +357,6 @@ export function renderPnLStatement() {
   }
   if (netMargEl) netMargEl.innerText = `Net Margin: ${netProfitMarginPct}%`;
 
-  // Update P&L Table Rows
   const rGross = document.getElementById("pnlRowGrossSales");
   const rDisc = document.getElementById("pnlRowDiscounts");
   const rNet = document.getElementById("pnlRowNetSales");
@@ -384,7 +378,7 @@ export function renderPnLStatement() {
 }
 
 // ==========================================================================
-// 3. 🔥 NEW: HOURLY SALES VELOCITY & PEAK TIMES REPORT
+// 3. HOURLY SALES VELOCITY & PEAK TIMES REPORT
 // ==========================================================================
 export function renderHourlyVelocityReport() {
   const tbody = document.getElementById("repHourlyTableBody");
@@ -396,7 +390,6 @@ export function renderHourlyVelocityReport() {
   const fromTime = fromVal ? new Date(fromVal).getTime() : 0;
   const toTime = toVal ? new Date(toVal).getTime() : Infinity;
 
-  // Initialize 24-hour slots
   const hourlyBuckets = [];
   for (let h = 0; h < 24; h++) {
     const formattedHour = `${String(h).padStart(2, '0')}:00 - ${String(h).padStart(2, '0')}:59`;
@@ -427,7 +420,6 @@ export function renderHourlyVelocityReport() {
     grandFilteredOrders += 1;
   });
 
-  // Find Peak Hour
   let peakBucket = { label: "N/A", totalRevenue: 0, ordersCount: 0 };
   hourlyBuckets.forEach(b => {
     if (b.totalRevenue > peakBucket.totalRevenue) {
@@ -456,7 +448,7 @@ export function renderHourlyVelocityReport() {
   const maxHourRevenue = Math.max(...hourlyBuckets.map(b => b.totalRevenue), 1);
 
   hourlyBuckets.forEach(b => {
-    if (b.ordersCount === 0 && b.totalRevenue === 0) return; // Skip inactive zero-traffic hours
+    if (b.ordersCount === 0 && b.totalRevenue === 0) return;
 
     const pctBarWidth = Math.min(100, Math.round((b.totalRevenue / maxHourRevenue) * 100));
     const isPeak = b.hour === peakBucket.hour;
@@ -481,7 +473,7 @@ export function renderHourlyVelocityReport() {
 }
 
 // ==========================================================================
-// 4. 🔥 NEW: WAITER-WISE SALES & SERVICE CHARGE DISTRIBUTION REPORT
+// 4. WAITER-WISE SALES & SERVICE CHARGE DISTRIBUTION REPORT
 // ==========================================================================
 export function renderWaiterSalesReport() {
   const tbody = document.getElementById("repWaitersTableBody");
@@ -495,7 +487,6 @@ export function renderWaiterSalesReport() {
 
   const waiterMap = {};
 
-  // Initialize registered waiters from employees directory
   Object.values(erpState.employees || {}).forEach(emp => {
     if (emp.role === "Waiter") {
       waiterMap[emp.name] = {
@@ -604,7 +595,6 @@ export async function submitManagerOverrideAction() {
   const enteredPin = document.getElementById("managerOverridePinInput")?.value.trim();
   if (!enteredPin || !pendingVoidInvoiceId) return;
 
-  // Validate strictly against database registered active Manager / Admin / Owner PINs only
   const isValidManager = Object.values(erpState.employees || {}).some(e => {
     const role = (e.role || "").toLowerCase();
     const isAuthorizedRole = role === "manager" || role === "admin" || role === "owner";
@@ -642,7 +632,6 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         voidedAt: new Date().toISOString()
       });
 
-      // Restock ingredients
       for (const item of (inv.items || [])) {
         const dish = erpState.dishes[item.dishId];
         if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
@@ -662,7 +651,6 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         }
       }
 
-      // If credit, void debt
       const matchedCreditEntry = Object.entries(erpState.customerCredits || {}).find(([id, c]) => c.invoiceId === invoiceId || c.invoiceNumber === inv.invoiceNumber);
       if (matchedCreditEntry) {
         await updateFn(dbRef(`tenants/${currentTenant}/customerCredits/${matchedCreditEntry[0]}`), {
@@ -915,7 +903,7 @@ export function exportCurrentReportToCSV() {
 }
 
 // ==========================================================================
-// 5. 🔥 SMART SHIFT-BASED DAY-END Z-REPORT (MIDNIGHT CROSSOVER SAFE)
+// 5. SMART SHIFT-BASED DAY-END Z-REPORT
 // ==========================================================================
 export let currentZReportCalculatedData = null;
 
@@ -923,7 +911,6 @@ export async function openDayEndModal() {
   const now = new Date();
   const todayLocalStr = getLocalDateString(now);
 
-  // Detect Most Recent Shift Start Time (Last Z-Report or Last Opening Float or 00:00:00 Today)
   let shiftStartTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
   
   const pastReports = Object.values(erpState.dayEndReports || {});
@@ -1142,7 +1129,6 @@ export function calculateDayEndVariance() {
   }
 }
 
-// 🔒 SAVE Z-REPORT SAFELY WITHOUT OVERWRITING DAILY SHIFTS
 export async function printAndSaveZReport() {
   if (!currentZReportCalculatedData) return;
 
@@ -1261,11 +1247,31 @@ function renderAdvancedThermalZReport(z) {
 }
 
 // ==========================================================================
-// 6. SHIFT HANDOVER (X-REPORT)
+// 6. SHIFT HANDOVER (X-REPORT) - WITH DYNAMIC EMPLOYEE DROPDOWNS
 // ==========================================================================
 export function openShiftHandoverModal() {
   const todayLocalStr = getLocalDateString(new Date());
   document.getElementById("shiftHandoverForm")?.reset();
+
+  // 👥 Populate Outgoing & Incoming Staff Dropdowns dynamically from erpState.employees
+  const outSelect = document.getElementById("handoverOutgoingCashier");
+  const inSelect = document.getElementById("handoverIncomingCashier");
+
+  if (outSelect && inSelect) {
+    let optionsHtml = `<option value="">-- සේවකයා තෝරන්න (Select Staff) --</option>`;
+    const staffList = Object.values(erpState.employees || {});
+
+    if (staffList.length > 0) {
+      staffList.forEach(emp => {
+        optionsHtml += `<option value="${emp.name}">${emp.name} (${emp.role || 'Staff'})</option>`;
+      });
+    } else {
+      optionsHtml += `<option value="Cashier 1">Cashier 1 (General)</option><option value="Cashier 2">Cashier 2 (General)</option>`;
+    }
+
+    outSelect.innerHTML = optionsHtml;
+    inSelect.innerHTML = optionsHtml;
+  }
 
   let cashSales = 0;
   Object.values(erpState.invoices || {}).forEach(inv => {
@@ -1300,10 +1306,15 @@ export function closeShiftHandoverModal() {
 
 export async function handleShiftHandoverSubmit(e) {
   if (e) e.preventDefault();
-  const outgoing = document.getElementById("handoverOutgoingCashier")?.value.trim() || "Cashier 1";
-  const incoming = document.getElementById("handoverIncomingCashier")?.value.trim() || "Cashier 2";
+  const outgoing = document.getElementById("handoverOutgoingCashier")?.value.trim() || "";
+  const incoming = document.getElementById("handoverIncomingCashier")?.value.trim() || "";
   const actualCash = parseFloat(document.getElementById("handoverActualCashInput")?.value || 0);
   const note = document.getElementById("handoverNote")?.value.trim() || "";
+
+  if (!outgoing || !incoming) {
+    alert("කරුණාකර භාරදෙන (Outgoing) සහ භාරගන්නා (Incoming) සේවකයින් දෙදෙනාම Dropdown එකෙන් තෝරන්න.");
+    return;
+  }
 
   const payload = {
     date: getLocalDateString(new Date()),
@@ -1369,5 +1380,3 @@ window.handleShiftHandoverSubmit = handleShiftHandoverSubmit;
 window.renderPnLStatement = renderPnLStatement;
 window.renderHourlyVelocityReport = renderHourlyVelocityReport;
 window.renderWaiterSalesReport = renderWaiterSalesReport;
-
-
