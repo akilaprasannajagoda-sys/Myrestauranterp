@@ -183,36 +183,68 @@ export function downloadCSVFile(csvContent, filename) {
   showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
 }
 
-// 5. PROFESSIONAL WHATSAPP DIGITAL RECEIPT ENGINE (SRI LANKA NUMBER SANITIZED)
-export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
-  let rawPhone = inputPhone;
-  
-  if (!rawPhone && invoiceData.payment && invoiceData.payment.customerPhone) {
-    rawPhone = invoiceData.payment.customerPhone;
+// 5. PROFESSIONAL WHATSAPP DIGITAL RECEIPT ENGINE (NO PROMPT CRASH / EXTERNAL URL SAFE)
+let pendingWhatsAppInvoice = null;
+let pendingWhatsAppHotel = "Restaurant ERP";
+
+export function openWhatsAppModal(invoiceData, hotelName) {
+  pendingWhatsAppInvoice = invoiceData;
+  pendingWhatsAppHotel = hotelName;
+
+  const modal = document.getElementById("whatsAppPhoneModal");
+  const phoneInput = document.getElementById("whatsAppModalPhoneInput");
+
+  if (phoneInput) {
+    let presetPhone = "";
+    if (invoiceData.payment && invoiceData.payment.customerPhone) {
+      presetPhone = invoiceData.payment.customerPhone;
+    }
+    phoneInput.value = presetPhone;
+    setTimeout(() => phoneInput.focus(), 150);
   }
-  
-  if (!rawPhone) {
-    rawPhone = prompt("කරුණාකර පාරිභෝගිකයාගේ WhatsApp දුරකථන අංකය ඇතුළත් කරන්න (උදා: 0771234567):");
+
+  if (modal) modal.classList.remove("hidden");
+}
+
+export function closeWhatsAppModal() {
+  const modal = document.getElementById("whatsAppPhoneModal");
+  if (modal) modal.classList.add("hidden");
+  pendingWhatsAppInvoice = null;
+}
+
+export function submitWhatsAppModalSend() {
+  const phoneInput = document.getElementById("whatsAppModalPhoneInput");
+  const phoneVal = phoneInput ? phoneInput.value.trim() : "";
+
+  if (!phoneVal) {
+    alert("කරුණාකර වලංගු දුරකථන අංකයක් ඇතුළත් කරන්න.");
+    return;
   }
-  
-  if (!rawPhone) return;
-  
-  // Normalize Sri Lankan phone numbers (e.g., 0771234567 -> 94771234567)
-  let cleanPhone = rawPhone.replace(/\D/g, "");
+
+  if (pendingWhatsAppInvoice) {
+    const inv = pendingWhatsAppInvoice;
+    const hName = pendingWhatsAppHotel;
+    closeWhatsAppModal();
+    executeWhatsAppSendDirect(inv, hName, phoneVal);
+  }
+}
+
+export function executeWhatsAppSendDirect(invoiceData, hotelName, targetPhone) {
+  let cleanPhone = targetPhone.replace(/\D/g, "");
   if (cleanPhone.startsWith("0")) {
     cleanPhone = "94" + cleanPhone.substring(1);
   } else if (!cleanPhone.startsWith("94") && cleanPhone.length === 9) {
     cleanPhone = "94" + cleanPhone;
   }
-  
+
   const dateStr = new Date(invoiceData.createdAt).toLocaleString();
   let itemsListText = "";
-  
+
   (invoiceData.items || []).forEach(i => {
     const noteTag = i.note ? ` (${i.note})` : "";
     itemsListText += `▪️ ${i.name}${noteTag} x${i.qty} = Rs. ${(i.price * i.qty).toFixed(2)}\n`;
   });
-  
+
   let message = `🍽️ *${hotelName.toUpperCase()}*\n`;
   message += `📜 *DIGITAL INVOICE: #${invoiceData.invoiceNumber}*\n`;
   message += `📅 Date: ${dateStr}\n`;
@@ -221,7 +253,7 @@ export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP"
   message += `${itemsListText}`;
   message += `------------------------------------\n`;
   message += `Subtotal: Rs. ${parseFloat(invoiceData.subtotal || 0).toFixed(2)}\n`;
-  
+
   if (invoiceData.discountAmount > 0) {
     message += `Discount: -Rs. ${parseFloat(invoiceData.discountAmount).toFixed(2)}\n`;
   }
@@ -234,20 +266,49 @@ export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP"
   if (invoiceData.cslAmount > 0) {
     message += `SSCL: Rs. ${parseFloat(invoiceData.cslAmount).toFixed(2)}\n`;
   }
-  
+
   message += `*NET TOTAL: Rs. ${parseFloat(invoiceData.netTotal || 0).toFixed(2)}*\n`;
-  
+
   const p = invoiceData.payment || { method: "cash" };
   if (p.method === "split") {
     message += `💳 Payment: SPLIT (Cash: Rs. ${parseFloat(p.splitCash || 0).toFixed(2)} + Card: Rs. ${parseFloat(p.splitCard || 0).toFixed(2)})\n`;
   } else {
     message += `💳 Payment: ${p.method.toUpperCase()}\n`;
   }
-  
+
   message += `------------------------------------\n`;
   message += `🙏 *Thank you for dining with us! Come again.*`;
-  
+
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-  window.open(waUrl, "_blank");
+
+  // 🌐 Safe Electron External URL Launch (Never crashes Electron app)
+  if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+    window.electronAPI.openExternal(waUrl);
+  } else {
+    window.open(waUrl, "_blank");
+  }
+
   showLiveToast("📱 WhatsApp Bill Ready", `Invoice #${invoiceData.invoiceNumber} WhatsApp වෙත යවන ලදී.`, "success", "fa-brands fa-whatsapp");
 }
+
+export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
+  let rawPhone = inputPhone;
+
+  if (!rawPhone && invoiceData.payment && invoiceData.payment.customerPhone) {
+    rawPhone = invoiceData.payment.customerPhone;
+  }
+
+  // If no phone number is present, open our custom clean modal (NEVER call disabled prompt())
+  if (!rawPhone) {
+    openWhatsAppModal(invoiceData, hotelName);
+    return;
+  }
+
+  executeWhatsAppSendDirect(invoiceData, hotelName, rawPhone);
+}
+
+// Window Global Exports
+window.openWhatsAppModal = openWhatsAppModal;
+window.closeWhatsAppModal = closeWhatsAppModal;
+window.submitWhatsAppModalSend = submitWhatsAppModalSend;
+window.sendInvoiceViaWhatsApp = sendInvoiceViaWhatsApp;
