@@ -38,29 +38,29 @@ export function selectPettyEntryType(type) {
   typeInput.value = type;
   
   if (type === "in") {
-    if (inBtn) inBtn.className = "py-2 rounded-xl border-2 border-green-600 bg-green-50 text-green-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs";
-    if (outBtn) outBtn.className = "py-2 rounded-xl border-2 border-gray-200 bg-gray-50 text-gray-600 font-bold text-xs flex items-center justify-center gap-1.5";
+    if (inBtn) inBtn.className = "py-2 rounded-xl border-2 border-green-600 bg-green-50 text-green-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer";
+    if (outBtn) outBtn.className = "py-2 rounded-xl border-2 border-gray-200 bg-gray-50 text-gray-600 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer";
     if (catLabel) catLabel.innerText = "මුදල් ලැබුණු මූලාශ්‍රය (Source / Reason)";
     if (personLabel) personLabel.innerText = "භාරගත් පුද්ගලයා (Received / Handled By)";
     if (submitBtn) {
-      submitBtn.className = "bg-green-600 hover:bg-green-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5";
+      submitBtn.className = "bg-green-600 hover:bg-green-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer";
       submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save Cash In (+ ලැබීම්)`;
     }
     
     catSelect.innerHTML = `
-      <option value="Main Cash Drawer Top-up">💵 Main Cash Drawer / Register Float</option>
+      <option value="Petty Cash Box Float Top-up">💵 Petty Cash Box Float Top-up</option>
       <option value="Owner Capital / Top-up">💼 Owner Capital Injection</option>
       <option value="Bank Withdrawal">🏦 Bank Cash Withdrawal</option>
       <option value="Customer Refund Return">🔄 Supplier / Customer Refund</option>
       <option value="Other Inflow">📦 Other Cash Inflow</option>
     `;
   } else {
-    if (outBtn) outBtn.className = "py-2 rounded-xl border-2 border-red-600 bg-red-50 text-red-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs";
-    if (inBtn) inBtn.className = "py-2 rounded-xl border-2 border-gray-200 bg-gray-50 text-gray-600 font-bold text-xs flex items-center justify-center gap-1.5";
+    if (outBtn) outBtn.className = "py-2 rounded-xl border-2 border-red-600 bg-red-50 text-red-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer";
+    if (inBtn) inBtn.className = "py-2 rounded-xl border-2 border-gray-200 bg-gray-50 text-gray-600 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer";
     if (catLabel) catLabel.innerText = "වියදම් වර්ගය (Expense Category)";
     if (personLabel) personLabel.innerText = "වියදම් කළ පුද්ගලයා (Spent / Paid By)";
     if (submitBtn) {
-      submitBtn.className = "bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5";
+      submitBtn.className = "bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer";
       submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save Expense (- වියදම)`;
     }
     
@@ -105,7 +105,7 @@ export async function handlePettyCashSubmit(e) {
     }
     closePettyCashModal();
     if (entryType === "in") {
-      showLiveToast("💰 Cash In Recorded", `පෙට්ටියට Rs. ${amount.toFixed(2)} ක් සාර්ථකව එකතු විය.`, "success", "fa-circle-plus");
+      showLiveToast("💰 Cash In Recorded", `සුළු මුදල් පෙට්ටියට Rs. ${amount.toFixed(2)} ක් සාර්ථකව එකතු විය.`, "success", "fa-circle-plus");
     } else {
       showLiveToast("💸 Expense Recorded", `Rs. ${amount.toFixed(2)} (${category}) වියදම සාර්ථකව සටහන් විය.`, "warning", "fa-wallet");
     }
@@ -171,7 +171,7 @@ export function getFilteredPettyCashData() {
     const t = new Date(item.timestamp || 0).getTime();
     const amt = parseFloat(item.amount || 0);
 
-    // Calculate B/F Balance (Transactions before the filtered start time)
+    // Calculate B/F Balance (Transactions occurred prior to filter start time)
     if (t < fromTime) {
       if (item.type === "in") {
         openingBalanceBF += amt;
@@ -231,12 +231,12 @@ export function renderPettyCashTable() {
   tbody.innerHTML = "";
   let runningBal = hasFromFilter ? openingBalanceBF : 0;
 
-  // Render Opening Balance B/F Row if filtered
+  // Render Opening Balance B/F Row if date filter is active
   if (hasFromFilter) {
     const bfTr = document.createElement("tr");
     bfTr.className = "bg-blue-50/60 font-bold border-b border-blue-100 text-blue-950";
     bfTr.innerHTML = `
-      <td class="p-3 font-mono text-gray-500">${document.getElementById("pettyFromDate")?.value.replace("T", " ")}</td>
+      <td class="p-3 font-mono text-gray-500">${(document.getElementById("pettyFromDate")?.value || "").replace("T", " ")}</td>
       <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] bg-blue-100 text-blue-800 font-extrabold uppercase">⚖️ OPENING (B/F)</span></td>
       <td class="p-3 text-blue-900 font-extrabold">ආරම්භක ශේෂය (Balance B/F)</td>
       <td class="p-3 text-gray-500 italic">පෙර දිනවල ඉතිරි වූ ශේෂය</td>
@@ -275,7 +275,7 @@ export function renderPettyCashTable() {
       <td class="p-3.5 text-right font-black text-red-600">${!isIn ? 'Rs. ' + amt.toFixed(2) : '-'}</td>
       <td class="p-3.5 text-right font-black ${runningBal >= 0 ? 'text-emerald-700' : 'text-red-600'}">Rs. ${runningBal.toFixed(2)}</td>
       <td class="p-3.5 text-right">
-        <button onclick="deletePettyCash('${id}')" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+        <button onclick="deletePettyCash('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -286,6 +286,7 @@ export async function deletePettyCash(id) {
   if (confirm("මෙම සටහන මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/pettyCash/${id}`));
+      showLiveToast("🗑️ Record Deleted", "මුදල් පොතේ සටහන සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -304,7 +305,7 @@ export function exportPettyCashToCSV() {
   let running = hasFromFilter ? openingBalanceBF : 0;
   
   if (hasFromFilter) {
-    csv += `"${document.getElementById("pettyFromDate")?.value}","OPENING (B/F)","Balance B/F","පෙර දිනවල ඉතිරි වූ ශේෂය","System","0.00","0.00","${openingBalanceBF.toFixed(2)}"\n`;
+    csv += `"${document.getElementById("pettyFromDate")?.value || ''}","OPENING (B/F)","Balance B/F","පෙර දිනවල ඉතිරි වූ ශේෂය","System","0.00","0.00","${openingBalanceBF.toFixed(2)}"\n`;
   }
 
   filteredList.forEach(([id, item]) => {
@@ -321,3 +322,13 @@ export function exportPettyCashToCSV() {
   
   downloadCSVFile(csv, `Petty_Cash_Ledger_${new Date().toISOString().split("T")[0]}.csv`);
 }
+
+// Global Window Exports
+window.openPettyCashModal = openPettyCashModal;
+window.closePettyCashModal = closePettyCashModal;
+window.selectPettyEntryType = selectPettyEntryType;
+window.handlePettyCashSubmit = handlePettyCashSubmit;
+window.setPettyPeriodPreset = setPettyPeriodPreset;
+window.renderPettyCashTable = renderPettyCashTable;
+window.deletePettyCash = deletePettyCash;
+window.exportPettyCashToCSV = exportPettyCashToCSV;
