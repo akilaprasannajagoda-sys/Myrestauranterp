@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 01: GLOBAL ERP STATE & DATA STORE (MULTI-PRINTER ROUTING SUPPORTED)
+// MODULE 01: GLOBAL ERP STATE & DATA STORE (PERSISTENT SETTINGS SUPPORTED)
 // ==========================================================================
 
 export let currentTenant = null;
@@ -25,6 +25,9 @@ export const erpState = {
   attendance: {},
   salaryAdvances: {},
   dayEndReports: {},
+  dailySummaries: {},
+  storeIssues: {},
+  wastageLogs: {},
   settings: {
     scEnabled: false,
     scRate: 10,
@@ -33,11 +36,13 @@ export const erpState = {
     cslEnabled: false,
     cslRate: 2.5,
     shiftHours: 8.0,
+    inventoryMode: "recipe", // Default: "recipe" (Auto-deduct by Recipe) හෝ "issue" (Daily Store Issue)
+    silentPrintEnabled: true,
     printers: {
-      p1: { name: "Main Cashier 1", bill: true, kot: false },
-      p2: { name: "Hot Kitchen KOT", bill: false, kot: true },
-      p3: { name: "Juice & Bar KOT", bill: false, kot: true },
-      p4: { name: "Cashier 2 / Accounts", bill: true, kot: false }
+      p1: { name: "Main Cashier 1", device: "POS-80", bill: true, kot: false },
+      p2: { name: "Hot Kitchen KOT", device: "POS80-Kitchen", bill: false, kot: true },
+      p3: { name: "Juice & Bar KOT", device: "POS80-Bar", bill: false, kot: true },
+      p4: { name: "Cashier 2 / Accounts", device: "POS80-Accounts", bill: true, kot: false }
     }
   }
 };
@@ -53,12 +58,43 @@ export let kioskCameraStream = null;
 export let todayLiveScans = [];
 
 // Safe State Mutators
-export function setCurrentTenant(val) { currentTenant = val; }
-export function setCurrentTenantInfo(val) { currentTenantInfo = val; }
-export function setCurrentUserRole(val) { currentUserRole = val; }
-export function setActiveBillId(val) { activeBillId = val; }
-export function setCurrentCategoryFilter(val) { currentCategoryFilter = val; }
-export function setCurrentAreaFilter(val) { currentAreaFilter = val; }
-export function setLastReadyOrderCount(val) { lastReadyOrderCount = val; }
-export function setActiveSupplierLedgerId(val) { activeSupplierLedgerId = val; }
-export function setKioskCameraStream(val) { kioskCameraStream = val; }
+export function setCurrentTenant(val) {
+  currentTenant = val;
+}
+
+export function setCurrentTenantInfo(val) {
+  currentTenantInfo = val;
+}
+
+export function setCurrentUserRole(val) {
+  currentUserRole = val;
+}
+
+export function setActiveBillId(val) {
+  activeBillId = val;
+}
+
+export function setCurrentCategoryFilter(val) {
+  currentCategoryFilter = val;
+}
+
+export function setCurrentAreaFilter(val) {
+  currentAreaFilter = val;
+}
+
+export function setLastReadyOrderCount(val) {
+  lastReadyOrderCount = val;
+}
+
+export function setActiveSupplierLedgerId(val) {
+  activeSupplierLedgerId = val;
+}
+
+export function setKioskCameraStream(val) {
+  kioskCameraStream = val;
+}
+
+export function setInventoryModeSetting(mode) {
+  if (!erpState.settings) erpState.settings = {};
+  erpState.settings.inventoryMode = (mode === "issue") ? "issue" : "recipe";
+}
