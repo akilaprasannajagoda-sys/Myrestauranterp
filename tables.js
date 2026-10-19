@@ -67,7 +67,7 @@ export function renderAreaListModalUI() {
       <span class="font-bold text-gray-800 flex items-center gap-2">
         <i class="fa-solid fa-layer-group text-blue-600"></i> ${area.name}
       </span>
-      <button onclick="deleteArea('${id}')" class="text-red-500 hover:text-red-700 p-1 transition"><i class="fa-solid fa-trash"></i></button>
+      <button onclick="deleteArea('${id}')" class="text-red-500 hover:text-red-700 p-1 transition cursor-pointer"><i class="fa-solid fa-trash"></i></button>
     `;
     container.appendChild(row);
   });
@@ -77,6 +77,7 @@ export async function deleteArea(id) {
   if (confirm("මෙම Floor Area එක මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/areas/${id}`));
+      showLiveToast("🗑️ Area Removed", "කලාපය සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -87,7 +88,7 @@ export function renderAreaFiltersUI() {
   container.innerHTML = "";
   
   const allBtn = document.createElement("button");
-  allBtn.className = `px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold transition text-xs ${
+  allBtn.className = `px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold transition text-xs cursor-pointer ${
     currentAreaFilter === "ALL" ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
   }`;
   allBtn.innerText = "All Areas (සියල්ල)";
@@ -96,7 +97,7 @@ export function renderAreaFiltersUI() {
   
   Object.entries(erpState.areas || {}).forEach(([id, area]) => {
     const btn = document.createElement("button");
-    btn.className = `px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold transition text-xs ${
+    btn.className = `px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold transition text-xs cursor-pointer ${
       currentAreaFilter === area.name ? "bg-blue-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
     }`;
     btn.innerText = area.name;
@@ -181,16 +182,22 @@ export async function handleTableSubmit(e) {
     updatedAt: new Date().toISOString()
   };
   
+  if (!tableData.tableNo) {
+    alert("කරුණාකර Table Number එක ඇතුළත් කරන්න.");
+    return;
+  }
+  
   try {
     if (dbRef && currentTenant) {
       if (editId && updateFn) {
         await updateFn(dbRef(`tenants/${currentTenant}/tables/${editId}`), tableData);
+        showLiveToast("🍽️ Table Updated", `Table ${tableData.tableNo} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-chair");
       } else if (pushFn) {
         await pushFn(dbRef(`tenants/${currentTenant}/tables`), tableData);
+        showLiveToast("🍽️ Table Saved", `Table ${tableData.tableNo} සාර්ථකව සේව් විය.`, "success", "fa-chair");
       }
     }
     closeTableModal();
-    showLiveToast("🍽️ Table Saved", `Table ${tableData.tableNo} සාර්ථකව සේව් විය.`, "success", "fa-chair");
   } catch (err) {
     alert("මේසය සේව් කිරීමේදී දෝෂයක්: " + err.message);
   }
@@ -236,8 +243,8 @@ export function renderTablesFloorGrid() {
             isOccupied ? "bg-red-200 text-red-800 animate-pulse" : "bg-green-100 text-green-800"
           }">${isOccupied ? 'Occupied (පිරිලා)' : 'Available (හිස්)'}</span>
           <div class="space-x-1" onclick="event.stopPropagation()">
-            <button onclick="openTableModal('edit', '${id}')" class="text-gray-400 hover:text-blue-600 p-1"><i class="fa-solid fa-pen text-xs"></i></button>
-            <button onclick="deleteTable('${id}')" class="text-gray-400 hover:text-red-600 p-1"><i class="fa-solid fa-trash text-xs"></i></button>
+            <button onclick="openTableModal('edit', '${id}')" class="text-gray-400 hover:text-blue-600 p-1 cursor-pointer"><i class="fa-solid fa-pen text-xs"></i></button>
+            <button onclick="deleteTable('${id}')" class="text-gray-400 hover:text-red-600 p-1 cursor-pointer"><i class="fa-solid fa-trash text-xs"></i></button>
           </div>
         </div>
 
@@ -299,6 +306,7 @@ export async function deleteTable(id) {
   if (confirm("මෙම Table එක මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/tables/${id}`));
+      showLiveToast("🗑️ Table Removed", "මේසය සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -416,6 +424,17 @@ export async function handleMergeTables(e) {
 }
 
 // Global Window Exports
+window.openAreaModal = openAreaModal;
+window.closeAreaModal = closeAreaModal;
+window.handleAddAreaSubmit = handleAddAreaSubmit;
+window.deleteArea = deleteArea;
+window.filterTableByArea = filterTableByArea;
+window.openTableModal = openTableModal;
+window.closeTableModal = closeTableModal;
+window.handleTableSubmit = handleTableSubmit;
+window.deleteTable = deleteTable;
+window.linkTableToPos = linkTableToPos;
 window.openMergeTableModal = openMergeTableModal;
 window.closeMergeTableModal = closeMergeTableModal;
 window.handleMergeTables = handleMergeTables;
+window.renderTablesFloorGrid = renderTablesFloorGrid;
