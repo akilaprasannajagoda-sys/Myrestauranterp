@@ -4,6 +4,7 @@
 
 import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans } from './state.js';
 import { showLiveToast, downloadCSVFile } from './utils.js';
+import { printThermalPayslip } from './printer.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -11,6 +12,9 @@ let updateFn = null;
 let removeFn = null;
 let createAuthUserFn = null;
 let wakeLockSentinel = null;
+
+// Stores current active payslip payload for instant 80mm thermal reprint
+export let activePayslipData = null;
 
 export function initPayrollContext(dbRefInstance, pushMethod, updateMethod, removeMethod, authUserMethod = null) {
   dbRef = dbRefInstance;
@@ -256,7 +260,7 @@ export function switchEmployeeSubTab(tabName) {
     const tabBtn = document.getElementById("empSubTab-" + t);
     if (sec) sec.classList.add("hidden");
     if (tabBtn) {
-      tabBtn.className = "px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold";
+      tabBtn.className = "px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer";
     }
   });
 
@@ -264,7 +268,7 @@ export function switchEmployeeSubTab(tabName) {
   const activeBtn = document.getElementById("empSubTab-" + tabName);
   if (activeSec) activeSec.classList.remove("hidden");
   if (activeBtn) {
-    activeBtn.className = "px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm font-bold";
+    activeBtn.className = "px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm font-bold cursor-pointer";
   }
 
   if (tabName === "attendance") {
@@ -464,11 +468,11 @@ export function renderEmployeesTable() {
       <td class="p-3.5 font-bold text-emerald-600">Rs. ${parseFloat(emp.salary || 0).toFixed(2)}</td>
       <td class="p-3.5 font-bold text-blue-600">Rs. ${parseFloat(emp.otRate || 0).toFixed(2)}</td>
       <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
-        <button onclick="openStaffLoginModal('${id}')" title="Create / Manage System Login" class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-200 px-2 py-1 rounded-lg text-xs font-bold transition">
+        <button onclick="openStaffLoginModal('${id}')" title="Create / Manage System Login" class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-200 px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer">
           <i class="fa-solid fa-key mr-0.5"></i> Login
         </button>
-        <button onclick="openEmployeeModal('edit', '${id}')" class="text-blue-600 hover:text-blue-800 p-1"><i class="fa-solid fa-pen"></i></button>
-        <button onclick="deleteEmployee('${id}')" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+        <button onclick="openEmployeeModal('edit', '${id}')" class="text-blue-600 hover:text-blue-800 p-1 cursor-pointer"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="deleteEmployee('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -479,6 +483,7 @@ export async function deleteEmployee(id) {
   if (confirm("මෙම සේවකයා ඉවත් කිරීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/employees/${id}`));
+      showLiveToast("🗑️ Employee Removed", "සේවකයා සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -586,7 +591,7 @@ export function renderAttendanceLogsTable() {
         </span>
       </td>
       <td class="p-3.5 text-right">
-        <button onclick="deleteAttendanceRecord('${id}')" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+        <button onclick="deleteAttendanceRecord('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -597,6 +602,7 @@ export async function deleteAttendanceRecord(id) {
   if (confirm("මෙම Attendance සටහන මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/attendance/${id}`));
+      showLiveToast("🗑️ Attendance Removed", "පැමිණීමේ සටහන සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -735,7 +741,7 @@ export function renderMonthlyPayrollSheet() {
       <td class="p-3.5 font-bold text-red-600">Rs. ${totalAdvances.toFixed(2)}</td>
       <td class="p-3.5 font-black text-emerald-700 text-sm">Rs. ${netSalary.toFixed(2)}</td>
       <td class="p-3.5 text-right">
-        <button onclick="printEmployeePayslip('${empId}', '${selectedMonth}', ${daysWorked}, ${basicSalary}, ${totalOtHours}, ${otRate}, ${otAmount}, ${totalAdvances}, ${netSalary})" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-xs">
+        <button onclick="printEmployeePayslip('${empId}', '${selectedMonth}', ${daysWorked}, ${basicSalary}, ${totalOtHours}, ${otRate}, ${otAmount}, ${totalAdvances}, ${netSalary})" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-xs cursor-pointer">
           <i class="fa-solid fa-receipt mr-1"></i> Payslip
         </button>
       </td>
@@ -754,10 +760,27 @@ export function renderMonthlyPayrollSheet() {
   if (netEl) netEl.innerText = `Rs. ${grandNet.toFixed(2)}`;
 }
 
+// 7. PAYSLIP MODAL PREVIEW & DEDICATED 80MM THERMAL PRINT DISPATCHER
 export function printEmployeePayslip(empId, monthStr, daysWorked, basic, otHours, otRate, otAmount, advances, netSalary) {
   const emp = erpState.employees[empId];
   if (!emp) return;
 
+  // Cache data for instant thermal print
+  activePayslipData = {
+    empId: emp.empId || 'EMP',
+    empName: emp.name,
+    empRole: emp.role || 'Staff',
+    monthStr: monthStr,
+    daysWorked: daysWorked,
+    basic: basic,
+    otHours: otHours,
+    otRate: otRate,
+    otAmount: otAmount,
+    advances: advances,
+    netSalary: netSalary
+  };
+
+  // Populate on-screen preview modal
   const mLabel = document.getElementById("payslipMonthLabel");
   const nameLabel = document.getElementById("payslipEmpName");
   const roleLabel = document.getElementById("payslipEmpIdRole");
@@ -787,6 +810,12 @@ export function printEmployeePayslip(empId, monthStr, daysWorked, basic, otHours
   document.getElementById("payslipModal")?.classList.remove("hidden");
 }
 
+// Dedicated 80mm Pure Thermal Print trigger (Stops runaway paper roll and blur)
+export async function printActiveThermalPayslip() {
+  if (!activePayslipData) return;
+  await printThermalPayslip(activePayslipData);
+}
+
 export function closePayslipModal() {
   document.getElementById("payslipModal")?.classList.add("hidden");
 }
@@ -811,7 +840,7 @@ export function exportPayrollToCSV() {
   downloadCSVFile(csv, `Monthly_Payroll_${month}.csv`);
 }
 
-// Window Global Exports
+// Global Window Exports
 window.kioskKeypadPress = kioskKeypadPress;
 window.kioskKeypadClear = kioskKeypadClear;
 window.kioskKeypadBackspace = kioskKeypadBackspace;
@@ -819,6 +848,7 @@ window.submitKioskAttendance = submitKioskAttendance;
 window.switchEmployeeSubTab = switchEmployeeSubTab;
 window.openEmployeeModal = openEmployeeModal;
 window.closeEmployeeModal = closeEmployeeModal;
+window.handleEmployeeSubmit = handleEmployeeSubmit;
 window.deleteEmployee = deleteEmployee;
 window.openStaffLoginModal = openStaffLoginModal;
 window.closeStaffLoginModal = closeStaffLoginModal;
@@ -829,7 +859,9 @@ window.deleteAttendanceRecord = deleteAttendanceRecord;
 window.exportAttendanceToCSV = exportAttendanceToCSV;
 window.openSalaryAdvanceModal = openSalaryAdvanceModal;
 window.closeSalaryAdvanceModal = closeSalaryAdvanceModal;
+window.handleSalaryAdvanceSubmit = handleSalaryAdvanceSubmit;
 window.renderMonthlyPayrollSheet = renderMonthlyPayrollSheet;
 window.printEmployeePayslip = printEmployeePayslip;
+window.printActiveThermalPayslip = printActiveThermalPayslip;
 window.closePayslipModal = closePayslipModal;
 window.exportPayrollToCSV = exportPayrollToCSV;
