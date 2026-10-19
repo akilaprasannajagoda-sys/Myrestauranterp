@@ -3,6 +3,7 @@
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
+import { showLiveToast } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -62,6 +63,7 @@ export async function handleAddCategorySubmit(e) {
   await pushFn(dbRef(`tenants/${currentTenant}/dishCategories`), { name });
   const input = document.getElementById("newCategoryName");
   if (input) input.value = "";
+  showLiveToast("🍽️ Category Added", `"${name}" කාණ්ඩය සාර්ථකව එකතු විය.`, "success", "fa-tags");
 }
 
 export function renderDishCategoryListUI() {
@@ -83,6 +85,7 @@ export async function deleteDishCategory(id) {
   if (confirm("මෙම Category එක මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/dishCategories/${id}`));
+      showLiveToast("🗑️ Category Removed", "Category එක සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -169,7 +172,7 @@ export function addRecipeIngredientRow(selectedRawId = "", qty = 1, selectedUnit
     <select class="w-16 p-2 border rounded-xl text-xs bg-white ing-unit font-bold outline-none" onchange="calculateDishCostAndMargin()">
       ${unitOptions}
     </select>
-    <button type="button" onclick="this.parentElement.remove(); calculateDishCostAndMargin();" class="text-red-500 hover:text-red-700 p-2"><i class="fa-solid fa-trash"></i></button>
+    <button type="button" onclick="this.parentElement.remove(); calculateDishCostAndMargin();" class="text-red-500 hover:text-red-700 p-2 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
   `;
   container.appendChild(row);
   calculateDishCostAndMargin();
@@ -250,8 +253,10 @@ export async function handleDishSubmit(e) {
   if (dbRef && currentTenant) {
     if (dishId && updateFn) {
       await updateFn(dbRef(`tenants/${currentTenant}/dishes/${dishId}`), dishData);
+      showLiveToast("🍽️ Dish Updated", `${dishData.name} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-bowl-food");
     } else if (pushFn) {
       await pushFn(dbRef(`tenants/${currentTenant}/dishes`), dishData);
+      showLiveToast("🍽️ Dish Saved", `${dishData.name} සහ Recipe එක සාර්ථකව සේව් විය.`, "success", "fa-bowl-food");
     }
   }
   closeDishModal();
@@ -286,8 +291,8 @@ export function renderMenuDishesTable() {
       <td class="p-3.5"><span class="text-green-600 font-black">${margin}%</span></td>
       <td class="p-3.5"><span class="bg-green-50 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">Active</span></td>
       <td class="p-3.5 text-right space-x-2">
-        <button onclick="openDishModal('edit', '${id}')" class="text-blue-600 hover:text-blue-800"><i class="fa-solid fa-pen"></i></button>
-        <button onclick="deleteDish('${id}')" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
+        <button onclick="openDishModal('edit', '${id}')" class="text-blue-600 hover:text-blue-800 cursor-pointer"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="deleteDish('${id}')" class="text-red-500 hover:text-red-700 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -298,6 +303,20 @@ export async function deleteDish(id) {
   if (confirm("මෙම Dish එක මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/dishes/${id}`));
+      showLiveToast("🗑️ Dish Deleted", "කෑම වර්ගය සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
     }
   }
 }
+
+// Window Global Exports
+window.openCategoryModal = openCategoryModal;
+window.closeCategoryModal = closeCategoryModal;
+window.handleAddCategorySubmit = handleAddCategorySubmit;
+window.deleteDishCategory = deleteDishCategory;
+window.openDishModal = openDishModal;
+window.closeDishModal = closeDishModal;
+window.addRecipeIngredientRow = addRecipeIngredientRow;
+window.onRecipeIngredientChange = onRecipeIngredientChange;
+window.calculateDishCostAndMargin = calculateDishCostAndMargin;
+window.handleDishSubmit = handleDishSubmit;
+window.deleteDish = deleteDish;
