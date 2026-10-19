@@ -35,6 +35,7 @@ export async function handleAddRawCategorySubmit(e) {
   await pushFn(dbRef(`tenants/${currentTenant}/rawCategories`), { name });
   const input = document.getElementById("newRawCategoryName");
   if (input) input.value = "";
+  showLiveToast("📦 Category Added", `"${name}" Category එක සාර්ථකව එකතු විය.`, "success", "fa-tags");
 }
 
 export function renderRawCategoryListUI() {
@@ -46,7 +47,7 @@ export function renderRawCategoryListUI() {
     row.className = "flex justify-between items-center p-2 rounded-xl bg-gray-50 border border-gray-200 text-xs";
     row.innerHTML = `
       <span class="font-bold text-gray-800">${cat.name}</span>
-      <button onclick="deleteRawCategory('${id}')" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+      <button onclick="deleteRawCategory('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
     `;
     container.appendChild(row);
   });
@@ -56,6 +57,7 @@ export async function deleteRawCategory(id) {
   if (confirm("මෙම Material Category එක මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/rawCategories/${id}`));
+      showLiveToast("🗑️ Category Removed", "Category එක සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -122,12 +124,13 @@ export async function handleRawItemSubmit(e) {
   if (dbRef && currentTenant) {
     if (rawId && updateFn) {
       await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${rawId}`), rawData);
+      showLiveToast("📦 Product Updated", `${rawData.name} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-boxes-stacked");
     } else if (pushFn) {
       await pushFn(dbRef(`tenants/${currentTenant}/rawItems`), rawData);
+      showLiveToast("📦 Product Saved", `${rawData.name} සාර්ථකව සේව් විය.`, "success", "fa-boxes-stacked");
     }
   }
   closeRawItemModal();
-  showLiveToast("📦 Product Saved", `${rawData.name} සාර්ථකව සේව් විය.`, "success", "fa-boxes-stacked");
 }
 
 export function renderRawStockTable() {
@@ -165,8 +168,8 @@ export function renderRawStockTable() {
         }">${stock} ${raw.unit}</span>
       </td>
       <td class="p-3.5 text-right space-x-2">
-        <button onclick="openRawItemModal('edit', '${id}')" class="text-indigo-600 hover:text-indigo-800"><i class="fa-solid fa-pen"></i></button>
-        <button onclick="deleteRawItem('${id}')" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
+        <button onclick="openRawItemModal('edit', '${id}')" class="text-indigo-600 hover:text-indigo-800 cursor-pointer"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="deleteRawItem('${id}')" class="text-red-500 hover:text-red-700 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -177,6 +180,7 @@ export async function deleteRawItem(id) {
   if (confirm("මෙම Material Product එක මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/rawItems/${id}`));
+      showLiveToast("🗑️ Product Deleted", "අමුද්‍රව්‍යය සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
     }
   }
 }
@@ -226,7 +230,7 @@ export function addStoreIssueItemRow() {
       <input type="number" step="0.1" placeholder="Issued Qty" value="1" class="w-full p-1.5 border rounded-lg font-bold text-center outline-none store-issue-qty">
     </div>
     <div class="col-span-6 sm:col-span-2 text-right">
-      <button type="button" onclick="this.closest('.store-issue-item-row').remove()" class="text-red-500 hover:text-red-700 p-1.5"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" onclick="this.closest('.store-issue-item-row').remove()" class="text-red-500 hover:text-red-700 p-1.5 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
   container.appendChild(row);
@@ -353,7 +357,7 @@ export function addWastageItemRow() {
       </select>
     </div>
     <div class="col-span-1 text-center">
-      <button type="button" onclick="this.closest('.wastage-item-row').remove()" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" onclick="this.closest('.wastage-item-row').remove()" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
   container.appendChild(row);
@@ -430,9 +434,11 @@ export async function handleWastageSubmit(e) {
 // Global Window Exports
 window.openRawCategoryModal = openRawCategoryModal;
 window.closeRawCategoryModal = closeRawCategoryModal;
+window.handleAddRawCategorySubmit = handleAddRawCategorySubmit;
 window.deleteRawCategory = deleteRawCategory;
 window.openRawItemModal = openRawItemModal;
 window.closeRawItemModal = closeRawItemModal;
+window.handleRawItemSubmit = handleRawItemSubmit;
 window.deleteRawItem = deleteRawItem;
 window.openStoreIssueModal = openStoreIssueModal;
 window.closeStoreIssueModal = closeStoreIssueModal;
