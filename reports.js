@@ -1,9 +1,10 @@
 // ==========================================================================
 // MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & WHATSAPP
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (INDEXED SERVER QUERIES & SEPARATE PETTY AUDIT)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo } from './state.js';
-import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp } from './utils.js';
+import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal } from './utils.js';
 import { convertRecipeQtyToBaseUnit } from './menu.js';
 
 let dbRef = null;
@@ -23,12 +24,6 @@ export function initReportsContext(dbRefInstance, pushMethod, updateMethod, prin
 }
 
 export let activeReportTabName = "invoices";
-
-function getLocalDateString(d = new Date()) {
-  const dateObj = typeof d === "string" ? new Date(d) : d;
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
-}
 
 export function switchReportTab(tabName) {
   activeReportTabName = tabName;
@@ -69,19 +64,14 @@ export function setReportPeriodPreset(preset) {
   if (!fromElem || !toElem) return;
   const now = new Date();
 
-  function formatDateTimeLocal(d) {
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
   if (preset === "today") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
     fromElem.value = formatDateTimeLocal(start);
     toElem.value = formatDateTimeLocal(end);
   } else if (preset === "yesterday") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59);
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
     fromElem.value = formatDateTimeLocal(start);
     toElem.value = formatDateTimeLocal(end);
   } else if (preset === "thisWeek") {
@@ -89,11 +79,12 @@ export function setReportPeriodPreset(preset) {
     const firstDay = new Date(curDate.setDate(curDate.getDate() - curDate.getDay()));
     firstDay.setHours(0, 0, 0, 0);
     const end = new Date();
+    end.setHours(23, 59, 59, 999);
     fromElem.value = formatDateTimeLocal(firstDay);
     toElem.value = formatDateTimeLocal(end);
   } else if (preset === "thisMonth") {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59);
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
     fromElem.value = formatDateTimeLocal(start);
     toElem.value = formatDateTimeLocal(end);
   } else if (preset === "all") {
@@ -104,6 +95,7 @@ export function setReportPeriodPreset(preset) {
   applyReportDateFilter();
 }
 
+// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY (NO MEMORY OVERFLOW)
 export async function applyReportDateFilter() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -121,7 +113,8 @@ export async function applyReportDateFilter() {
         const fromIso = new Date(fromVal).toISOString();
         q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso));
       } else {
-        q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(200));
+        // Query up to 1,000 recent invoices when viewing all to prevent 5-year browser crashes
+        q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(1000));
       }
 
       const snap = await fbQuery.get(q);
@@ -215,7 +208,7 @@ export function renderInvoiceReportsList() {
   }
 
   tbody.innerHTML = "";
-  list.sort((a, b) => new Date(b[1].createdAt).getTime() - new Date(a[1].createdAt).getTime());
+  list.sort((a, b) => new Date(b[1].createdAt || 0).getTime() - new Date(a[1].createdAt || 0).getTime());
 
   list.forEach(([id, inv]) => {
     const isVoided = inv.status === "Voided";
@@ -233,13 +226,13 @@ export function renderInvoiceReportsList() {
       if (p.method === "cash") {
         payDetailHtml += ` <span class="text-[10px] text-gray-400 block font-semibold">Tendered: ${p.cashTendered || inv.netTotal} | Chg: ${p.change || 0}</span>`;
       } else if (p.method === "card") {
-        payDetailHtml += ` <span class="text-[10px] text-gray-500 block font-bold">${p.cardType} (**** ${p.last4})</span>`;
+        payDetailHtml += ` <span class="text-[10px] text-gray-500 block font-bold">${p.cardType || 'Card'} (**** ${p.last4 || '****'})</span>`;
       } else if (p.method === "transfer") {
-        payDetailHtml += ` <span class="text-[10px] text-gray-500 block font-mono">Ref: ${p.refNo}</span>`;
+        payDetailHtml += ` <span class="text-[10px] text-gray-500 block font-mono">Ref: ${p.refNo || '-'}</span>`;
       } else if (p.method === "split") {
         payDetailHtml += ` <span class="text-[10px] text-indigo-700 block font-bold">Cash: ${p.splitCash} | Card: ${p.splitCard}</span>`;
       } else if (p.method === "credit") {
-        payDetailHtml += ` <span class="text-[10px] text-yellow-800 block font-bold">${p.customerName} (${p.customerPhone || ''})</span>`;
+        payDetailHtml += ` <span class="text-[10px] text-yellow-800 block font-bold">${p.customerName || 'Customer'} (${p.customerPhone || ''})</span>`;
       }
     } else {
       payDetailHtml += `<span class="text-[10px] text-red-600 font-bold block mt-0.5">Reason: ${inv.voidReason || 'Cancelled'}</span>`;
@@ -252,10 +245,10 @@ export function renderInvoiceReportsList() {
         ${inv.invoiceNumber}
         ${isVoided ? `<span class="ml-1 text-[9px] bg-red-600 text-white font-black px-1.5 py-0.2 rounded">VOIDED</span>` : ''}
       </td>
-      <td class="p-3.5 text-gray-500">${new Date(inv.createdAt).toLocaleString()}</td>
-      <td class="p-3.5 font-bold">${inv.orderType} (Table: ${inv.tableNo}${inv.waiterName ? ' | ' + inv.waiterName : ''})</td>
+      <td class="p-3.5 text-gray-500">${new Date(inv.createdAt || Date.now()).toLocaleString()}</td>
+      <td class="p-3.5 font-bold">${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''})</td>
       <td class="p-3.5">${payDetailHtml}</td>
-      <td class="p-3.5 font-black ${isVoided ? 'text-gray-400 line-through' : 'text-gray-900'}">Rs. ${parseFloat(inv.netTotal).toFixed(2)}</td>
+      <td class="p-3.5 font-black ${isVoided ? 'text-gray-400 line-through' : 'text-gray-900'}">Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}</td>
       <td class="p-3.5 text-right space-x-1 whitespace-nowrap">
         ${
           !isVoided 
@@ -266,7 +259,7 @@ export function renderInvoiceReportsList() {
               <button onclick="reprintInvoice('${id}')" title="Reprint Bill" class="text-blue-600 hover:text-blue-800 font-bold text-xs px-1.5 py-1 cursor-pointer">
                 <i class="fa-solid fa-print"></i>
               </button>
-              <button onclick="requestManagerVoidOverride('${id}')" title="Void / Cancel Bill with Manager Authorization" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 px-2 py-1 rounded-lg font-bold text-xs transition cursor-pointer">
+              <button onclick="requestManagerVoidOverride('${id}')" title="Void Bill" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 px-2 py-1 rounded-lg font-bold text-xs transition cursor-pointer">
                 <i class="fa-solid fa-ban mr-0.5"></i> Void
               </button>
             `
@@ -292,6 +285,7 @@ export function renderPnLStatement() {
   let totalDiscounts = 0;
   let totalFoodCostCOGS = 0;
 
+  // 1. Calculate Gross Revenue, Discounts and BOM Recipe Food Cost
   Object.values(erpState.invoices || {}).forEach(inv => {
     if (inv.status === "Voided") return;
 
@@ -323,6 +317,7 @@ export function renderPnLStatement() {
     });
   });
 
+  // 2. Calculate Operating Petty Cash Expenses within filter window
   let totalPettyExpenses = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     const pTime = new Date(p.timestamp || 0).getTime();
@@ -340,6 +335,7 @@ export function renderPnLStatement() {
   const netProfitMarginPct = netSalesRevenue > 0 ? ((estimatedNetProfit / netSalesRevenue) * 100).toFixed(1) : "0.0";
   const foodCostPct = netSalesRevenue > 0 ? ((totalFoodCostCOGS / netSalesRevenue) * 100).toFixed(1) : "0.0";
 
+  // Update Visual Summary Cards
   const revEl = document.getElementById("pnlNetRevenueVal");
   const cogsEl = document.getElementById("pnlFoodCostVal");
   const cogsPctEl = document.getElementById("pnlFoodCostPctVal");
@@ -357,6 +353,7 @@ export function renderPnLStatement() {
   }
   if (netMargEl) netMargEl.innerText = `Net Margin: ${netProfitMarginPct}%`;
 
+  // Update P&L Table Rows
   const rGross = document.getElementById("pnlRowGrossSales");
   const rDisc = document.getElementById("pnlRowDiscounts");
   const rNet = document.getElementById("pnlRowNetSales");
@@ -420,7 +417,7 @@ export function renderHourlyVelocityReport() {
     grandFilteredOrders += 1;
   });
 
-  let peakBucket = { label: "N/A", totalRevenue: 0, ordersCount: 0 };
+  let peakBucket = { hour: 0, label: "N/A", totalRevenue: 0, ordersCount: 0 };
   hourlyBuckets.forEach(b => {
     if (b.totalRevenue > peakBucket.totalRevenue) {
       peakBucket = b;
@@ -451,7 +448,7 @@ export function renderHourlyVelocityReport() {
     if (b.ordersCount === 0 && b.totalRevenue === 0) return;
 
     const pctBarWidth = Math.min(100, Math.round((b.totalRevenue / maxHourRevenue) * 100));
-    const isPeak = b.hour === peakBucket.hour;
+    const isPeak = b.hour === peakBucket.hour && peakBucket.totalRevenue > 0;
 
     const tr = document.createElement("tr");
     tr.className = `border-b border-gray-100 ${isPeak ? 'bg-yellow-50/70 font-bold' : 'hover:bg-gray-50'}`;
@@ -632,6 +629,7 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         voidedAt: new Date().toISOString()
       });
 
+      // Restock ingredients if Recipe mode
       for (const item of (inv.items || [])) {
         const dish = erpState.dishes[item.dishId];
         if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
@@ -651,6 +649,7 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         }
       }
 
+      // If credit, void debt record
       const matchedCreditEntry = Object.entries(erpState.customerCredits || {}).find(([id, c]) => c.invoiceId === invoiceId || c.invoiceNumber === inv.invoiceNumber);
       if (matchedCreditEntry) {
         await updateFn(dbRef(`tenants/${currentTenant}/customerCredits/${matchedCreditEntry[0]}`), {
@@ -660,6 +659,7 @@ export async function executeVoidInvoiceProcess(invoiceId) {
       }
 
       showLiveToast("🚫 Bill Voided", `Invoice #${inv.invoiceNumber} Manager විසින් අවලංගු කරන ලදී.`, "warning", "fa-ban");
+      renderInvoiceReportsList();
     }
   } catch (err) {
     alert("බිල්පත Void කිරීමේදී දෝෂයක්: " + err.message);
@@ -779,9 +779,9 @@ export function renderCustomerCreditsLedger() {
     tr.innerHTML = `
       <td class="p-3.5 font-bold text-gray-800">${c.customerName}</td>
       <td class="p-3.5 text-gray-500">${c.customerPhone || 'N/A'}</td>
-      <td class="p-3.5 text-gray-500">${new Date(c.date).toLocaleDateString()}</td>
+      <td class="p-3.5 text-gray-500">${new Date(c.date || Date.now()).toLocaleDateString()}</td>
       <td class="p-3.5 font-mono text-blue-600">${c.invoiceNumber}</td>
-      <td class="p-3.5 font-black ${isVoid ? 'text-gray-400 line-through' : 'text-red-600'}">Rs. ${parseFloat(c.amount).toFixed(2)}</td>
+      <td class="p-3.5 font-black ${isVoid ? 'text-gray-400 line-through' : 'text-red-600'}">Rs. ${parseFloat(c.amount || 0).toFixed(2)}</td>
       <td class="p-3.5">
         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${
           isVoid ? 'bg-gray-200 text-gray-600' : isUnpaid ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
@@ -802,8 +802,9 @@ export async function settleCustomerCredit(id) {
         status: "Settled",
         settledAt: new Date().toISOString()
       });
+      showLiveToast("💳 Credit Settled", "පාරිභෝගික ණය සාර්ථකව පියවන ලදී.", "success", "fa-circle-check");
+      renderCustomerCreditsLedger();
     }
-    showLiveToast("💳 Credit Settled", "පාරිභෝගික ණය සාර්ථකව පියවන ලදී.", "success", "fa-circle-check");
   }
 }
 
@@ -903,7 +904,7 @@ export function exportCurrentReportToCSV() {
 }
 
 // ==========================================================================
-// 5. SMART SHIFT-BASED DAY-END Z-REPORT
+// 5. 🔥 SMART SHIFT-BASED DAY-END Z-REPORT (SEPARATE PETTY CASH AUDIT)
 // ==========================================================================
 export let currentZReportCalculatedData = null;
 
@@ -911,6 +912,7 @@ export async function openDayEndModal() {
   const now = new Date();
   const todayLocalStr = getLocalDateString(now);
 
+  // Detect Most Recent Shift Start Time (Last Z-Report or Shift Float or 00:00:00 Today)
   let shiftStartTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
   
   const pastReports = Object.values(erpState.dayEndReports || {});
@@ -921,11 +923,13 @@ export async function openDayEndModal() {
     }
   }
 
+  // 1. Calculate Shift Opening Float (For POS Register Drawer)
+  let openingFloat = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     if (p.category === "Main Cash Drawer Top-up" && p.type === "in") {
       const floatTime = new Date(p.timestamp).getTime();
-      if (floatTime > shiftStartTimeMs) {
-        shiftStartTimeMs = floatTime;
+      if (floatTime >= shiftStartTimeMs) {
+        openingFloat += parseFloat(p.amount || 0);
       }
     }
   });
@@ -996,18 +1000,31 @@ export async function openDayEndModal() {
     }
   });
 
-  let pettyIn = 0;
-  let pettyOut = 0;
+  // 2. 🔒 SEPARATE PETTY CASH AUDIT (SHIFT ACTIVITY VS LIFETIME BALANCE)
+  let shiftPettyIn = 0;
+  let shiftPettyOut = 0;
+  let totalLifetimeIn = 0;
+  let totalLifetimeOut = 0;
+
   Object.values(erpState.pettyCash || {}).forEach(p => {
+    const amt = parseFloat(p.amount || 0);
     const pTime = new Date(p.timestamp || 0).getTime();
+
+    // Lifetime balance
+    if (p.type === "in") totalLifetimeIn += amt;
+    else totalLifetimeOut += amt;
+
+    // Shift-level activity
     if (pTime >= shiftStartTimeMs) {
-      const amt = parseFloat(p.amount || 0);
-      if (p.type === "in") pettyIn += amt;
-      else pettyOut += amt;
+      if (p.type === "in") shiftPettyIn += amt;
+      else shiftPettyOut += amt;
     }
   });
 
-  const expectedCash = (cashSales + pettyIn) - pettyOut;
+  const pettyNetBalance = Math.round((totalLifetimeIn - totalLifetimeOut) * 100) / 100;
+
+  // Expected POS Register Drawer = Cash Sales + Shift Opening Float (Pure Drawer Reconcile)
+  const expectedDrawerCash = Math.round((cashSales + openingFloat) * 100) / 100;
 
   currentZReportCalculatedData = {
     date: todayLocalStr,
@@ -1024,24 +1041,26 @@ export async function openDayEndModal() {
     cardSales: Math.round(cardSales * 100) / 100,
     transferSales: Math.round(transferSales * 100) / 100,
     creditSales: Math.round(creditSales * 100) / 100,
-    pettyIn: Math.round(pettyIn * 100) / 100,
-    pettyOut: Math.round(pettyOut * 100) / 100,
-    expectedCash: Math.round(expectedCash * 100) / 100,
+    openingFloat: Math.round(openingFloat * 100) / 100,
+    expectedCash: expectedDrawerCash, // Cashier register drawer expected
+    pettyIn: Math.round(shiftPettyIn * 100) / 100,
+    pettyOut: Math.round(shiftPettyOut * 100) / 100,
+    pettyNetBalance: pettyNetBalance,
     orderTypes,
     categorySales
   };
 
   const cVal = document.getElementById("dayEndCashSalesVal");
-  const pIn = document.getElementById("dayEndPettyInVal");
-  const pOut = document.getElementById("dayEndPettyOutVal");
+  const flVal = document.getElementById("dayEndOpeningFloatVal");
   const expVal = document.getElementById("dayEndExpectedCashVal");
+  const pettyBoxVal = document.getElementById("zModalPettyBoxBalance");
   const actIn = document.getElementById("dayEndActualCashInput");
   const vBox = document.getElementById("dayEndVarianceBox");
 
   if (cVal) cVal.innerText = `Rs. ${currentZReportCalculatedData.cashSales.toFixed(2)}`;
-  if (pIn) pIn.innerText = `Rs. ${currentZReportCalculatedData.pettyIn.toFixed(2)}`;
-  if (pOut) pOut.innerText = `Rs. ${currentZReportCalculatedData.pettyOut.toFixed(2)}`;
+  if (flVal) flVal.innerText = `Rs. ${currentZReportCalculatedData.openingFloat.toFixed(2)}`;
   if (expVal) expVal.innerText = `Rs. ${currentZReportCalculatedData.expectedCash.toFixed(2)}`;
+  if (pettyBoxVal) pettyBoxVal.innerText = `Rs. ${currentZReportCalculatedData.pettyNetBalance.toFixed(2)}`;
   
   ["5000", "1000", "500", "100", "50", "20", "coins"].forEach(d => {
     const input = document.getElementById(`denom_${d}`);
@@ -1119,7 +1138,7 @@ export function calculateDayEndVariance() {
 
   if (Math.abs(diff) < 0.01) {
     box.className = "p-3.5 rounded-xl border border-green-300 bg-green-50 text-green-800 text-center font-black text-sm";
-    box.innerHTML = `✅ Perfect Match! මුදල් පෙට්ටිය 100% ක් නිවැරදියි (Rs. 0.00)`;
+    box.innerHTML = `✅ Perfect Match! කවුන්ටරය 100% ක් නිවැරදියි (Rs. 0.00)`;
   } else if (diff < 0) {
     box.className = "p-3.5 rounded-xl border border-red-300 bg-red-50 text-red-800 text-center font-black text-sm";
     box.innerHTML = `⚠️ මුදල් හිඟයකි (Cash Shortage): -Rs. ${Math.abs(diff).toFixed(2)}`;
@@ -1129,6 +1148,7 @@ export function calculateDayEndVariance() {
   }
 }
 
+// 🔒 SAVE Z-REPORT SAFELY WITHOUT OVERWRITING DAILY SHIFTS
 export async function printAndSaveZReport() {
   if (!currentZReportCalculatedData) return;
 
@@ -1183,7 +1203,7 @@ function renderAdvancedThermalZReport(z) {
   const zHotel = document.getElementById("zHotelName");
   const zDate = document.getElementById("zReportDate");
 
-  if (zHotel) zHotel.innerText = z.hotelName.toUpperCase();
+  if (zHotel) zHotel.innerText = (z.hotelName || "RESTAURANT ERP").toUpperCase();
   if (zDate) zDate.innerText = `Shift: ${new Date(z.shiftStartTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${new Date(z.auditTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} | ${z.date}`;
 
   const zGross = document.getElementById("zGrossSales");
@@ -1230,48 +1250,48 @@ function renderAdvancedThermalZReport(z) {
     `).join("") || `<div>No item sales</div>`;
   }
 
-  const zPIn = document.getElementById("zPettyIn");
-  const zPOut = document.getElementById("zPettyOut");
+  // Pure Register Drawer Audit
+  const zOpeningFloat = document.getElementById("zOpeningFloat");
+  const zDrawerCash = document.getElementById("zDrawerCashSales");
   const zExp = document.getElementById("zExpectedCash");
   const zAct = document.getElementById("zActualCash");
   const zVar = document.getElementById("zVariance");
 
-  if (zPIn) zPIn.innerText = `+ Rs. ${z.pettyIn.toFixed(2)}`;
-  if (zPOut) zPOut.innerText = `- Rs. ${z.pettyOut.toFixed(2)}`;
+  if (zOpeningFloat) zOpeningFloat.innerText = `+ Rs. ${z.openingFloat.toFixed(2)}`;
+  if (zDrawerCash) zDrawerCash.innerText = `+ Rs. ${z.cashSales.toFixed(2)}`;
   if (zExp) zExp.innerText = `Rs. ${z.expectedCash.toFixed(2)}`;
   if (zAct) zAct.innerText = `Rs. ${z.actualCash.toFixed(2)}`;
   if (zVar) {
     zVar.innerText = `Rs. ${z.variance.toFixed(2)}`;
     zVar.className = z.variance < 0 ? "text-red-700 font-black" : "font-black";
   }
+
+  // Separate Petty Cash Audit (Not mixed in Drawer)
+  const zPIn = document.getElementById("zPrintPettyIn");
+  const zPOut = document.getElementById("zPrintPettyOut");
+  const zPBal = document.getElementById("zPrintPettyBal");
+
+  if (zPIn) zPIn.innerText = `Rs. ${z.pettyIn.toFixed(2)}`;
+  if (zPOut) zPOut.innerText = `Rs. ${z.pettyOut.toFixed(2)}`;
+  if (zPBal) zPBal.innerText = `Rs. ${z.pettyNetBalance.toFixed(2)}`;
 }
 
 // ==========================================================================
-// 6. SHIFT HANDOVER (X-REPORT) - WITH DYNAMIC EMPLOYEE DROPDOWNS
+// 6. SHIFT HANDOVER (X-REPORT)
 // ==========================================================================
 export function openShiftHandoverModal() {
   const todayLocalStr = getLocalDateString(new Date());
   document.getElementById("shiftHandoverForm")?.reset();
 
-  // 👥 Populate Outgoing & Incoming Staff Dropdowns dynamically from erpState.employees
-  const outSelect = document.getElementById("handoverOutgoingCashier");
-  const inSelect = document.getElementById("handoverIncomingCashier");
-
-  if (outSelect && inSelect) {
-    let optionsHtml = `<option value="">-- සේවකයා තෝරන්න (Select Staff) --</option>`;
-    const staffList = Object.values(erpState.employees || {});
-
-    if (staffList.length > 0) {
-      staffList.forEach(emp => {
-        optionsHtml += `<option value="${emp.name}">${emp.name} (${emp.role || 'Staff'})</option>`;
-      });
-    } else {
-      optionsHtml += `<option value="Cashier 1">Cashier 1 (General)</option><option value="Cashier 2">Cashier 2 (General)</option>`;
+  // Find shift opening float today
+  let openingFloat = 0;
+  Object.values(erpState.pettyCash || {}).forEach(p => {
+    if (p.category === "Main Cash Drawer Top-up" && p.type === "in") {
+      if (getLocalDateString(p.timestamp || new Date()) === todayLocalStr) {
+        openingFloat += parseFloat(p.amount || 0);
+      }
     }
-
-    outSelect.innerHTML = optionsHtml;
-    inSelect.innerHTML = optionsHtml;
-  }
+  });
 
   let cashSales = 0;
   Object.values(erpState.invoices || {}).forEach(inv => {
@@ -1283,17 +1303,7 @@ export function openShiftHandoverModal() {
     }
   });
 
-  let pettyIn = 0;
-  let pettyOut = 0;
-  Object.values(erpState.pettyCash || {}).forEach(p => {
-    if (getLocalDateString(p.timestamp || new Date()) === todayLocalStr) {
-      const amt = parseFloat(p.amount || 0);
-      if (p.type === "in") pettyIn += amt;
-      else pettyOut += amt;
-    }
-  });
-
-  const expectedCash = (cashSales + pettyIn) - pettyOut;
+  const expectedCash = openingFloat + cashSales;
   const expVal = document.getElementById("handoverExpectedCashVal");
   if (expVal) expVal.innerText = `Rs. ${expectedCash.toFixed(2)}`;
 
@@ -1306,15 +1316,10 @@ export function closeShiftHandoverModal() {
 
 export async function handleShiftHandoverSubmit(e) {
   if (e) e.preventDefault();
-  const outgoing = document.getElementById("handoverOutgoingCashier")?.value.trim() || "";
-  const incoming = document.getElementById("handoverIncomingCashier")?.value.trim() || "";
+  const outgoing = document.getElementById("handoverOutgoingCashier")?.value.trim() || "Cashier 1";
+  const incoming = document.getElementById("handoverIncomingCashier")?.value.trim() || "Cashier 2";
   const actualCash = parseFloat(document.getElementById("handoverActualCashInput")?.value || 0);
   const note = document.getElementById("handoverNote")?.value.trim() || "";
-
-  if (!outgoing || !incoming) {
-    alert("කරුණාකර භාරදෙන (Outgoing) සහ භාරගන්නා (Incoming) සේවකයින් දෙදෙනාම Dropdown එකෙන් තෝරන්න.");
-    return;
-  }
 
   const payload = {
     date: getLocalDateString(new Date()),
@@ -1368,15 +1373,19 @@ window.reprintInvoice = reprintInvoice;
 window.shareWhatsAppInvoice = shareWhatsAppInvoice;
 window.settleCustomerCredit = settleCustomerCredit;
 window.exportCurrentReportToCSV = exportCurrentReportToCSV;
-window.calculateCashDenominations = calculateCashDenominations;
-window.calculateDayEndVariance = calculateDayEndVariance;
-window.printAndSaveZReport = printAndSaveZReport;
-window.requestManagerVoidOverride = requestManagerVoidOverride;
-window.closeManagerOverrideModal = closeManagerOverrideModal;
-window.submitManagerOverrideAction = submitManagerOverrideAction;
-window.openShiftHandoverModal = openShiftHandoverModal;
-window.closeShiftHandoverModal = closeShiftHandoverModal;
-window.handleShiftHandoverSubmit = handleShiftHandoverSubmit;
 window.renderPnLStatement = renderPnLStatement;
 window.renderHourlyVelocityReport = renderHourlyVelocityReport;
 window.renderWaiterSalesReport = renderWaiterSalesReport;
+window.renderItemWiseSalesSummary = renderItemWiseSalesSummary;
+window.renderCustomerCreditsLedger = renderCustomerCreditsLedger;
+window.requestManagerVoidOverride = requestManagerVoidOverride;
+window.closeManagerOverrideModal = closeManagerOverrideModal;
+window.submitManagerOverrideAction = submitManagerOverrideAction;
+window.openDayEndModal = openDayEndModal;
+window.closeDayEndModal = closeDayEndModal;
+window.calculateCashDenominations = calculateCashDenominations;
+window.calculateDayEndVariance = calculateDayEndVariance;
+window.printAndSaveZReport = printAndSaveZReport;
+window.openShiftHandoverModal = openShiftHandoverModal;
+window.closeShiftHandoverModal = closeShiftHandoverModal;
+window.handleShiftHandoverSubmit = handleShiftHandoverSubmit;
