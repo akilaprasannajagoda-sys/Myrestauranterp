@@ -1,8 +1,24 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
-let mainWindow;
+let mainWindow = null;
+
+// 🔒 1. SINGLE INSTANCE LOCK (ඇප් එක එකවර දෙපාරක් Open වීම වළක්වයි)
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+  
+  app.whenReady().then(createWindow);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -11,17 +27,35 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: "Restaurant ERP - SME Enterprise Edition",
-    autoHideMenuBar: true, // වින්ඩෝස් Menu bar එක සඟවයි (Clean POS Screen)
+    autoHideMenuBar: true, // Clean POS Screen (Menu bar සැඟවීම)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      devTools: false // Production එකේදී DevTools අවහිර කිරීම
     }
   });
   
   mainWindow.maximize(); // ඇප් එක Open වන විටම Fullscreen මැක්සිමයිස් වේ
   mainWindow.loadFile('index.html');
+  
+  // 🔒 2. DEVTOOLS & ACCIDENTAL RELOAD BLOCK (F12 සහ Ctrl+R අවහිර කිරීම)
+  mainWindow.webContents.on('devtools-opened', () => {
+    mainWindow.webContents.closeDevTools();
+  });
+  
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // F12, Ctrl+Shift+I (Inspect) සහ F5, Ctrl+R (Accidental Reload) අවහිර කිරීම
+    if (
+      input.key === 'F12' ||
+      (input.control && input.shift && input.key.toLowerCase() === 'i') ||
+      input.key === 'F5' ||
+      (input.control && input.key.toLowerCase() === 'r')
+    ) {
+      event.preventDefault();
+    }
+  });
   
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -38,6 +72,7 @@ function createWindow() {
 
 // 🔔 Auto-Updater Download Event (Cashier ගෙන් විමසීම)
 autoUpdater.on('update-downloaded', (info) => {
+  if (!mainWindow) return;
   dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: '🎉 Update Ready!',
@@ -53,66 +88,30 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🌐 BROWSER & WHATSAPP EXTERNAL URL OPENER (NO ELECTRON CRASH)
-ipcMain.handle('open-external', async (event, url) => {
-  try {
-    if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
-      await shell.openExternal(url);
-      return { success: true };
-    }
-    return { success: false, error: 'Invalid URL format' };
-  } catch (err) {
-    console.error('[Open External Error]:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (HIGH DENSITY CRISP BLACK)
+// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (ZERO MEMORY LEAK)
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let printWin = null;
     try {
       if (!mainWindow) return resolve({ success: false, error: "Main window not found" });
       
-      const osPrinters = await mainWindow.webContents.getPrintersAsync();
-      let targetDevice = "";
+      const printers = await mainWindow.webContents.getPrintersAsync();
+      let targetDevice = printerName;
       
-      // 🔍 1. SMART PRINTER NAME MATCHER (Exact / Case-Insensitive / Space-Hyphen Neutral)
-      if (printerName && printerName.trim()) {
-        const cleanSearch = printerName.toLowerCase().replace(/[\s\-_]/g, '');
-        const matched = osPrinters.find(p => p.name.toLowerCase().replace(/[\s\-_]/g, '') === cleanSearch);
-        if (matched) {
-          targetDevice = matched.name;
-        } else {
-          // Partial search fallback (e.g. searching 'pos 80' inside 'POS-80 Series')
-          const partialMatch = osPrinters.find(p => p.name.toLowerCase().includes("pos") || p.name.toLowerCase().includes("80"));
-          if (partialMatch) {
-            targetDevice = partialMatch.name;
-          }
-        }
-      }
-      
-      // If still no exact device found, fallback safely to default Windows printer
+      // Default printer එකක් නොදුන් විට පද්ධතියේ default printer එක තෝරාගනී
       if (!targetDevice) {
-        const def = osPrinters.find(p => p.isDefault);
-        targetDevice = def ? def.name : (osPrinters.length > 0 ? osPrinters[0].name : "");
+        const def = printers.find(p => p.isDefault);
+        targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
       }
       
-      if (!targetDevice) {
-        return resolve({ success: false, error: "Windows OS තුළ කිසිදු Printer එකක් හමු නොවීය." });
-      }
-      
-      console.log(`[Silent Print Engine] Target Printer: "${targetDevice}"`);
-      
-      // 🖥️ 2. BACKGROUND PRINT WINDOW WITH NO THROTTLING
+      // පසුබිමෙන් පමණක් ධාවනය වන කුඩා 80mm Print Buffer Window එකක් සෑදීම
       printWin = new BrowserWindow({
         width: 320,
         height: 600,
         show: false,
         webPreferences: {
           nodeIntegration: false,
-          contextIsolation: true,
-          backgroundThrottling: false // Prevents Chromium from freezing print rendering
+          contextIsolation: true
         }
       });
       
@@ -122,41 +121,23 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         <head>
           <meta charset="UTF-8">
           <style>
-            @page { 
-              margin: 0 !important; 
-              size: 80mm auto !important; 
-            }
-            * { 
-              box-sizing: border-box !important; 
-              -webkit-print-color-adjust: exact !important;
-              color-adjust: exact !important;
-            }
+            @page { margin: 0; size: 80mm auto; }
             body {
               margin: 0 !important;
-              padding: 1mm 1mm 2mm 1mm !important;
+              padding: 2mm 2mm 15mm 2mm !important;
               width: 72mm !important;
-              font-family: Consolas, 'Lucida Console', 'Segoe UI', Arial, sans-serif !important;
-              font-size: 12.5px !important;
-              font-weight: 700 !important;
-              line-height: 1.25 !important;
-              color: #000000 !important;
-              background: #ffffff !important;
-              text-rendering: geometricPrecision !important;
-              -webkit-font-smoothing: antialiased !important;
+              font-family: 'Courier New', Courier, monospace, sans-serif !important;
+              font-size: 12px !important;
+              line-height: 1.3 !important;
+              color: #000 !important;
+              background: #fff !important;
             }
-            .text-center { text-align: center !important; }
-            .text-right { text-align: right !important; }
-            .font-bold { font-weight: 900 !important; }
-            .font-black { font-weight: 900 !important; }
-            .uppercase { text-transform: uppercase !important; }
-            .flex { display: flex !important; justify-content: space-between !important; align-items: center !important; }
-            .w-1\\/2 { width: 50% !important; }
-            .w-1\\/4 { width: 25% !important; }
-            .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
-            .border-b { border-bottom: 1px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
-            .border-b-2 { border-bottom: 2px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
-            /* Safe minimal cut clearance (just clears tear bar without wasting paper) */
-            .cut-spacer { height: 4mm !important; display: block !important; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-bold { font-weight: bold; }
+            .flex { display: flex; justify-content: space-between; }
+            .border-b { border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 3px; }
+            .cut-spacer { height: 18mm; display: block; }
           </style>
         </head>
         <body>
@@ -169,39 +150,34 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
       
       printWin.webContents.on('did-finish-load', () => {
-        // Wait slightly for DOM layout to compute fully
         setTimeout(async () => {
           try {
-            printWin.webContents.print({
+            await printWin.webContents.print({
               silent: true,
               printBackground: true,
               deviceName: targetDevice,
               margins: { marginType: 'none' }
-            }, (success, failureReason) => {
-              // 🔒 Safe Spool Delay: Do NOT close immediately! Allow Windows spooler 1.5 seconds to pipe to USB
-              setTimeout(() => {
-                if (printWin && !printWin.isDestroyed()) {
-                  printWin.close();
-                  printWin = null;
-                }
-              }, 1500);
-              
-              if (success) {
-                resolve({ success: true, deviceName: targetDevice });
-              } else {
-                console.error("[Silent Print Failed]:", failureReason);
-                resolve({ success: false, error: failureReason || "Print job failed by OS driver." });
-              }
             });
+            // 🔒 Window එක Destroy කිරීම මගින් RAM මතකය නිදහස් කරයි
+            if (printWin) {
+              printWin.destroy();
+              printWin = null;
+            }
+            resolve({ success: true });
           } catch (printErr) {
-            if (printWin && !printWin.isDestroyed()) printWin.close();
+            if (printWin) {
+              printWin.destroy();
+              printWin = null;
+            }
             resolve({ success: false, error: printErr.message });
           }
-        }, 300);
+        }, 150);
       });
-      
     } catch (err) {
-      if (printWin && !printWin.isDestroyed()) printWin.close();
+      if (printWin) {
+        printWin.destroy();
+        printWin = null;
+      }
       resolve({ success: false, error: err.message });
     }
   });
@@ -212,8 +188,6 @@ ipcMain.handle('get-printers', async () => {
   if (!mainWindow) return [];
   return await mainWindow.webContents.getPrintersAsync();
 });
-
-app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
