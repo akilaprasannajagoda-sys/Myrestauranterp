@@ -8,6 +8,7 @@ import { showLiveToast, downloadCSVFile } from './utils.js';
 let dbRef = null;
 let pushFn = null;
 let updateFn = null;
+let grnSearchDebounceTimer = null;
 
 export function initSuppliersContext(dbRefInstance, pushMethod, updateMethod) {
   dbRef = dbRefInstance;
@@ -32,7 +33,7 @@ export function switchGrnTab(tabName) {
     const tabBtn = document.getElementById("grnTab-" + t);
     if (sec) sec.classList.add("hidden");
     if (tabBtn) {
-      tabBtn.className = "px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold";
+      tabBtn.className = "px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer";
     }
   });
 
@@ -40,12 +41,12 @@ export function switchGrnTab(tabName) {
   const activeBtn = document.getElementById("grnTab-" + tabName);
   if (activeSec) activeSec.classList.remove("hidden");
   if (activeBtn) {
-    activeBtn.className = "px-3 py-1.5 rounded-lg bg-purple-600 text-white shadow-sm font-bold";
+    activeBtn.className = "px-3 py-1.5 rounded-lg bg-purple-600 text-white shadow-sm font-bold cursor-pointer";
   }
 
   if (tabName === "entry") {
     const dInput = document.getElementById("grnDate");
-    if (dInput) dInput.value = new Date().toISOString().split("T")[0];
+    if (dInput && !dInput.value) dInput.value = new Date().toISOString().split("T")[0];
     if (document.querySelectorAll(".grn-item-row").length === 0) {
       addGrnItemRow();
     }
@@ -95,14 +96,25 @@ export async function handleSupplierSubmit(e) {
     address: document.getElementById("supAddress")?.value.trim() || ""
   };
 
-  if (dbRef && currentTenant) {
-    if (supId && updateFn) {
-      await updateFn(dbRef(`tenants/${currentTenant}/suppliers/${supId}`), supData);
-    } else if (pushFn) {
-      await pushFn(dbRef(`tenants/${currentTenant}/suppliers`), supData);
-    }
+  if (!supData.name) {
+    alert("කරුණාකර සැපයුම්කරුගේ නම ඇතුළත් කරන්න.");
+    return;
   }
-  closeSupplierModal();
+
+  try {
+    if (dbRef && currentTenant) {
+      if (supId && updateFn) {
+        await updateFn(dbRef(`tenants/${currentTenant}/suppliers/${supId}`), supData);
+        showLiveToast("🚚 Supplier Updated", `${supData.name} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-truck-field");
+      } else if (pushFn) {
+        await pushFn(dbRef(`tenants/${currentTenant}/suppliers`), supData);
+        showLiveToast("🚚 Supplier Saved", `${supData.name} සාර්ථකව සේව් විය.`, "success", "fa-truck-field");
+      }
+    }
+    closeSupplierModal();
+  } catch (err) {
+    alert("Supplier සේව් කිරීමේදී දෝෂයක්: " + err.message);
+  }
 }
 
 export function populateGRNSupplierDropdown() {
@@ -159,14 +171,14 @@ export function renderSuppliersDirectoryTable() {
       <td class="p-3.5 font-bold text-gray-800">Rs. ${totalPurchases.toFixed(2)}</td>
       <td class="p-3.5 font-bold text-green-600">Rs. ${totalPaid.toFixed(2)}</td>
       <td class="p-3.5 font-black text-red-600">Rs. ${creditBalance.toFixed(2)}</td>
-      <td class="p-3.5 text-right space-x-1.5">
-        <button onclick="openSupplierLedgerModal('${id}')" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] shadow-xs">
+      <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+        <button onclick="openSupplierLedgerModal('${id}')" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] shadow-xs cursor-pointer">
           <i class="fa-solid fa-book-open mr-1"></i> Ledger (මුදල් පොත)
         </button>
-        <button onclick="openSupplierPayModal('${id}', ${creditBalance})" class="bg-green-600 hover:bg-green-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px]">
+        <button onclick="openSupplierPayModal('${id}', ${creditBalance})" class="bg-green-600 hover:bg-green-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] cursor-pointer">
           Settle
         </button>
-        <button onclick="openSupplierModal('edit', '${id}')" class="text-gray-400 hover:text-purple-800 px-1"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="openSupplierModal('edit', '${id}')" class="text-gray-400 hover:text-purple-800 px-1 cursor-pointer"><i class="fa-solid fa-pen"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -197,8 +209,8 @@ export function openSupplierLedgerModal(supId) {
     if (g.supplierId === supId) {
       transactions.push({
         date: g.date || g.createdAt,
-        type: `📥 GRN Purchase (${g.paymentMethod.toUpperCase()})`,
-        ref: `${g.grnNumber} (Inv: ${g.invoiceNo})`,
+        type: `📥 GRN Purchase (${(g.paymentMethod || 'cash').toUpperCase()})`,
+        ref: `${g.grnNumber} (Inv: ${g.invoiceNo || 'N/A'})`,
         debit: g.paymentMethod !== 'credit' ? parseFloat(g.netTotal || 0) : 0,
         credit: parseFloat(g.netTotal || 0),
         rawTime: new Date(g.createdAt || g.date).getTime()
@@ -210,8 +222,8 @@ export function openSupplierLedgerModal(supId) {
     if (p.supplierId === supId) {
       transactions.push({
         date: p.date ? p.date.split("T")[0] : '',
-        type: `💵 Debt Settlement (${p.method.toUpperCase()})`,
-        ref: p.chequeNo ? `Cheque #${p.chequeNo} (${p.bank})` : (p.refNo || 'Direct Payment'),
+        type: `💵 Debt Settlement (${(p.method || 'cash').toUpperCase()})`,
+        ref: p.chequeNo ? `Cheque #${p.chequeNo} (${p.bank || ''})` : (p.refNo || 'Direct Payment'),
         debit: parseFloat(p.amount || 0),
         credit: 0,
         rawTime: new Date(p.date).getTime()
@@ -279,7 +291,7 @@ export function exportSupplierLedgerToCSV() {
   downloadCSVFile(csv, `Ledger_${sup.name.replace(/\s+/g, '_')}_${new Date().toISOString().split("T")[0]}.csv`);
 }
 
-// 3. SEARCHABLE GRN BUILDER
+// 3. ZERO-FREEZE SEARCHABLE GRN BUILDER
 export function addGrnItemRow() {
   const container = document.getElementById("grnItemsContainer");
   if (!container) return;
@@ -289,12 +301,12 @@ export function addGrnItemRow() {
 
   let options = `<option value="">-- අමුද්‍රව්‍ය තෝරන්න --</option>`;
   Object.entries(erpState.rawItems || {}).forEach(([id, item]) => {
-    options += `<option value="${id}" data-name="${item.name.toLowerCase()}" data-cost="${item.cost}">${item.name} (${item.unit} - Rs. ${item.cost})</option>`;
+    options += `<option value="${id}" data-cost="${item.cost || 0}">${item.name} (${item.unit} - Rs. ${item.cost})</option>`;
   });
 
   row.innerHTML = `
     <div class="col-span-12 sm:col-span-4 space-y-1">
-      <input type="text" placeholder="🔍 Search product..." oninput="filterGrnRowSelect(this)" class="w-full p-1 border rounded-md text-[10px] outline-none bg-gray-50 grn-search-input">
+      <input type="text" placeholder="🔍 Instant search material..." oninput="filterGrnRowSelect(this)" class="w-full p-1.5 border rounded-md text-xs outline-none bg-gray-50 font-bold text-purple-900 grn-search-input">
       <select class="w-full p-1.5 border rounded-lg bg-white grn-raw-select font-bold outline-none text-xs" onchange="onGrnRawSelectChange(this)">
         ${options}
       </select>
@@ -311,26 +323,58 @@ export function addGrnItemRow() {
       Rs. 0.00
     </div>
     <div class="col-span-1 text-center">
-      <button type="button" onclick="this.closest('.grn-item-row').remove(); calculateGrnTotals();" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" onclick="this.closest('.grn-item-row').remove(); calculateGrnTotals();" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
   container.appendChild(row);
 }
 
+// 🔥 DEBOUNCED ZERO-FREEZE SEARCH IMPLEMENTATION
 export function filterGrnRowSelect(input) {
-  const query = input.value.toLowerCase().trim();
-  const row = input.closest(".grn-item-row");
-  const select = row ? row.querySelector(".grn-raw-select") : null;
-  if (!select) return;
+  if (grnSearchDebounceTimer) clearTimeout(grnSearchDebounceTimer);
 
-  let html = `<option value="">-- අමුද්‍රව්‍ය තෝරන්න --</option>`;
-  Object.entries(erpState.rawItems || {}).forEach(([id, item]) => {
-    if (!query || item.name.toLowerCase().includes(query)) {
-      html += `<option value="${id}" data-name="${item.name.toLowerCase()}" data-cost="${item.cost}">${item.name} (${item.unit} - Rs. ${item.cost})</option>`;
+  grnSearchDebounceTimer = setTimeout(() => {
+    const query = (input.value || "").toLowerCase().trim();
+    const row = input.closest(".grn-item-row");
+    const select = row ? row.querySelector(".grn-raw-select") : null;
+    const costInput = row ? row.querySelector(".grn-cost") : null;
+    if (!select) return;
+
+    let html = `<option value="">-- අමුද්‍රව්‍ය තෝරන්න --</option>`;
+    let matchCount = 0;
+    let singleMatchId = null;
+    let singleMatchCost = 0;
+
+    const rawList = Object.entries(erpState.rawItems || {});
+
+    for (let i = 0; i < rawList.length; i++) {
+      const [id, item] = rawList[i];
+      const itemName = (item.name || "").toLowerCase();
+      
+      if (!query || itemName.includes(query)) {
+        html += `<option value="${id}" data-cost="${item.cost || 0}">${item.name} (${item.unit} - Rs. ${item.cost})</option>`;
+        matchCount++;
+        singleMatchId = id;
+        singleMatchCost = item.cost || 0;
+        if (matchCount >= 60) break; // Limits DOM repaint footprint to eliminate freezing
+      }
     }
-  });
 
-  select.innerHTML = html;
+    if (matchCount === 0 && query) {
+      html = `<option value="">(අමුද්‍රව්‍ය හමු නොවීය - No Match)</option>`;
+    }
+
+    select.innerHTML = html;
+
+    // Auto-select and fill unit cost if exact query or single item matched
+    if (matchCount === 1 && singleMatchId && query.length >= 2) {
+      select.value = singleMatchId;
+      if (costInput && !costInput.value) {
+        costInput.value = singleMatchCost;
+        calculateGrnTotals();
+      }
+    }
+  }, 180); // 180ms debounce completely prevents UI hang
 }
 
 export function onGrnRawSelectChange(sel) {
@@ -338,7 +382,7 @@ export function onGrnRawSelectChange(sel) {
   const defaultCost = selectedOption ? selectedOption.getAttribute("data-cost") : null;
   const row = sel.closest(".grn-item-row");
   const costInput = row ? row.querySelector(".grn-cost") : null;
-  if (defaultCost && costInput) {
+  if (defaultCost !== null && costInput) {
     costInput.value = defaultCost;
   }
   calculateGrnTotals();
@@ -441,7 +485,7 @@ export async function handleGrnSubmit(e) {
       for (const it of items) {
         const currentStock = parseFloat(erpState.rawItems[it.rawId]?.stock || 0);
         await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${it.rawId}`), {
-          stock: currentStock + it.qty,
+          stock: parseFloat((currentStock + it.qty).toFixed(3)),
           cost: it.cost
         });
       }
@@ -474,6 +518,8 @@ export function renderGRNHistoryTable() {
   }
 
   tbody.innerHTML = "";
+  list.sort((a, b) => new Date(b[1].createdAt || b[1].date).getTime() - new Date(a[1].createdAt || a[1].date).getTime());
+
   list.forEach(([id, grn]) => {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-gray-50 border-b border-gray-100";
@@ -481,11 +527,11 @@ export function renderGRNHistoryTable() {
       <td class="p-3.5 font-mono font-bold text-purple-600">${grn.grnNumber}</td>
       <td class="p-3.5 font-semibold text-gray-600">${grn.date}</td>
       <td class="p-3.5 font-bold text-gray-800">${grn.supplierName}</td>
-      <td class="p-3.5 font-mono text-gray-600">${grn.invoiceNo}</td>
+      <td class="p-3.5 font-mono text-gray-600">${grn.invoiceNo || '-'}</td>
       <td class="p-3.5"><span class="uppercase text-[10px] font-bold px-2 py-0.5 rounded-full ${grn.paymentMethod === 'credit' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">${grn.paymentMethod}</span></td>
       <td class="p-3.5 font-black text-gray-900">Rs. ${parseFloat(grn.netTotal).toFixed(2)}</td>
       <td class="p-3.5 text-right">
-        <button onclick="viewGrnDetail('${id}')" class="text-purple-600 hover:text-purple-900 font-bold text-xs"><i class="fa-solid fa-eye"></i> View</button>
+        <button onclick="viewGrnDetail('${id}')" class="text-purple-600 hover:text-purple-900 font-bold text-xs cursor-pointer"><i class="fa-solid fa-eye"></i> View</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -497,7 +543,7 @@ export function viewGrnDetail(id) {
   if (!grn) return;
   const title = document.getElementById("grnDetailTitle");
   const sub = document.getElementById("grnDetailSubtitle");
-  if (title) title.innerText = `${grn.grnNumber} (Inv: ${grn.invoiceNo})`;
+  if (title) title.innerText = `${grn.grnNumber} (Inv: ${grn.invoiceNo || 'N/A'})`;
   if (sub) sub.innerText = `Supplier: ${grn.supplierName} | Date: ${grn.date}`;
 
   const container = document.getElementById("grnDetailContent");
@@ -536,7 +582,7 @@ export function exportGrnToCSV() {
 
   let csv = "GRN Number,Date,Supplier,Invoice No,Payment,Net Total\n";
   list.forEach(g => {
-    csv += `"${g.grnNumber}","${g.date}","${g.supplierName}","${g.invoiceNo}","${g.paymentMethod}","${g.netTotal}"\n`;
+    csv += `"${g.grnNumber}","${g.date}","${g.supplierName}","${g.invoiceNo || ''}","${g.paymentMethod}","${g.netTotal}"\n`;
   });
 
   downloadCSVFile(csv, `GRN_Report_${new Date().toISOString().split("T")[0]}.csv`);
@@ -592,9 +638,37 @@ export async function handleSupplierPaySubmit(e) {
     date: new Date().toISOString()
   };
 
-  if (dbRef && pushFn && currentTenant) {
-    await pushFn(dbRef(`tenants/${currentTenant}/supplierPayments`), payRecord);
+  try {
+    if (dbRef && pushFn && currentTenant) {
+      await pushFn(dbRef(`tenants/${currentTenant}/supplierPayments`), payRecord);
+    }
+    closeSupplierPayModal();
+    showLiveToast("💰 Supplier Paid", `සැපයුම්කරුට Rs. ${amount.toFixed(2)} ක මුදලක් සාර්ථකව පියවන ලදී.`, "success", "fa-money-bill-wave");
+  } catch (err) {
+    alert("ගෙවීම සටහන් කිරීමේදී දෝෂයක්: " + err.message);
   }
-  closeSupplierPayModal();
-  showLiveToast("💰 Supplier Paid", `සැපයුම්කරුට Rs. ${amount.toFixed(2)} ක මුදලක් සාර්ථකව පියවන ලදී.`, "success", "fa-money-bill-wave");
 }
+
+// Global Window Exports
+window.switchGrnTab = switchGrnTab;
+window.openSupplierModal = openSupplierModal;
+window.closeSupplierModal = closeSupplierModal;
+window.handleSupplierSubmit = handleSupplierSubmit;
+window.openSupplierLedgerModal = openSupplierLedgerModal;
+window.closeSupplierLedgerModal = closeSupplierLedgerModal;
+window.openSupPayFromLedger = openSupPayFromLedger;
+window.exportSupplierLedgerToCSV = exportSupplierLedgerToCSV;
+window.addGrnItemRow = addGrnItemRow;
+window.filterGrnRowSelect = filterGrnRowSelect;
+window.onGrnRawSelectChange = onGrnRawSelectChange;
+window.calculateGrnTotals = calculateGrnTotals;
+window.onGrnPaymentMethodChange = onGrnPaymentMethodChange;
+window.handleGrnSubmit = handleGrnSubmit;
+window.renderGRNHistoryTable = renderGRNHistoryTable;
+window.viewGrnDetail = viewGrnDetail;
+window.closeGrnDetailModal = closeGrnDetailModal;
+window.exportGrnToCSV = exportGrnToCSV;
+window.openSupplierPayModal = openSupplierPayModal;
+window.closeSupplierPayModal = closeSupplierPayModal;
+window.onSupPayMethodChange = onSupPayMethodChange;
+window.handleSupplierPaySubmit = handleSupplierPaySubmit;
