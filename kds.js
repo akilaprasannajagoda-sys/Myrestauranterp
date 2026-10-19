@@ -84,7 +84,7 @@ export function renderKDSOrdersGrid() {
         <div class="flex justify-between items-start border-b border-gray-100 pb-2">
           <div>
             <div class="flex items-center gap-1.5">
-              <span class="text-[9px] bg-yellow-100 text-yellow-800 font-extrabold px-2 py-0.5 rounded-full uppercase">${order.orderType}</span>
+              <span class="text-[9px] bg-yellow-100 text-yellow-800 font-extrabold px-2 py-0.5 rounded-full uppercase">${order.orderType || 'Dine-in'}</span>
               <span id="kds-timer-${id}" class="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-green-100 text-green-800">
                 ⏱️ 00:00
               </span>
@@ -177,3 +177,5 @@ export async function completeKitchenOrder(id) {
 // Window Global Exports
 window.completeKitchenOrder = completeKitchenOrder;
 window.toggleKDSItemPrepared = toggleKDSItemPrepared;
+window.renderKDSOrdersGrid = renderKDSOrdersGrid;
+window.updateKDSElapsedTimersUI = updateKDSElapsedTimersUI;
