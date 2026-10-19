@@ -5,12 +5,12 @@
 import { erpState, currentTenantInfo } from './state.js';
 import { showLiveToast } from './utils.js';
 
-// ESC/POS Standard Commands
+// ESC/POS Standard Thermal Commands
 const ESC = "\x1B";
 const GS = "\x1D";
 const CMD_INIT = ESC + "@";
 const CMD_CUT = GS + "V\x41\x03"; // Feed & Full Cut
-const CMD_DRAWER = ESC + "p\x00\x19\xFA"; // Kick Cash Drawer
+const CMD_DRAWER = ESC + "p\x00\x19\xFA"; // Kick Cash Drawer Pin
 const CMD_BOLD_ON = ESC + "E\x01";
 const CMD_BOLD_OFF = ESC + "E\x00";
 const CMD_CENTER = ESC + "a\x01";
@@ -23,8 +23,8 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   const addr = currentTenantInfo?.address || "";
   const tel = currentTenantInfo?.phone ? `Tel: ${currentTenantInfo.phone}` : "";
   const tax = currentTenantInfo?.taxNo ? `TIN/VAT: ${currentTenantInfo.taxNo}` : "";
-  const footer = currentTenantInfo?.footerNote || "*** THANK YOU! COME AGAIN ***";
-  const dateStr = new Date(inv.createdAt || new Date()).toLocaleString();
+  const footer = currentTenantInfo?.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
+  const dateStr = new Date(inv.createdAt || Date.now()).toLocaleString();
   
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `${hName}\n` + CMD_BOLD_OFF;
@@ -35,7 +35,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   
   text += `Invoice #${inv.invoiceNumber}\n`;
   text += `Date: ${dateStr}\n`;
-  text += `Type: ${inv.orderType} (Table: ${inv.tableNo})\n`;
+  text += `Type: ${inv.orderType} (Table: ${inv.tableNo || 'N/A'})\n`;
   text += CMD_LEFT + "------------------------------------------------\n";
   text += "ITEM / QTY                      PRICE      TOTAL\n";
   text += "------------------------------------------------\n";
@@ -54,16 +54,16 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   text += CMD_RIGHT;
   text += `Subtotal: Rs. ${parseFloat(inv.subtotal || 0).toFixed(2)}\n`;
   
-  if (inv.discountAmount > 0) {
+  if (parseFloat(inv.discountAmount || 0) > 0) {
     text += `Discount: -Rs. ${parseFloat(inv.discountAmount).toFixed(2)}\n`;
   }
-  if (inv.scAmount > 0) {
+  if (parseFloat(inv.scAmount || 0) > 0) {
     text += `Service Charge: Rs. ${parseFloat(inv.scAmount).toFixed(2)}\n`;
   }
-  if (inv.vatAmount > 0) {
+  if (parseFloat(inv.vatAmount || 0) > 0) {
     text += `VAT: Rs. ${parseFloat(inv.vatAmount).toFixed(2)}\n`;
   }
-  if (inv.cslAmount > 0) {
+  if (parseFloat(inv.cslAmount || 0) > 0) {
     text += `SSCL: Rs. ${parseFloat(inv.cslAmount).toFixed(2)}\n`;
   }
   
@@ -81,9 +81,9 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   }
   
   text += CMD_CENTER + "\n" + footer + "\n";
-  text += "Software by Restaurant ERP Enterprise\n\n\n\n\n\n";
+  text += "Software by Restaurant ERP Enterprise\n\n\n\n";
   text += CMD_DRAWER; // Pop open cash drawer
-  text += CMD_CUT; // Cut paper
+  text += CMD_CUT; // Cut paper cleanly
   
   return text;
 }
@@ -94,7 +94,7 @@ export function formatKOTRawText(kot, stationLabel = "") {
   text += CMD_CENTER + CMD_BOLD_ON + `*** KITCHEN ORDER TICKET (KOT) ***\n` + CMD_BOLD_OFF;
   if (stationLabel) text += `[STATION: ${stationLabel}]\n`;
   text += CMD_BOLD_ON + `TABLE: ${kot.tableNo}\n` + CMD_BOLD_OFF;
-  text += `Type: ${kot.orderType.toUpperCase()} | Time: ${new Date(kot.timestamp).toLocaleTimeString()}\n`;
+  text += `Type: ${(kot.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(kot.timestamp || Date.now()).toLocaleTimeString()}\n`;
   text += CMD_LEFT + "================================================\n";
   text += CMD_BOLD_ON + "ITEM NAME                                    QTY\n" + CMD_BOLD_OFF;
   text += "================================================\n";
@@ -110,51 +110,115 @@ export function formatKOTRawText(kot, stationLabel = "") {
   });
   
   text += "================================================\n";
-  text += CMD_CENTER + "PREPARE FRESH & QUICK\n\n\n\n\n\n";
+  text += CMD_CENTER + "PREPARE FRESH & QUICK\n\n\n\n";
   text += CMD_CUT;
   
   return text;
 }
 
-// 3. SILENT DIRECT PRINT DISPATCHER (DEDICATED 80MM HTML CONTENT DISPATCH)
+// 3. NEW: 80MM DEDICATED THERMAL PAYSLIP FORMATTER (SOLVES PAPER ROLL RUNAWAY & BLUR)
+export function formatPayslipRawText(p) {
+  const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
+  
+  let text = CMD_INIT;
+  text += CMD_CENTER + CMD_BOLD_ON + `${hName}\n` + CMD_BOLD_OFF;
+  text += `*** EMPLOYEE SALARY PAYSLIP ***\n`;
+  text += `Month: ${p.monthStr || 'N/A'}\n`;
+  text += CMD_LEFT + "------------------------------------------------\n";
+  text += CMD_BOLD_ON + `Emp ID : ${p.empId || 'EMP'}\n` + CMD_BOLD_OFF;
+  text += `Name   : ${p.empName || 'Staff'}\n`;
+  text += `Role   : ${p.empRole || 'Staff'}\n`;
+  text += `Days Worked : ${p.daysWorked || 0} Days\n`;
+  text += "------------------------------------------------\n";
+  text += CMD_RIGHT;
+  text += `Basic Salary: Rs. ${parseFloat(p.basic || 0).toFixed(2)}\n`;
+  text += `OT (${p.otHours || 0}h @ Rs.${p.otRate || 0}): +Rs. ${parseFloat(p.otAmount || 0).toFixed(2)}\n`;
+  text += `Gross Earnings: Rs. ${(parseFloat(p.basic || 0) + parseFloat(p.otAmount || 0)).toFixed(2)}\n`;
+  text += `Advances Deducted: -Rs. ${parseFloat(p.advances || 0).toFixed(2)}\n`;
+  text += "------------------------------------------------\n";
+  text += CMD_BOLD_ON + `NET SALARY: Rs. ${parseFloat(p.netSalary || 0).toFixed(2)}\n` + CMD_BOLD_OFF;
+  text += "------------------------------------------------\n\n";
+  text += CMD_CENTER;
+  text += `....................        ....................\n`;
+  text += ` Employer Signature          Employee Signature\n\n\n\n`;
+  text += CMD_CUT; // Cuts thermal roll immediately (Never feeds endlessly)
+  
+  return text;
+}
+
+// 4. SILENT DIRECT PRINT DISPATCHER (DEDICATED 80MM HTML CONTENT DISPATCH)
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
   const contentToPrint = el ? el.innerHTML : rawContent;
   
   // 1. Check if running inside Electron Desktop App (.exe)
-  if (window.electronAPI && typeof window.electronAPI.printSilent === 'function') {
+  if (window.electronAPI && window.electronAPI.printSilent) {
     try {
       const res = await window.electronAPI.printSilent({
-        printerName: targetDeviceName || "",
+        printerName: targetDeviceName,
         htmlContent: contentToPrint
       });
-      
-      if (res && res.success) {
-        return true;
-      } else {
-        console.warn("[Electron Silent Print Warning]:", res?.error);
-        showLiveToast("⚠️ Printer Notice", res?.error || "Print driver response failed.", "warning", "fa-print");
-        return false;
-      }
+      if (res && res.success) return true;
     } catch (e) {
-      console.error("[Electron direct print exception]:", e);
-      showLiveToast("❌ Print Error", e.message, "warning", "fa-triangle-exclamation");
-      return false;
+      console.warn("Electron direct print fallback:", e);
     }
   }
   
-  // 2. Fallback ONLY for Pure Web Browser environment (if not running in Electron .exe)
+  // 2. Fallback for Web Browser with controlled print-flow
   if (el) {
     el.style.display = "block";
     await new Promise(resolve => setTimeout(resolve, 80));
     window.print();
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 100));
     el.style.display = "none";
   }
   return true;
 }
 
-// 4. TEST PRINT HARDWARE PRINTER (WITH SAMPLE BILL DATA)
+// 5. PRINT THERMAL 80MM PAYSLIP DISPATCHER
+export async function printThermalPayslip(payslipData) {
+  // Populate the 80mm Pure Thermal DOM Template (Created in index.html)
+  const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
+  const pHotel = document.getElementById("payslipThermalHotel");
+  const pMonth = document.getElementById("payslipThermalMonth");
+  const pId = document.getElementById("ptEmpId");
+  const pName = document.getElementById("ptEmpName");
+  const pRole = document.getElementById("ptEmpRole");
+  const pDays = document.getElementById("ptDaysWorked");
+  const pBasic = document.getElementById("ptBasic");
+  const pOtH = document.getElementById("ptOtHrs");
+  const pOtR = document.getElementById("ptOtRate");
+  const pOtPay = document.getElementById("ptOtPay");
+  const pGross = document.getElementById("ptGross");
+  const pAdv = document.getElementById("ptAdvances");
+  const pNet = document.getElementById("ptNet");
+  
+  if (pHotel) pHotel.innerText = hName;
+  if (pMonth) pMonth.innerText = `Month: ${payslipData.monthStr || ''}`;
+  if (pId) pId.innerText = payslipData.empId || 'EMP';
+  if (pName) pName.innerText = payslipData.empName || '';
+  if (pRole) pRole.innerText = payslipData.empRole || '';
+  if (pDays) pDays.innerText = `${payslipData.daysWorked || 0} Days`;
+  if (pBasic) pBasic.innerText = `Rs. ${parseFloat(payslipData.basic || 0).toFixed(2)}`;
+  if (pOtH) pOtH.innerText = payslipData.otHours || 0;
+  if (pOtR) pOtR.innerText = payslipData.otRate || 0;
+  if (pOtPay) pOtPay.innerText = `+Rs. ${parseFloat(payslipData.otAmount || 0).toFixed(2)}`;
+  
+  const gross = parseFloat(payslipData.basic || 0) + parseFloat(payslipData.otAmount || 0);
+  if (pGross) pGross.innerText = `Rs. ${gross.toFixed(2)}`;
+  if (pAdv) pAdv.innerText = `-Rs. ${parseFloat(payslipData.advances || 0).toFixed(2)}`;
+  if (pNet) pNet.innerText = `Rs. ${parseFloat(payslipData.netSalary || 0).toFixed(2)}`;
+  
+  // Determine target device (Defaults to P4: Accounts or P1: Cashier)
+  const pr = erpState.settings?.printers || {};
+  let targetDevice = pr.p4?.device || pr.p1?.device || "POS-80";
+  
+  const rawText = formatPayslipRawText(payslipData);
+  await sendDirectSilentPrint(targetDevice, rawText, "payslipThermalModal");
+  showLiveToast("🖨️ Payslip Printed", `${payslipData.empName} ගේ Payslip එක සාර්ථකව Print විය.`, "success", "fa-receipt");
+}
+
+// 6. TEST PRINT HARDWARE PRINTER (WITH SAMPLE BILL DATA)
 export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
   const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "POS-80";
@@ -192,14 +256,13 @@ export async function testDirectPrinter(slotKey) {
   if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** HARDWARE TEST SUCCESSFUL ***</div>`;
   
   try {
-    const success = await sendDirectSilentPrint(devName, "", "receiptModal");
-    if (success) {
-      showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
-    }
+    await sendDirectSilentPrint(devName, "", "receiptModal");
+    showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
   } catch (err) {
     alert("Test Print Error: " + err.message);
   }
 }
 
-// Window global export
+// Window global exports
 window.testDirectPrinter = testDirectPrinter;
+window.printThermalPayslip = printThermalPayslip;
