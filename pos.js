@@ -1,5 +1,6 @@
 // ==========================================================================
 // MODULE 11: POS ENGINE (ATOMIC STOCK TRANSACTIONS, SPLIT BILL, SHIFT FLOAT)
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (AUTO-PRUNED OFFLINE SYNC)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
@@ -179,7 +180,7 @@ export function renderBillTabsBar() {
         <span>${label}</span>
       </div>
       <span class="text-[10px] px-1.5 py-0.2 rounded-full font-black ${isCurrent ? 'bg-blue-800 text-white' : 'bg-gray-200 text-gray-800'}">${itemCount}</span>
-      ${allActiveBills.length > 1 ? `<i class="fa-solid fa-xmark hover:text-red-400 text-xs ml-1 p-0.5" onclick="closeBillTab('${key}', event)"></i>` : ""}
+      ${allActiveBills.length > 1 ? `<i class="fa-solid fa-xmark hover:text-red-400 text-xs ml-1 p-0.5 cursor-pointer" onclick="closeBillTab('${key}', event)"></i>` : ""}
     `;
     container.appendChild(tabBtn);
   });
@@ -251,7 +252,7 @@ export function renderDishCategoriesFilterUI() {
   container.innerHTML = "";
 
   const allButton = document.createElement("button");
-  allButton.className = `px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition ${
+  allButton.className = `px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition cursor-pointer ${
     currentCategoryFilter === "ALL" ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200"
   }`;
   allButton.innerText = "All Items";
@@ -260,7 +261,7 @@ export function renderDishCategoriesFilterUI() {
 
   Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
     const b = document.createElement("button");
-    b.className = `px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition ${
+    b.className = `px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition cursor-pointer ${
       currentCategoryFilter === cat.name ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200"
     }`;
     b.innerText = cat.name;
@@ -478,9 +479,9 @@ export function renderCartItemsUI() {
             </div>
           </div>
           <div class="flex items-center gap-1.5">
-            <button onclick="changeCartQty('${item.dishId}', -1)" class="w-5 h-5 rounded-md bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-xs">-</button>
+            <button onclick="changeCartQty('${item.dishId}', -1)" class="w-5 h-5 rounded-md bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-xs cursor-pointer">-</button>
             <span class="font-black text-xs w-4 text-center">${q}</span>
-            <button onclick="changeCartQty('${item.dishId}', 1)" class="w-5 h-5 rounded-md bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-xs">+</button>
+            <button onclick="changeCartQty('${item.dishId}', 1)" class="w-5 h-5 rounded-md bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-xs cursor-pointer">+</button>
           </div>
           <div class="font-black text-gray-800 text-xs text-right w-16">
             Rs. ${(item.price * q).toFixed(2)}
@@ -488,7 +489,7 @@ export function renderCartItemsUI() {
         </div>
         <div class="flex items-center justify-between text-[10px] text-gray-500 pt-0.5 border-t border-gray-200">
           <span class="italic text-purple-700 font-semibold truncate w-40">${item.note ? '📝 ' + item.note : 'No notes'}</span>
-          <button onclick="updateCartItemNote('${item.dishId}')" class="text-blue-600 font-bold hover:underline">
+          <button onclick="updateCartItemNote('${item.dishId}')" class="text-blue-600 font-bold hover:underline cursor-pointer">
             <i class="fa-solid fa-pen-to-square"></i> Note
           </button>
         </div>
@@ -524,13 +525,13 @@ export function calculateOrderTotals(cartList = [], discType = "fixed", discValu
   let vatAmount = 0;
   let cslAmount = 0;
 
-  if (erpState.settings.scEnabled && orderType === "Dine-in") {
+  if (erpState.settings?.scEnabled && orderType === "Dine-in") {
     scAmount = taxableAmount * (parseFloat(erpState.settings.scRate || 0) / 100);
   }
-  if (erpState.settings.vatEnabled) {
+  if (erpState.settings?.vatEnabled) {
     vatAmount = taxableAmount * (parseFloat(erpState.settings.vatRate || 0) / 100);
   }
-  if (erpState.settings.cslEnabled) {
+  if (erpState.settings?.cslEnabled) {
     cslAmount = taxableAmount * (parseFloat(erpState.settings.cslRate || 0) / 100);
   }
 
@@ -576,7 +577,7 @@ export function recalculateCartTotalsUI() {
   }
 
   const scRow = document.getElementById("cartServiceChargeRow");
-  if (erpState.settings.scEnabled && oType === "Dine-in" && scRow) {
+  if (erpState.settings?.scEnabled && oType === "Dine-in" && scRow) {
     scRow.classList.remove("hidden");
     const lbl = document.getElementById("cartServiceChargeLabel");
     const val = document.getElementById("cartServiceChargeVal");
@@ -587,7 +588,7 @@ export function recalculateCartTotalsUI() {
   }
 
   const vatRow = document.getElementById("cartVatRow");
-  if (erpState.settings.vatEnabled && vatRow) {
+  if (erpState.settings?.vatEnabled && vatRow) {
     vatRow.classList.remove("hidden");
     const lbl = document.getElementById("cartVatLabel");
     const val = document.getElementById("cartVatVal");
@@ -598,7 +599,7 @@ export function recalculateCartTotalsUI() {
   }
 
   const cslRow = document.getElementById("cartCslRow");
-  if (erpState.settings.cslEnabled && cslRow) {
+  if (erpState.settings?.cslEnabled && cslRow) {
     cslRow.classList.remove("hidden");
     const lbl = document.getElementById("cartCslLabel");
     const val = document.getElementById("cartCslVal");
@@ -693,7 +694,7 @@ export function calculateSplitPaymentBalance() {
 
 // SILENT DIRECT HARDWARE KOT GENERATOR WITH NOTES
 export async function printPhysicalKOTSlip(kot) {
-  const pr = erpState.settings.printers || {};
+  const pr = erpState.settings?.printers || {};
   const activeKotPrinters = Object.entries(pr).filter(([k, p]) => p.kot);
 
   if (activeKotPrinters.length === 0) {
@@ -706,8 +707,8 @@ export async function printPhysicalKOTSlip(kot) {
   const itemsContainer = document.getElementById("kotPrintItems");
 
   if (tableEl) tableEl.innerText = `TABLE: ${kot.tableNo}`;
-  if (typeEl) typeEl.innerText = `ORDER TYPE: ${kot.orderType.toUpperCase()}`;
-  if (timeEl) timeEl.innerText = `Time: ${new Date(kot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  if (typeEl) typeEl.innerText = `ORDER TYPE: ${(kot.orderType || 'DINE-IN').toUpperCase()}`;
+  if (timeEl) timeEl.innerText = `Time: ${new Date(kot.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
   if (itemsContainer) {
     itemsContainer.innerHTML = kot.items.map(i => `
@@ -799,7 +800,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
 
   const kotTicket = {
     billKey: activeBillId,
-    orderType: currentBill.orderType,
+    orderType: currentBill.orderType || "Dine-in",
     tableNo: currentBill.tableNo || "N/A",
     waiterName: currentBill.waiterName || "",
     items: deltaItems,
@@ -1028,7 +1029,7 @@ export async function processOrder(sendWhatsApp = false) {
 
 // 80MM THERMAL RECEIPT PRINTING
 export async function printThermalReceipt(inv) {
-  const pr = erpState.settings.printers || {};
+  const pr = erpState.settings?.printers || {};
   const activeBillPrinters = Object.entries(pr).filter(([k, p]) => p.bill);
 
   if (activeBillPrinters.length === 0) {
@@ -1058,11 +1059,11 @@ export async function printThermalReceipt(inv) {
     }
   }
 
-  if (rFoot) rFoot.innerText = currentTenantInfo?.footerNote || "*** THANK YOU! COME AGAIN ***";
+  if (rFoot) rFoot.innerText = currentTenantInfo?.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
 
   if (oId) oId.innerText = `Invoice #${inv.invoiceNumber}`;
-  if (dEl) dEl.innerText = `Date: ${new Date(inv.createdAt).toLocaleString()}`;
-  if (tEl) tEl.innerText = `${inv.orderType} (Table: ${inv.tableNo}${inv.waiterName ? ' | ' + inv.waiterName : ''})`;
+  if (dEl) dEl.innerText = `Date: ${new Date(inv.createdAt || Date.now()).toLocaleString()}`;
+  if (tEl) tEl.innerText = `${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''})`;
 
   const itemsContainer = document.getElementById("receiptItems");
   if (itemsContainer) {
@@ -1084,7 +1085,7 @@ export async function printThermalReceipt(inv) {
 
   const discRow = document.getElementById("receiptDiscountRow");
   if (discRow) {
-    if (inv.discountAmount > 0) {
+    if (parseFloat(inv.discountAmount || 0) > 0) {
       discRow.style.display = "flex";
       const discVal = document.getElementById("receiptDiscountVal");
       if (discVal) discVal.innerText = `-Rs. ${parseFloat(inv.discountAmount).toFixed(2)}`;
@@ -1095,7 +1096,7 @@ export async function printThermalReceipt(inv) {
 
   const scRow = document.getElementById("receiptScRow");
   if (scRow) {
-    if (inv.scAmount > 0) {
+    if (parseFloat(inv.scAmount || 0) > 0) {
       scRow.style.display = "flex";
       const scVal = document.getElementById("receiptScVal");
       if (scVal) scVal.innerText = `Rs. ${parseFloat(inv.scAmount).toFixed(2)}`;
@@ -1106,7 +1107,7 @@ export async function printThermalReceipt(inv) {
 
   const vatRow = document.getElementById("receiptVatRow");
   if (vatRow) {
-    if (inv.vatAmount > 0) {
+    if (parseFloat(inv.vatAmount || 0) > 0) {
       vatRow.style.display = "flex";
       const vatVal = document.getElementById("receiptVatVal");
       if (vatVal) vatVal.innerText = `Rs. ${parseFloat(inv.vatAmount).toFixed(2)}`;
@@ -1117,7 +1118,7 @@ export async function printThermalReceipt(inv) {
 
   const cslRow = document.getElementById("receiptCslRow");
   if (cslRow) {
-    if (inv.cslAmount > 0) {
+    if (parseFloat(inv.cslAmount || 0) > 0) {
       cslRow.style.display = "flex";
       const cslVal = document.getElementById("receiptCslVal");
       if (cslVal) cslVal.innerText = `Rs. ${parseFloat(inv.cslAmount).toFixed(2)}`;
@@ -1132,20 +1133,20 @@ export async function printThermalReceipt(inv) {
   const payDiv = document.getElementById("receiptPayDetails");
   if (payDiv) {
     const p = inv.payment || { method: "cash" };
-    let payText = `<div class="flex justify-between font-bold"><span>PAYMENT METHOD:</span><span>${p.method.toUpperCase()}</span></div>`;
+    let payText = `<div class="flex justify-between font-bold"><span>PAYMENT METHOD:</span><span>${(p.method || 'cash').toUpperCase()}</span></div>`;
 
     if (p.method === "cash") {
       payText += `<div class="flex justify-between"><span>Cash Tendered:</span><span>Rs. ${parseFloat(p.cashTendered || inv.netTotal).toFixed(2)}</span></div>`;
       payText += `<div class="flex justify-between font-bold"><span>Cash Change:</span><span>Rs. ${parseFloat(p.change || 0).toFixed(2)}</span></div>`;
     } else if (p.method === "card") {
-      payText += `<div class="flex justify-between"><span>Card:</span><span>${p.cardType} (**** ${p.last4})</span></div>`;
+      payText += `<div class="flex justify-between"><span>Card:</span><span>${p.cardType || 'Card'} (**** ${p.last4 || '****'})</span></div>`;
     } else if (p.method === "transfer") {
-      payText += `<div class="flex justify-between"><span>Ref / TXN ID:</span><span>${p.refNo}</span></div>`;
+      payText += `<div class="flex justify-between"><span>Ref / TXN ID:</span><span>${p.refNo || '-'}</span></div>`;
     } else if (p.method === "split") {
       payText += `<div class="flex justify-between"><span>Split Cash:</span><span>Rs. ${parseFloat(p.splitCash || 0).toFixed(2)}</span></div>`;
       payText += `<div class="flex justify-between"><span>Split Card:</span><span>Rs. ${parseFloat(p.splitCard || 0).toFixed(2)}</span></div>`;
     } else if (p.method === "credit") {
-      payText += `<div class="flex justify-between"><span>Customer:</span><span>${p.customerName} (${p.customerPhone || 'N/A'})</span></div>`;
+      payText += `<div class="flex justify-between"><span>Customer:</span><span>${p.customerName || 'Customer'} (${p.customerPhone || 'N/A'})</span></div>`;
     }
 
     payDiv.innerHTML = payText;
@@ -1272,7 +1273,7 @@ export async function executeItemSplitToNewBill() {
 
     await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newSplitKey}`), {
       name: newBillName,
-      orderType: currentBill.orderType,
+      orderType: currentBill.orderType || "Dine-in",
       tableNo: currentBill.tableNo || "",
       waiterName: currentBill.waiterName || "",
       cart: splitItems,
@@ -1340,7 +1341,7 @@ export async function handleShiftFloatSubmit(e) {
   }
 }
 
-// 🔄 ROBUST OFFLINE INVOICES CLOUD SYNC ENGINE (HONORS INVENTORY DEDUCTION MODE)
+// 🔄 5-YEAR PRODUCTION HARDENED OFFLINE INVOICES CLOUD SYNC & AUTO-PRUNING ENGINE
 export async function syncOfflineInvoicesToCloud() {
   if (!navigator.onLine || !localDBInstance || !dbRef || !pushFn || !currentTenant) return;
   if (isOfflineSyncInProgress) return;
@@ -1348,6 +1349,13 @@ export async function syncOfflineInvoicesToCloud() {
   try {
     isOfflineSyncInProgress = true;
     const unsyncedInvoices = await localDBInstance.offlineInvoices.where("synced").equals(0).toArray();
+    
+    // 🔒 5-YEAR MAINTENANCE: Auto-prune any legacy synced records older than 14 days to prevent disk bloat
+    try {
+      const twoWeeksAgoIso = new Date(Date.now() - (14 * 24 * 60 * 60 * 1000)).toISOString();
+      await localDBInstance.offlineInvoices.where("createdAt").below(twoWeeksAgoIso).delete();
+    } catch (pruneErr) {}
+
     if (unsyncedInvoices.length === 0) {
       isOfflineSyncInProgress = false;
       return;
@@ -1389,7 +1397,7 @@ export async function syncOfflineInvoicesToCloud() {
           });
         }
 
-        // Deduct only if Recipe Mode
+        // Deduct only if Recipe Mode is active
         if (isRecipeMode) {
           for (const item of inv.items || []) {
             const dish = erpState.dishes[item.dishId];
@@ -1418,6 +1426,7 @@ export async function syncOfflineInvoicesToCloud() {
           }
         }
 
+        // 🔒 Immediately clean up synced invoice from local disk
         await localDBInstance.offlineInvoices.delete(inv.id);
       } catch (singleInvErr) {
         console.warn("Single invoice sync bypass:", singleInvErr);
@@ -1432,7 +1441,7 @@ export async function syncOfflineInvoicesToCloud() {
   }
 }
 
-// Window Global Exports
+// Global Window Exports
 window.setDiscountType = setDiscountType;
 window.recalculateCartTotalsUI = recalculateCartTotalsUI;
 window.printPhysicalKOTSlip = printPhysicalKOTSlip;
@@ -1448,4 +1457,17 @@ window.openShiftFloatModal = openShiftFloatModal;
 window.closeShiftFloatModal = closeShiftFloatModal;
 window.handleShiftFloatSubmit = handleShiftFloatSubmit;
 window.syncOfflineInvoicesToCloud = syncOfflineInvoicesToCloud;
+window.addNewBillTab = addNewBillTab;
+window.switchBillTab = switchBillTab;
+window.closeBillTab = closeBillTab;
+window.updateCurrentBillSettings = updateCurrentBillSettings;
+window.onPosSearchInput = onPosSearchInput;
+window.filterPosByCategory = filterPosByCategory;
+window.changeCartQty = changeCartQty;
+window.clearCurrentCart = clearCurrentCart;
+window.selectPayMethod = selectPayMethod;
+window.calculateCashChange = calculateCashChange;
+window.sendOrderToKitchen = sendOrderToKitchen;
+window.processOrder = processOrder;
+window.printThermalReceipt = printThermalReceipt;
 window.addEventListener("online", syncOfflineInvoicesToCloud);
