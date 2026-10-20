@@ -26,7 +26,7 @@ import {
   endAt,
   limitToLast,
   equalTo,
-  runTransaction // 🔒 ATOMIC TRANSACTION SUPPORT
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 // --- IMPORT CUSTOM ERP MODULES ---
@@ -83,7 +83,7 @@ function updateDeviceTerminalBadgeUI() {
   }
 }
 
-// 🔒 BULLETPROOF SECONDARY AUTH ENGINE (NO UI FREEZE / NO OWNER LOGOUT)
+// 🔒 BULLETPROOF SECONDARY AUTH ENGINE
 async function createStaffAuthAccount(email, password, role, staffName, tenantId) {
   const tempAppName = "SecondaryAuthApp_" + Date.now() + "_" + Math.random().toString(36).substring(7);
   const tempApp = initializeApp(firebaseConfig, tempAppName);
@@ -94,7 +94,6 @@ async function createStaffAuthAccount(email, password, role, staffName, tenantId
     const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
     const subUser = cred.user;
 
-    // Write user profile directly via temp instance context
     await set(ref(tempDb, `users/${subUser.uid}`), {
       email: email,
       tenantId: tenantId,
@@ -136,12 +135,10 @@ POS.initPosContext(dbRef, push, update, remove, set, localDB, runTransaction);
 
 updateDeviceTerminalBadgeUI();
 
-// PREVENT FORM RELOAD
 document.querySelectorAll("form").forEach(f => {
   f.addEventListener("submit", (e) => e.preventDefault());
 });
 
-// AUTH ALERT HELPER
 function renderAuthAlert(msgText, isError = true) {
   const box = document.getElementById("alertBox");
   if (!box) return;
@@ -150,7 +147,6 @@ function renderAuthAlert(msgText, isError = true) {
   box.classList.remove("hidden");
 }
 
-// PURE LOGIN SUBMIT HANDLER
 export async function handleLoginSubmit(ev) {
   if (ev) ev.preventDefault();
   const emailVal = document.getElementById("loginEmail")?.value.trim() || "";
@@ -185,7 +181,6 @@ export async function handleLoginSubmit(ev) {
 
 window.handleLoginSubmit = handleLoginSubmit;
 
-// ATTACH EVENT LISTENERS SAFELY
 document.getElementById("loginForm")?.addEventListener("submit", handleLoginSubmit);
 document.getElementById("pettyCashForm")?.addEventListener("submit", (e) => { e.preventDefault(); PettyCash.handlePettyCashSubmit(e); });
 document.getElementById("addAreaForm")?.addEventListener("submit", (e) => { e.preventDefault(); Tables.handleAddAreaSubmit(e); });
@@ -255,7 +250,7 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
   }
 });
 
-// TAX & INVENTORY SETTINGS (LOCKS INVENTORY DEDUCTION MODE TO PERSIST)
+// TAX & INVENTORY SETTINGS
 document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -283,14 +278,13 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
   }
 });
 
-// 100% COMPLETE DATABASE BACKUP (ROBUST ERROR PROTECTED)
+// 100% COMPLETE DATABASE BACKUP
 export async function downloadFullDatabaseBackup() {
   if (!dbRef || !currentTenant) return;
 
   try {
     showLiveToast("💾 Preparing Backup", "සම්පූර්ණ දත්ත ගොනුව සූදානම් වෙමින් පවතී...", "info", "fa-spinner fa-spin");
     
-    // Read core master tenant configuration safely
     const snap = await get(ref(dbInstance, `tenants/${currentTenant}`));
     let fullTenantData = snap.exists() ? snap.val() : JSON.parse(JSON.stringify(erpState));
 
@@ -308,7 +302,7 @@ export async function downloadFullDatabaseBackup() {
       tenantId: currentTenant,
       hotelName: currentTenantInfo?.hotelName || "Hotel",
       exportedAt: new Date().toISOString(),
-      systemVersion: "Enterprise SME v2.5 (5-Year Certified)",
+      systemVersion: "Enterprise SME v2.5",
       databaseType: "Full Cloud & Offline Snapshot",
       data: fullTenantData
     };
@@ -337,7 +331,7 @@ export async function handleRestoreBackupFile(event) {
   const file = event.target.files[0];
   if (!file || !dbRef || !currentTenant) return;
 
-  const confirmMsg = `⚠️ අනතුරු ඇඟවීමයි!\n\nඔබ තෝරාගත් Backup ගොනුවෙන් පද්ධතිය Restore කිරීමට අවශ්‍යද?\nමෙමගින් පද්ධතියේ පවතින දත්ත Backup ගොනුවේ ඇති දත්ත වලට යාවත්කාලීන වේ.`;
+  const confirmMsg = `⚠️ අනතුරු ඇඟවීමයි!\n\nඔබ තෝරාගත් Backup ගොනුවෙන් පද්ධතිය Restore කිරීමට අවශ්‍යද?`;
   if (!confirm(confirmMsg)) {
     event.target.value = "";
     return;
@@ -376,43 +370,42 @@ export async function handleRestoreBackupFile(event) {
 }
 window.handleRestoreBackupFile = handleRestoreBackupFile;
 
-// 🔥 5-YEAR PRODUCTION FIX: INACTIVITY AUTO PIN-LOCK ENGINE (KITCHEN & KIOSK SAFE)
+// 🔥 INACTIVITY AUTO PIN-LOCK ENGINE (OWNER-SAFE)
 let inactivityTimer = null;
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
-  
-  // 🔒 CRITICAL OPERATIONAL FIX: Never lock hands-free Kitchen KDS screen or Attendance Kiosk
   if (currentUserRole === 'cook') return;
 
   inactivityTimer = setTimeout(() => {
     if (authInstance.currentUser && currentTenant) {
-      // Check current active view
       const isKitchenActive = document.getElementById("viewKitchen") && !document.getElementById("viewKitchen").classList.contains("hidden");
       const isFaceScanActive = document.getElementById("viewFaceScan") && !document.getElementById("viewFaceScan").classList.contains("hidden");
 
-      if (isKitchenActive || isFaceScanActive) {
-        return; // Hands-free display bypass
-      }
+      if (isKitchenActive || isFaceScanActive) return;
 
       document.getElementById("inactivityLockScreen")?.classList.remove("hidden");
       const pinIn = document.getElementById("unlockScreenPinInput");
       if (pinIn) pinIn.value = "";
     }
-  }, 240000); // 4 minute timeout for counter screens
+  }, 240000);
 }
 
 ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
   window.addEventListener(evt, resetInactivityTimer, { passive: true });
 });
 
-// 🔒 STRICT DATABASE STAFF PIN UNLOCK ONLY
+// 🔒 STRICT & OWNER-SAFE COUNTER PIN UNLOCK
 window.submitCounterUnlock = function() {
   const pin = document.getElementById("unlockScreenPinInput")?.value.trim();
   if (!pin) return;
 
-  const isMatched = Object.values(erpState.employees || {}).some(e => String(e.password || "").trim() === pin);
+  const employeesList = Object.values(erpState.employees || {});
+  const isMatchedEmployee = employeesList.some(e => String(e.password || "").trim() === pin);
   
-  if (isMatched) {
+  // If no employees are registered yet, allow emergency initial PIN "1234"
+  const isInitialSetupUnlock = employeesList.length === 0 && pin === "1234";
+
+  if (isMatchedEmployee || isInitialSetupUnlock) {
     document.getElementById("inactivityLockScreen")?.classList.add("hidden");
     resetInactivityTimer();
     showLiveToast("🔓 Terminal Unlocked", "කවුන්ටරය සාර්ථකව Unlock කරන ලදී.", "success", "fa-unlock");
@@ -423,7 +416,7 @@ window.submitCounterUnlock = function() {
   }
 };
 
-// REALTIME ROLE & FEATURE TOGGLE ENFORCEMENT
+// ROLE & FEATURE TOGGLE ENFORCEMENT
 export function applyRoleBasedUI(role = "owner") {
   setCurrentUserRole(role);
   const roleBadge = document.getElementById("sideUserRole");
@@ -507,7 +500,7 @@ export function applyRoleBasedUI(role = "owner") {
   }
 }
 
-// 🔒 ROBUST AUTH STATE LISTENER (DIAGNOSTIC AUTO-REPORTING)
+// AUTH STATE LISTENER
 onAuthStateChanged(authInstance, async (activeUser) => {
   const loginBtn = document.getElementById("loginBtn");
   if (loginBtn) {
@@ -526,7 +519,7 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       }
 
       if (!snap.exists()) {
-        renderAuthAlert(`🚫 මෙම ගිණුම (UID: ${activeUser.uid}) Database එකේ users node එක යටතේ ලියාපදිංචි වී නොමැත. කරුණාකර Super Admin Panel එකෙන් මෙම User හදන්න.`, true);
+        renderAuthAlert(`🚫 මෙම ගිණුම Database හි users node යටතේ ලියාපදිංචි වී නොමැත.`, true);
         await signOut(authInstance);
         return;
       }
@@ -537,7 +530,7 @@ onAuthStateChanged(authInstance, async (activeUser) => {
 
       if (userRole !== "owner") {
         if (!pairedTenant || pairedTenant !== uData.tenantId) {
-          renderAuthAlert(`🚫 Access Denied: මෙම සේවක ගිණුමෙන් ලොග් විය හැක්කේ හෝටලයේ Owner ලොග් වූ පරිගණක වලින් පමණි. (කරුණාකර පළමුව Owner Account එකෙන් ලොග් වන්න).`, true);
+          renderAuthAlert(`🚫 Access Denied: කරුණාකර පළමුව Owner Account එකෙන් ලොග් වන්න.`, true);
           await signOut(authInstance);
           updateDeviceTerminalBadgeUI();
           return;
@@ -566,7 +559,6 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       startLiveClockWidget();
       resetInactivityTimer();
 
-      // 🔄 AUTOMATIC STARTUP OFFLINE DATA CLOUD SYNC
       if (navigator.onLine) {
         POS.syncOfflineInvoicesToCloud();
       }
@@ -583,7 +575,6 @@ onAuthStateChanged(authInstance, async (activeUser) => {
   }
 });
 
-// 🔄 PERIODIC BACKGROUND OFFLINE SYNC (EVERY 60 SECONDS)
 setInterval(() => {
   if (navigator.onLine && currentTenant) {
     POS.syncOfflineInvoicesToCloud();
@@ -627,7 +618,7 @@ function initializeRealtimeDataStreams(tenantId) {
     if (pFoot && !pFoot.value) pFoot.value = prof.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
   });
 
-  // 2. Settings & Taxes (PERSISTENT INVENTORY MODE ENSURED)
+  // 2. Settings & Taxes
   onValue(ref(dbInstance, `${basePath}/settings`), (snapshot) => {
     if (snapshot.exists()) {
       erpState.settings = Object.assign({ shiftHours: 8.0, silentPrintEnabled: true, inventoryMode: "recipe" }, snapshot.val());
@@ -665,7 +656,7 @@ function initializeRealtimeDataStreams(tenantId) {
     POS.renderPOSDishesGrid();
   });
 
-  // 📦 6.1 Store Issues (Bounded to Last 80 for Live Performance)
+  // 6.1 Store Issues
   const recentStoreIssuesQuery = query(ref(dbInstance, `${basePath}/storeIssues`), limitToLast(80));
   onValue(recentStoreIssuesQuery, (snapshot) => {
     erpState.storeIssues = snapshot.val() || {};
@@ -685,7 +676,7 @@ function initializeRealtimeDataStreams(tenantId) {
     Tables.renderTablesFloorGrid();
   });
 
-  // 9. Kitchen Orders (Live Active Orders Bounded Stream)
+  // 9. Kitchen Orders
   const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(100));
   onValue(recentKitchenQuery, (snapshot) => {
     const prevOrders = erpState.kitchenOrders || {};
@@ -713,14 +704,14 @@ function initializeRealtimeDataStreams(tenantId) {
     Suppliers.populateGRNSupplierDropdown();
   });
 
-  // 11. Supplier Payments (Bounded to Last 80 for Live Stream)
+  // 11. Supplier Payments
   const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(80));
   onValue(recentSupPayQuery, (snapshot) => {
     erpState.supplierPayments = snapshot.val() || {};
     Suppliers.renderSuppliersDirectoryTable();
   });
 
-  // 12. GRNs (Bounded to Last 80 for Live Stream)
+  // 12. GRNs
   const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(80));
   onValue(recentGrnQuery, (snapshot) => {
     erpState.grns = snapshot.val() || {};
@@ -728,10 +719,9 @@ function initializeRealtimeDataStreams(tenantId) {
     Suppliers.renderSuppliersDirectoryTable();
   });
 
-  // 13. Invoices & Reports Sync (Hot Stream: Bounded to Recent Bills to Prevent 5-Year RAM Bloat)
+  // 13. Invoices & Reports Sync
   const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(100));
   onValue(recentInvoicesQuery, (snapshot) => {
-    // Only refresh live memory if user is NOT currently viewing an active custom date filter report
     const fromVal = document.getElementById("repFromDate")?.value;
     const toVal = document.getElementById("repToDate")?.value;
     
@@ -759,7 +749,7 @@ function initializeRealtimeDataStreams(tenantId) {
     Reports.renderCustomerCreditsLedger();
   });
 
-  // 15. Petty Cash (Bounded to Last 100 for Live Stream)
+  // 15. Petty Cash
   const recentPettyQuery = query(ref(dbInstance, `${basePath}/pettyCash`), limitToLast(100));
   onValue(recentPettyQuery, (snapshot) => {
     erpState.pettyCash = snapshot.val() || {};
@@ -782,7 +772,7 @@ function initializeRealtimeDataStreams(tenantId) {
     }
   });
 
-  // 17. Attendance Logs (Bounded to Last 100 for Live Stream)
+  // 17. Attendance Logs
   const recentAttQuery = query(ref(dbInstance, `${basePath}/attendance`), limitToLast(100));
   onValue(recentAttQuery, (snapshot) => {
     erpState.attendance = snapshot.val() || {};
@@ -790,14 +780,14 @@ function initializeRealtimeDataStreams(tenantId) {
     Payroll.renderMonthlyPayrollSheet();
   });
 
-  // 18. Salary Advances (Bounded to Last 80)
+  // 18. Salary Advances
   const recentAdvQuery = query(ref(dbInstance, `${basePath}/salaryAdvances`), limitToLast(80));
   onValue(recentAdvQuery, (snapshot) => {
     erpState.salaryAdvances = snapshot.val() || {};
     Payroll.renderMonthlyPayrollSheet();
   });
 
-  // 19. Active Bills (Realtime Active POS Counter Bills)
+  // 19. Active Bills
   onValue(ref(dbInstance, `${basePath}/activeBills`), (snapshot) => {
     erpState.activeBills = snapshot.val() || {};
     const billKeys = Object.keys(erpState.activeBills);
@@ -825,7 +815,7 @@ function initializeRealtimeDataStreams(tenantId) {
     POS.syncActiveBillToFormUI();
   });
 
-  // 20. LIVE HEARTBEAT & REALTIME FEATURE TOGGLE LISTENER
+  // 20. LIVE HEARTBEAT & SAAS SUBSCRIPTION
   const sendHeartbeat = () => {
     if (currentTenant && dbRef) {
       update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
@@ -841,7 +831,7 @@ function initializeRealtimeDataStreams(tenantId) {
     erpState.subscription = sub;
 
     if (sub.broadcastNotice && sub.broadcastNotice.trim()) {
-      showLiveToast("📢 Super Admin Notice", sub.broadcastNotice, "info", "fa-bullhorn");
+      showLiveToast("📢 Notice", sub.broadcastNotice, "info", "fa-bullhorn");
     }
 
     applyRoleBasedUI(currentUserRole);
@@ -866,13 +856,7 @@ function initializeRealtimeDataStreams(tenantId) {
           </div>
           <h2 class="text-xl font-black text-white">Software Subscription Suspended</h2>
           <p class="text-xs text-gray-400 leading-relaxed">
-            ඔබගේ හෝටලයේ මෘදුකාංග ගිණුම තාවකාලිකව අත්හිටුවා ඇත (Suspended). කරුණාකර සේවා සපයන්නා (Software Provider) අමතා මාසික බිල්පත පියවා සේවාව නැවත සක්‍රීය කරගන්න.
-          </p>
-          <div class="p-3 bg-gray-800 rounded-xl border border-gray-700 text-xs font-mono text-purple-400 font-bold">
-            Tenant ID: ${tenantId}
-          </div>
-          <p class="text-xs font-bold text-gray-500 pt-2">
-            📞 Software Provider Support Line
+            ඔබගේ හෝටලයේ මෘදුකාංග ගිණුම තාවකාලිකව අත්හිටුවා ඇත. කරුණාකර සේවා සපයන්නා අමතන්න.
           </p>
         </div>
       `;
@@ -956,7 +940,6 @@ function startLiveClockWidget() {
   }, 1000);
 }
 
-// 🔒 STRICT PERSISTENT SETTINGS UI SYNCHRONIZER
 function syncSettingsUI() {
   const setSc = document.getElementById("setScEnabled");
   const setScRate = document.getElementById("setScRate");
@@ -967,7 +950,6 @@ function syncSettingsUI() {
   const setShift = document.getElementById("setShiftHours");
   const setSilent = document.getElementById("silentPrintEnabled");
 
-  // Sync Inventory Deduction Mode Radio Buttons
   const invMode = erpState.settings?.inventoryMode || "recipe";
   const modeRec = document.getElementById("modeRecipe");
   const modeIss = document.getElementById("modeIssue");
