@@ -3,9 +3,10 @@
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (INDEXED SERVER QUERIES & SEPARATE PETTY AUDIT)
 // ==========================================================================
 
-import { erpState, currentTenant, currentTenantInfo } from './state.js';
-import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal } from './utils.js';
+import { erpState, currentTenant, currentTenantInfo, currentUserRole } from './state.js';
+import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal, showCustomInputModal } from './utils.js';
 import { convertRecipeQtyToBaseUnit } from './menu.js';
+import { sendDirectSilentPrint } from './printer.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -95,7 +96,7 @@ export function setReportPeriodPreset(preset) {
   applyReportDateFilter();
 }
 
-// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY (NO MEMORY OVERFLOW)
+// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY
 export async function applyReportDateFilter() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -113,7 +114,6 @@ export async function applyReportDateFilter() {
         const fromIso = new Date(fromVal).toISOString();
         q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso));
       } else {
-        // Query up to 1,000 recent invoices when viewing all to prevent 5-year browser crashes
         q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(1000));
       }
 
@@ -159,9 +159,7 @@ export function getFilteredInvoicesList() {
   });
 }
 
-// ==========================================================================
 // 1. INVOICES & INCOME REPORT
-// ==========================================================================
 export function renderInvoiceReportsList() {
   const tbody = document.getElementById("repInvoicesTableBody");
   const countBadge = document.getElementById("repInvoiceCount");
@@ -271,9 +269,7 @@ export function renderInvoiceReportsList() {
   });
 }
 
-// ==========================================================================
 // 2. ESTIMATED PROFIT & LOSS (P&L) STATEMENT REPORT
-// ==========================================================================
 export function renderPnLStatement() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -285,7 +281,6 @@ export function renderPnLStatement() {
   let totalDiscounts = 0;
   let totalFoodCostCOGS = 0;
 
-  // 1. Calculate Gross Revenue, Discounts and BOM Recipe Food Cost
   Object.values(erpState.invoices || {}).forEach(inv => {
     if (inv.status === "Voided") return;
 
@@ -317,7 +312,6 @@ export function renderPnLStatement() {
     });
   });
 
-  // 2. Calculate Operating Petty Cash Expenses within filter window
   let totalPettyExpenses = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     const pTime = new Date(p.timestamp || 0).getTime();
@@ -335,7 +329,6 @@ export function renderPnLStatement() {
   const netProfitMarginPct = netSalesRevenue > 0 ? ((estimatedNetProfit / netSalesRevenue) * 100).toFixed(1) : "0.0";
   const foodCostPct = netSalesRevenue > 0 ? ((totalFoodCostCOGS / netSalesRevenue) * 100).toFixed(1) : "0.0";
 
-  // Update Visual Summary Cards
   const revEl = document.getElementById("pnlNetRevenueVal");
   const cogsEl = document.getElementById("pnlFoodCostVal");
   const cogsPctEl = document.getElementById("pnlFoodCostPctVal");
@@ -353,7 +346,6 @@ export function renderPnLStatement() {
   }
   if (netMargEl) netMargEl.innerText = `Net Margin: ${netProfitMarginPct}%`;
 
-  // Update P&L Table Rows
   const rGross = document.getElementById("pnlRowGrossSales");
   const rDisc = document.getElementById("pnlRowDiscounts");
   const rNet = document.getElementById("pnlRowNetSales");
@@ -374,9 +366,7 @@ export function renderPnLStatement() {
   }
 }
 
-// ==========================================================================
 // 3. HOURLY SALES VELOCITY & PEAK TIMES REPORT
-// ==========================================================================
 export function renderHourlyVelocityReport() {
   const tbody = document.getElementById("repHourlyTableBody");
   if (!tbody) return;
@@ -469,9 +459,7 @@ export function renderHourlyVelocityReport() {
   });
 }
 
-// ==========================================================================
 // 4. WAITER-WISE SALES & SERVICE CHARGE DISTRIBUTION REPORT
-// ==========================================================================
 export function renderWaiterSalesReport() {
   const tbody = document.getElementById("repWaitersTableBody");
   if (!tbody) return;
@@ -568,14 +556,14 @@ export function renderWaiterSalesReport() {
   });
 }
 
-// 🔒 MANAGER OVERRIDE VERIFICATION FOR VOID BILLS (STRICT DB CHECK ONLY)
+// 🔒 MANAGER OVERRIDE VERIFICATION (OWNER & MANAGER SAFE)
 export function requestManagerVoidOverride(invoiceId) {
   pendingVoidInvoiceId = invoiceId;
   const inv = erpState.invoices[invoiceId];
   if (!inv) return;
 
   const desc = document.getElementById("managerOverrideDesc");
-  if (desc) desc.innerText = `Invoice #${inv.invoiceNumber} (Rs. ${inv.netTotal}) අවලංගු කිරීමට Manager PIN එක ගසන්න:`;
+  if (desc) desc.innerText = `Invoice #${inv.invoiceNumber} (Rs. ${inv.netTotal}) අවලංගු කිරීමට Manager PIN එක ඇතුළත් කරන්න:`;
 
   const pinIn = document.getElementById("managerOverridePinInput");
   if (pinIn) pinIn.value = "";
@@ -592,13 +580,15 @@ export async function submitManagerOverrideAction() {
   const enteredPin = document.getElementById("managerOverridePinInput")?.value.trim();
   if (!enteredPin || !pendingVoidInvoiceId) return;
 
-  const isValidManager = Object.values(erpState.employees || {}).some(e => {
+  const isEmployeeManager = Object.values(erpState.employees || {}).some(e => {
     const role = (e.role || "").toLowerCase();
     const isAuthorizedRole = role === "manager" || role === "admin" || role === "owner";
     return isAuthorizedRole && String(e.password || "").trim() === enteredPin;
   });
 
-  if (!isValidManager) {
+  const isOwnerSession = (currentUserRole === "owner" || currentUserRole === "admin");
+
+  if (!isEmployeeManager && !isOwnerSession) {
     alert("❌ වැරදි Manager PIN අංකයකි! Authorization Failed.");
     const pinIn = document.getElementById("managerOverridePinInput");
     if (pinIn) pinIn.value = "";
@@ -610,14 +600,20 @@ export async function submitManagerOverrideAction() {
   await executeVoidInvoiceProcess(idToVoid);
 }
 
-// 🔒 EXECUTE VOID INVOICE ENGINE
+// 🔒 EXECUTE VOID INVOICE ENGINE (CRASH-PROOF MODAL REASON)
 export async function executeVoidInvoiceProcess(invoiceId) {
   const inv = erpState.invoices[invoiceId];
   if (!inv) return;
 
-  const reason = prompt(`⚠️ ${inv.invoiceNumber} බිල්පත අවලංගු කිරීමට (Void) හේතුව ඇතුළත් කරන්න:`);
+  // 🔒 CRITICAL FIX: Replaced crash-prone browser prompt() with custom input modal
+  const reason = await showCustomInputModal(
+    `Void Invoice #${inv.invoiceNumber}`,
+    "අවලංගු කිරීමට හේතුව (උදා: Wrong Item, Cancelled)",
+    ""
+  );
+
   if (!reason || !reason.trim()) {
-    alert("අවලංගු කිරීම සඳහා හේතුවක් ඇතුළත් කිරීම අනිවාර්ය වේ.");
+    showLiveToast("ℹ️ Void Cancelled", "හේතුවක් ඇතුළත් නොකළ නිසා බිල අවලංගු නොවුණි.", "info", "fa-circle-info");
     return;
   }
 
@@ -629,7 +625,6 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         voidedAt: new Date().toISOString()
       });
 
-      // Restock ingredients if Recipe mode
       for (const item of (inv.items || [])) {
         const dish = erpState.dishes[item.dishId];
         if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
@@ -649,7 +644,6 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         }
       }
 
-      // If credit, void debt record
       const matchedCreditEntry = Object.entries(erpState.customerCredits || {}).find(([id, c]) => c.invoiceId === invoiceId || c.invoiceNumber === inv.invoiceNumber);
       if (matchedCreditEntry) {
         await updateFn(dbRef(`tenants/${currentTenant}/customerCredits/${matchedCreditEntry[0]}`), {
@@ -658,7 +652,7 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         });
       }
 
-      showLiveToast("🚫 Bill Voided", `Invoice #${inv.invoiceNumber} Manager විසින් අවලංගු කරන ලදී.`, "warning", "fa-ban");
+      showLiveToast("🚫 Bill Voided", `Invoice #${inv.invoiceNumber} සාර්ථකව අවලංගු කරන ලදී.`, "warning", "fa-ban");
       renderInvoiceReportsList();
     }
   } catch (err) {
@@ -808,7 +802,7 @@ export async function settleCustomerCredit(id) {
   }
 }
 
-// 🔒 UTF-8 BOM CSV EXPORT ENGINE FOR ALL 6 TABS
+// 🔒 UTF-8 BOM CSV EXPORT ENGINE
 export function exportCurrentReportToCSV() {
   const dateStr = getLocalDateString();
 
@@ -903,16 +897,13 @@ export function exportCurrentReportToCSV() {
   }
 }
 
-// ==========================================================================
 // 5. 🔥 SMART SHIFT-BASED DAY-END Z-REPORT (SEPARATE PETTY CASH AUDIT)
-// ==========================================================================
 export let currentZReportCalculatedData = null;
 
 export async function openDayEndModal() {
   const now = new Date();
   const todayLocalStr = getLocalDateString(now);
 
-  // Detect Most Recent Shift Start Time (Last Z-Report or Shift Float or 00:00:00 Today)
   let shiftStartTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
   
   const pastReports = Object.values(erpState.dayEndReports || {});
@@ -923,7 +914,6 @@ export async function openDayEndModal() {
     }
   }
 
-  // 1. Calculate Shift Opening Float (For POS Register Drawer)
   let openingFloat = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     if (p.category === "Main Cash Drawer Top-up" && p.type === "in") {
@@ -1000,7 +990,6 @@ export async function openDayEndModal() {
     }
   });
 
-  // 2. 🔒 SEPARATE PETTY CASH AUDIT (SHIFT ACTIVITY VS LIFETIME BALANCE)
   let shiftPettyIn = 0;
   let shiftPettyOut = 0;
   let totalLifetimeIn = 0;
@@ -1010,11 +999,9 @@ export async function openDayEndModal() {
     const amt = parseFloat(p.amount || 0);
     const pTime = new Date(p.timestamp || 0).getTime();
 
-    // Lifetime balance
     if (p.type === "in") totalLifetimeIn += amt;
     else totalLifetimeOut += amt;
 
-    // Shift-level activity
     if (pTime >= shiftStartTimeMs) {
       if (p.type === "in") shiftPettyIn += amt;
       else shiftPettyOut += amt;
@@ -1022,8 +1009,6 @@ export async function openDayEndModal() {
   });
 
   const pettyNetBalance = Math.round((totalLifetimeIn - totalLifetimeOut) * 100) / 100;
-
-  // Expected POS Register Drawer = Cash Sales + Shift Opening Float (Pure Drawer Reconcile)
   const expectedDrawerCash = Math.round((cashSales + openingFloat) * 100) / 100;
 
   currentZReportCalculatedData = {
@@ -1042,7 +1027,7 @@ export async function openDayEndModal() {
     transferSales: Math.round(transferSales * 100) / 100,
     creditSales: Math.round(creditSales * 100) / 100,
     openingFloat: Math.round(openingFloat * 100) / 100,
-    expectedCash: expectedDrawerCash, // Cashier register drawer expected
+    expectedCash: expectedDrawerCash,
     pettyIn: Math.round(shiftPettyIn * 100) / 100,
     pettyOut: Math.round(shiftPettyOut * 100) / 100,
     pettyNetBalance: pettyNetBalance,
@@ -1148,7 +1133,7 @@ export function calculateDayEndVariance() {
   }
 }
 
-// 🔒 SAVE Z-REPORT SAFELY WITHOUT OVERWRITING DAILY SHIFTS
+// 🔒 SAVE Z-REPORT & SILENT DIRECT HARDWARE PRINT
 export async function printAndSaveZReport() {
   if (!currentZReportCalculatedData) return;
 
@@ -1186,13 +1171,12 @@ export async function printAndSaveZReport() {
 
     renderAdvancedThermalZReport(fullZReportPayload);
 
+    // 🖨️ SILENT PRINT TO CASHIER PRINTER
+    const pr = erpState.settings?.printers || {};
+    const targetPrinter = pr.p1?.device || pr.p4?.device || "";
+    await sendDirectSilentPrint(targetPrinter, "", "zReportPrintModal");
+
     closeDayEndModal();
-    const printModal = document.getElementById("zReportPrintModal");
-    if (printModal) {
-      printModal.style.display = "block";
-      window.print();
-      printModal.style.display = "none";
-    }
     showLiveToast("📑 Z-Report Completed", "දවසේ සම්පූර්ණ Z-Report එක සාර්ථකව Print විය.", "success", "fa-vault");
   } catch (err) {
     alert("Z-Report සේව් කිරීමේදී දෝෂයක්: " + err.message);
@@ -1250,7 +1234,6 @@ function renderAdvancedThermalZReport(z) {
     `).join("") || `<div>No item sales</div>`;
   }
 
-  // Pure Register Drawer Audit
   const zOpeningFloat = document.getElementById("zOpeningFloat");
   const zDrawerCash = document.getElementById("zDrawerCashSales");
   const zExp = document.getElementById("zExpectedCash");
@@ -1266,7 +1249,6 @@ function renderAdvancedThermalZReport(z) {
     zVar.className = z.variance < 0 ? "text-red-700 font-black" : "font-black";
   }
 
-  // Separate Petty Cash Audit (Not mixed in Drawer)
   const zPIn = document.getElementById("zPrintPettyIn");
   const zPOut = document.getElementById("zPrintPettyOut");
   const zPBal = document.getElementById("zPrintPettyBal");
@@ -1276,14 +1258,11 @@ function renderAdvancedThermalZReport(z) {
   if (zPBal) zPBal.innerText = `Rs. ${z.pettyNetBalance.toFixed(2)}`;
 }
 
-// ==========================================================================
 // 6. SHIFT HANDOVER (X-REPORT)
-// ==========================================================================
 export function openShiftHandoverModal() {
   const todayLocalStr = getLocalDateString(new Date());
   document.getElementById("shiftHandoverForm")?.reset();
 
-  // Find shift opening float today
   let openingFloat = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     if (p.category === "Main Cash Drawer Top-up" && p.type === "in") {
@@ -1352,12 +1331,11 @@ export async function handleShiftHandoverSubmit(e) {
     if (xNote) xNote.innerText = note ? `Note: ${note}` : "";
 
     closeShiftHandoverModal();
-    const printModal = document.getElementById("xReportPrintModal");
-    if (printModal) {
-      printModal.style.display = "block";
-      window.print();
-      printModal.style.display = "none";
-    }
+
+    // 🖨️ SILENT PRINT TO CASHIER PRINTER
+    const pr = erpState.settings?.printers || {};
+    const targetPrinter = pr.p1?.device || pr.p4?.device || "";
+    await sendDirectSilentPrint(targetPrinter, "", "xReportPrintModal");
 
     showLiveToast("🤝 Shift Handover Verified", `${outgoing} -> ${incoming} වෙත මුදල් පෙට්ටිය සාර්ථකව භාරදෙන ලදී.`, "success", "fa-arrows-split-up-and-left");
   } catch (err) {
