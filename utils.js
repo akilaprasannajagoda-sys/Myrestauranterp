@@ -22,26 +22,23 @@ export function triggerAudioAlert(soundType = "info") {
     gainNode.connect(ctx.destination);
     
     if (soundType === "kitchen" || soundType === "newOrder") {
-      // 🔔 Two-Tone Pleasant Kitchen Bell (High-Pitch Chime)
       osc.type = "sine";
-      osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
       gainNode.gain.setValueAtTime(0.35, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
       osc.start();
       osc.stop(ctx.currentTime + 0.55);
     } else if (soundType === "success") {
-      // 🎶 Tri-Tone Success Chime
       osc.type = "triangle";
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
-      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
       gainNode.gain.setValueAtTime(0.25, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
       osc.start();
       osc.stop(ctx.currentTime + 0.55);
     } else if (soundType === "warning") {
-      // ⚠️ Alert Warning Tone
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(330, ctx.currentTime);
       osc.frequency.setValueAtTime(220, ctx.currentTime + 0.15);
@@ -50,7 +47,6 @@ export function triggerAudioAlert(soundType = "info") {
       osc.start();
       osc.stop(ctx.currentTime + 0.45);
     } else {
-      // ℹ️ Soft General Notification
       osc.type = "sine";
       osc.frequency.setValueAtTime(440, ctx.currentTime);
       gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
@@ -188,7 +184,7 @@ export function downloadCSVFile(csvContent, filename) {
   showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
 }
 
-// 5. DEBOUNCE HELPER (PREVENTS UI FREEZES ON RAPID SEARCH INPUTS LIKE GRN SEARCH)
+// 5. DEBOUNCE HELPER
 export function debounce(func, wait = 250) {
   let timeout;
   return function executedFunction(...args) {
@@ -201,7 +197,7 @@ export function debounce(func, wait = 250) {
   };
 }
 
-// 6. DATE FORMATTING UTILITIES (USED IN REPORTS, PAYROLL & PETTY CASH)
+// 6. DATE FORMATTING UTILITIES
 export function getLocalDateString(d = new Date()) {
   const dateObj = typeof d === "string" ? new Date(d) : d;
   if (isNaN(dateObj.getTime())) return new Date().toISOString().split("T")[0];
@@ -221,8 +217,57 @@ export function formatCurrency(amount = 0) {
   return `Rs. ${num.toFixed(2)}`;
 }
 
-// 7. PROFESSIONAL WHATSAPP DIGITAL RECEIPT ENGINE (SRI LANKA NUMBER SANITIZED)
-export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
+// 🔒 7. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
+export function showCustomInputModal(titleText, placeholderText = "", defaultValue = "") {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("globalCustomPromptModal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "globalCustomPromptModal";
+    overlay.className = "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+      <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 border border-gray-100 text-center animate-pulse-once">
+        <div class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center mx-auto text-xl">
+          <i class="fa-brands fa-whatsapp"></i>
+        </div>
+        <div>
+          <h4 class="font-black text-base text-gray-800">${titleText}</h4>
+          <p class="text-[11px] text-gray-400 mt-0.5">පාරිභෝගිකයාගේ WhatsApp අංකය ඇතුළත් කරන්න</p>
+        </div>
+        <input type="text" id="customPromptInputField" value="${defaultValue}" placeholder="${placeholderText}" class="w-full p-3 border-2 border-green-400 rounded-2xl text-center text-base font-bold outline-none bg-green-50/40 text-gray-800 focus:bg-white focus:border-green-600 transition">
+        <div class="flex justify-end gap-2 pt-2 text-xs font-bold border-t border-gray-100">
+          <button type="button" id="customPromptCancelBtn" class="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition cursor-pointer">Cancel</button>
+          <button type="button" id="customPromptOkBtn" class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md transition cursor-pointer">OK (Send)</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector("#customPromptInputField");
+    if (input) {
+      input.focus();
+      input.select();
+    }
+
+    const cleanup = (resultVal) => {
+      overlay.remove();
+      resolve(resultVal);
+    };
+
+    overlay.querySelector("#customPromptOkBtn").onclick = () => cleanup(input.value.trim());
+    overlay.querySelector("#customPromptCancelBtn").onclick = () => cleanup(null);
+
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") cleanup(input.value.trim());
+      if (e.key === "Escape") cleanup(null);
+    };
+  });
+}
+
+// 8. PROFESSIONAL WHATSAPP DIGITAL RECEIPT ENGINE (WITH systems.lk BRANDING)
+export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
   let rawPhone = inputPhone;
   
   if (!rawPhone && invoiceData.payment && invoiceData.payment.customerPhone) {
@@ -230,12 +275,14 @@ export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP"
   }
   
   if (!rawPhone) {
-    rawPhone = prompt("කරුණාකර පාරිභෝගිකයාගේ WhatsApp දුරකථන අංකය ඇතුළත් කරන්න (උදා: 0771234567):");
+    rawPhone = await showCustomInputModal("WhatsApp Bill Dispatch", "0771234567");
   }
   
-  if (!rawPhone) return;
+  if (!rawPhone) {
+    showLiveToast("ℹ️ WhatsApp Cancelled", "දුරකථන අංකයක් ඇතුළත් නොකළ නිසා WhatsApp නොයැවුණි.", "info", "fa-circle-info");
+    return;
+  }
   
-  // Normalize Sri Lankan phone numbers (e.g., 0771234567 -> 94771234567)
   let cleanPhone = rawPhone.replace(/\D/g, "");
   if (cleanPhone.startsWith("0")) {
     cleanPhone = "94" + cleanPhone.substring(1);
@@ -283,7 +330,9 @@ export function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP"
   }
   
   message += `------------------------------------\n`;
-  message += `🙏 *Thank you for dining with us! Come again.*`;
+  message += `🙏 *Thank you for dining with us! Come again.*\n\n`;
+  // 🚀 systems.lk BRANDING
+  message += `_Software by systems.lk | Tel: 0760672029_`;
   
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   window.open(waUrl, "_blank");
@@ -300,3 +349,4 @@ window.downloadCSVFile = downloadCSVFile;
 window.sendInvoiceViaWhatsApp = sendInvoiceViaWhatsApp;
 window.formatCurrency = formatCurrency;
 window.getLocalDateString = getLocalDateString;
+window.showCustomInputModal = showCustomInputModal;
