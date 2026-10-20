@@ -88,7 +88,7 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (ZERO MEMORY LEAK)
+// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (ZERO MEMORY LEAK + AUTO-FALLBACK)
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let printWin = null;
@@ -96,22 +96,36 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       if (!mainWindow) return resolve({ success: false, error: "Main window not found" });
       
       const printers = await mainWindow.webContents.getPrintersAsync();
-      let targetDevice = printerName;
+      let targetDevice = "";
       
-      // Default printer එකක් නොදුන් විට පද්ධතියේ default printer එක තෝරාගනී
+      // 1. පරිගණකයේ ඇති Printers අතරින් නම ගැළපෙන Printer එක සෙවීම (Exact / Partial Match)
+      if (printerName && printerName.trim()) {
+        const cleanReqName = printerName.trim().toLowerCase();
+        const matched = printers.find(p => p.name.toLowerCase() === cleanReqName || p.name.toLowerCase().includes(cleanReqName));
+        if (matched) {
+          targetDevice = matched.name;
+        }
+      }
+      
+      // 2. ඔබ දුන් නමින් Printer එකක් නැතිනම්, පරිගණකයේ Default Printer එක හෝ පවතින ප්‍රධාන Printer එක තෝරාගනී
       if (!targetDevice) {
         const def = printers.find(p => p.isDefault);
         targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
       }
       
-      // පසුබිමෙන් පමණක් ධාවනය වන කුඩා 80mm Print Buffer Window එකක් සෑදීම
+      if (!targetDevice) {
+        return resolve({ success: false, error: "පරිගණකයට කිසිදු Printer එකක් සම්බන්ධ කර නොමැත." });
+      }
+      
+      // 3. පසුබිමෙන් පමණක් ධාවනය වන Print Buffer Window එකක් සෑදීම
       printWin = new BrowserWindow({
         width: 320,
         height: 600,
         show: false,
         webPreferences: {
           nodeIntegration: false,
-          contextIsolation: true
+          contextIsolation: true,
+          backgroundThrottling: false // Hidden Window එක Render වීම Freeze වීම වළක්වයි
         }
       });
       
@@ -158,12 +172,16 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
               deviceName: targetDevice,
               margins: { marginType: 'none' }
             });
-            // 🔒 Window එක Destroy කිරීම මගින් RAM මතකය නිදහස් කරයි
-            if (printWin) {
-              printWin.destroy();
-              printWin = null;
-            }
-            resolve({ success: true });
+            
+            // Windows Spooler එකට Data සම්පූර්ණයෙන්ම යනතුරු තත්පර 1ක් තබා Window එක Destroy කරයි
+            setTimeout(() => {
+              if (printWin) {
+                printWin.destroy();
+                printWin = null;
+              }
+            }, 1000);
+            
+            resolve({ success: true, usedPrinter: targetDevice });
           } catch (printErr) {
             if (printWin) {
               printWin.destroy();
@@ -171,7 +189,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
             }
             resolve({ success: false, error: printErr.message });
           }
-        }, 150);
+        }, 350);
       });
     } catch (err) {
       if (printWin) {
