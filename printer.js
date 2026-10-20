@@ -81,7 +81,8 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   }
   
   text += CMD_CENTER + "\n" + footer + "\n";
-  text += "Software by Restaurant ERP Enterprise\n\n\n\n";
+  // 🚀 systems.lk BRANDING
+  text += "Software by systems.lk | Tel: 0760672029\n\n\n\n";
   text += CMD_DRAWER; // Pop open cash drawer
   text += CMD_CUT; // Cut paper cleanly
   
@@ -110,13 +111,14 @@ export function formatKOTRawText(kot, stationLabel = "") {
   });
   
   text += "================================================\n";
-  text += CMD_CENTER + "PREPARE FRESH & QUICK\n\n\n\n";
+  text += CMD_CENTER + "PREPARE FRESH & QUICK\n";
+  text += "systems.lk | Tel: 0760672029\n\n\n\n";
   text += CMD_CUT;
   
   return text;
 }
 
-// 3. NEW: 80MM DEDICATED THERMAL PAYSLIP FORMATTER (SOLVES PAPER ROLL RUNAWAY & BLUR)
+// 3. 80MM DEDICATED THERMAL PAYSLIP FORMATTER
 export function formatPayslipRawText(p) {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   
@@ -140,36 +142,44 @@ export function formatPayslipRawText(p) {
   text += "------------------------------------------------\n\n";
   text += CMD_CENTER;
   text += `....................        ....................\n`;
-  text += ` Employer Signature          Employee Signature\n\n\n\n`;
-  text += CMD_CUT; // Cuts thermal roll immediately (Never feeds endlessly)
+  text += ` Employer Signature          Employee Signature\n\n`;
+  // 🚀 systems.lk BRANDING
+  text += "Software by systems.lk | Tel: 0760672029\n\n\n\n";
+  text += CMD_CUT;
   
   return text;
 }
 
-// 4. SILENT DIRECT PRINT DISPATCHER (DEDICATED 80MM HTML CONTENT DISPATCH)
+// 4. SILENT DIRECT PRINT DISPATCHER
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
   const contentToPrint = el ? el.innerHTML : rawContent;
   
-  // 1. Check if running inside Electron Desktop App (.exe)
+  // 1. Electron Desktop App (.exe) Environment
   if (window.electronAPI && window.electronAPI.printSilent) {
     try {
       const res = await window.electronAPI.printSilent({
         printerName: targetDeviceName,
         htmlContent: contentToPrint
       });
-      if (res && res.success) return true;
+      if (res && res.success) {
+        return true;
+      } else if (res && !res.success) {
+        console.error("Print Error from Driver:", res.error);
+        showLiveToast("⚠️ Printer Warning", res.error || "Printer එක සම්බන්ධ කර නැත හෝ Offline ඇත.", "warning", "fa-print");
+      }
     } catch (e) {
       console.warn("Electron direct print fallback:", e);
+      showLiveToast("⚠️ Print Error", e.message, "warning", "fa-triangle-exclamation");
     }
   }
   
-  // 2. Fallback for Web Browser with controlled print-flow
+  // 2. Web Browser Fallback with Controlled Window Display
   if (el) {
     el.style.display = "block";
-    await new Promise(resolve => setTimeout(resolve, 80));
+    await new Promise(resolve => setTimeout(resolve, 150));
     window.print();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
     el.style.display = "none";
   }
   return true;
@@ -177,7 +187,6 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
 
 // 5. PRINT THERMAL 80MM PAYSLIP DISPATCHER
 export async function printThermalPayslip(payslipData) {
-  // Populate the 80mm Pure Thermal DOM Template (Created in index.html)
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const pHotel = document.getElementById("payslipThermalHotel");
   const pMonth = document.getElementById("payslipThermalMonth");
@@ -209,9 +218,8 @@ export async function printThermalPayslip(payslipData) {
   if (pAdv) pAdv.innerText = `-Rs. ${parseFloat(payslipData.advances || 0).toFixed(2)}`;
   if (pNet) pNet.innerText = `Rs. ${parseFloat(payslipData.netSalary || 0).toFixed(2)}`;
   
-  // Determine target device (Defaults to P4: Accounts or P1: Cashier)
   const pr = erpState.settings?.printers || {};
-  let targetDevice = pr.p4?.device || pr.p1?.device || "POS-80";
+  let targetDevice = pr.p4?.device || pr.p1?.device || "";
   
   const rawText = formatPayslipRawText(payslipData);
   await sendDirectSilentPrint(targetDevice, rawText, "payslipThermalModal");
@@ -221,7 +229,7 @@ export async function printThermalPayslip(payslipData) {
 // 6. TEST PRINT HARDWARE PRINTER (WITH SAMPLE BILL DATA)
 export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
-  const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "POS-80";
+  const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "";
   const labelName = document.getElementById(`${slotKey}_name`)?.value.trim() || pr?.name || slotKey;
   
   const rHotel = document.getElementById("receiptHotel");
@@ -236,7 +244,7 @@ export async function testDirectPrinter(slotKey) {
   if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   if (rOrderId) rOrderId.innerText = `HARDWARE TEST PRINT`;
   if (rDate) rDate.innerText = `Date: ${new Date().toLocaleString()}`;
-  if (rType) rType.innerText = `Station: ${labelName} (${devName})`;
+  if (rType) rType.innerText = `Station: ${labelName} (${devName || 'Default'})`;
   if (rItems) {
     rItems.innerHTML = `
       <div class="flex justify-between py-1 border-b border-black">
@@ -253,11 +261,11 @@ export async function testDirectPrinter(slotKey) {
   }
   if (rSub) rSub.innerText = `Rs. 0.00`;
   if (rTotal) rTotal.innerText = `TEST PASSED`;
-  if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** HARDWARE TEST SUCCESSFUL ***</div>`;
+  if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** Software by systems.lk (0760672029) ***</div>`;
   
   try {
     await sendDirectSilentPrint(devName, "", "receiptModal");
-    showLiveToast("🖨️ Test Print Sent", `[${labelName}] -> ${devName} වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
+    showLiveToast("🖨️ Test Print Command Sent", `[${labelName}] වෙත Print Request එක යවන ලදී.`, "success", "fa-check");
   } catch (err) {
     alert("Test Print Error: " + err.message);
   }
