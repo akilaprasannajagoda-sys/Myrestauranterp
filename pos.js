@@ -4,7 +4,7 @@
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
-import { showLiveToast, sendInvoiceViaWhatsApp } from './utils.js';
+import { showLiveToast, sendInvoiceViaWhatsApp, showCustomInputModal } from './utils.js';
 import { convertRecipeQtyToBaseUnit } from './menu.js';
 import { formatReceiptRawText, formatKOTRawText, sendDirectSilentPrint } from './printer.js';
 
@@ -16,9 +16,7 @@ let setFn = null;
 let localDBInstance = null;
 let transactionFn = null;
 
-// 🔒 SYNC CONCURRENCY LOCK (ද්විත්ව SYNC වැළැක්වීම)
 let isOfflineSyncInProgress = false;
-
 export let currentDiscountType = "fixed";
 
 export function initPosContext(dbRefInstance, pushMethod, updateMethod, removeMethod, setMethod, localDB, runTransactionMethod = null) {
@@ -38,7 +36,7 @@ export function generateCollisionProofInvoiceNumber() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   const timePart = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0');
-  const salt = String(Math.floor(10 + Math.random() * 90)); // 2-digit micro random salt
+  const salt = String(Math.floor(10 + Math.random() * 90));
   return `INV-${yy}${mm}${dd}-${timePart}${salt}`;
 }
 
@@ -132,7 +130,6 @@ export async function closeBillTab(key, ev) {
     }
   }
 
-  // Free table if occupied
   if (b && b.tableNo && dbRef && updateFn && currentTenant) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === b.tableNo);
     if (matchedTable) {
@@ -270,9 +267,8 @@ export function renderDishCategoriesFilterUI() {
   });
 }
 
-// CHECK DISH STOCK AVAILABILITY (HONORS INVENTORY DEDUCTION MODE)
+// CHECK DISH STOCK AVAILABILITY
 export function checkDishStockAvailability(dish) {
-  // If Daily Store Issue Mode is active, bypass BOM portion constraint
   if (erpState.settings?.inventoryMode === "issue") {
     return { isAvailable: true, portionsLeft: 999, outMaterialName: "" };
   }
@@ -390,7 +386,6 @@ export async function addDishToActiveCart(dishId, dish) {
 
   await persistActiveBillToCloud({ cart: cartList });
 
-  // Auto Occupy Table
   if (currentBill.tableNo && dbRef && updateFn && currentTenant) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
     if (matchedTable) {
@@ -416,16 +411,23 @@ export async function changeCartQty(dishId, stepDelta) {
   await persistActiveBillToCloud({ cart: cartList });
 }
 
+// 🔒 CRASH-PROOF KITCHEN NOTE EDITOR (ELECTRON SAFE)
 export async function updateCartItemNote(dishId) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
   const targetItem = cartList.find(i => i.dishId === dishId);
   if (!targetItem) return;
 
-  const newNote = prompt(`"${targetItem.name}" සඳහා Kitchen Note එක ඇතුළත් කරන්න (උදා: Less Spicy, No Sugar, Extra Gravy):`, targetItem.note || "");
+  const newNote = await showCustomInputModal(
+    `Kitchen Note: ${targetItem.name}`,
+    "උදා: Less Spicy, No Sugar, Extra Gravy",
+    targetItem.note || ""
+  );
+
   if (newNote !== null) {
     targetItem.note = newNote.trim();
     await persistActiveBillToCloud({ cart: cartList });
+    renderCartItemsUI();
   }
 }
 
@@ -507,7 +509,6 @@ export function renderCartItemsUI() {
   recalculateCartTotalsUI();
 }
 
-// SMART DYNAMIC SERVICE CHARGE CALCULATION (DINE-IN ONLY)
 export function calculateOrderTotals(cartList = [], discType = "fixed", discValue = 0, orderType = "Dine-in") {
   const subtotal = cartList.reduce((sum, i) => sum + (i.price * (parseInt(i.qty) || 0)), 0);
   
@@ -639,7 +640,6 @@ export function selectPayMethod(method, syncCloud = true) {
   }
 }
 
-// QUICK CASH BUTTONS HELPER
 export function setQuickCashAmount(amt) {
   const currentBill = getActiveBillData();
   const discIn = document.getElementById("cartDiscountInput");
@@ -672,7 +672,6 @@ export function calculateCashChange() {
   if (changeEl) changeEl.innerText = `Rs. ${change.toFixed(2)}`;
 }
 
-// MULTI-TENDER SPLIT PAYMENT BALANCE CALCULATOR
 export function calculateSplitPaymentBalance() {
   const currentBill = getActiveBillData();
   const discIn = document.getElementById("cartDiscountInput");
@@ -692,13 +691,12 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
-// SILENT DIRECT HARDWARE KOT GENERATOR WITH NOTES
 export async function printPhysicalKOTSlip(kot) {
   const pr = erpState.settings?.printers || {};
   const activeKotPrinters = Object.entries(pr).filter(([k, p]) => p.kot);
 
   if (activeKotPrinters.length === 0) {
-    activeKotPrinters.push(["default", { name: "Kitchen Printer", device: "POS-80" }]);
+    activeKotPrinters.push(["default", { name: "Kitchen Printer", device: "" }]);
   }
 
   const tableEl = document.getElementById("kotPrintTable");
@@ -727,11 +725,9 @@ export async function printPhysicalKOTSlip(kot) {
     await sendDirectSilentPrint(p.device, rawText, "kotPrintModal");
   }
 
-  const pNames = activeKotPrinters.map(([k, p]) => `${p.name} (${p.device})`).join(", ");
-  showLiveToast("🖨️ KOT Direct Printed", `KOT #${kot.tableNo} -> [${pNames}] වෙත Silent Print විය.`, "kitchen", "fa-print");
+  showLiveToast("🖨️ KOT Direct Printed", `KOT #${kot.tableNo} Print Command යවන ලදී.`, "kitchen", "fa-print");
 }
 
-// TABLE PRE-PRINT ESTIMATE BILL (COLLISION-PROOF NUMBER)
 export async function printPreBillEstimate() {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart || [];
@@ -762,10 +758,9 @@ export async function printPreBillEstimate() {
   showLiveToast("📄 Pre-Bill Printed", `Table ${currentBill.tableNo || 'N/A'} සඳහා Estimate බිලක් Print කරන ලදී.`, "info", "fa-file-lines");
 }
 
-// INCREMENTAL DELTA KOT WITH COOKING NOTES
 export async function sendOrderToKitchen(isPhysicalPrint = false) {
   const currentBill = getActiveBillData();
-  const cartList = currentBill.cart || [];
+  const cartList = currentBill.cart ? [...currentBill.cart] : [];
   if (cartList.length === 0 || !dbRef || !pushFn || !currentTenant) return;
 
   const deltaItems = [];
@@ -830,7 +825,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
   }
 }
 
-// MULTI-PAYMENT CHECKOUT (HONORS INVENTORY DEDUCTION MODE & WAITER ATTRIBUTION)
+// 🔒 CHECKOUT ENGINE (CRASH-PROOF WHATSAPP + ROBUST INVENTORY TRANSACTIONS)
 export async function processOrder(sendWhatsApp = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart || [];
@@ -894,10 +889,8 @@ export async function processOrder(sendWhatsApp = false) {
     payDetails.customerPhone = custPhone;
   }
   
-  // 🔒 COLLISION-PROOF UNIQUE INVOICE NUMBER
   const invoiceNumber = generateCollisionProofInvoiceNumber();
   
-  // Determine Waiter Name directly from Table Plan if available
   let assignedWaiter = currentBill.waiterName || "";
   if (!assignedWaiter && currentBill.tableNo) {
     const tObj = Object.values(erpState.tables || {}).find(t => t.tableNo === currentBill.tableNo);
@@ -938,7 +931,6 @@ export async function processOrder(sendWhatsApp = false) {
         });
       }
       
-      // 🔒 ATOMIC TRANSACTION RAW STOCK DEDUCTION (ONLY IN RECIPE MODE)
       const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
       if (isRecipeMode) {
         for (const item of cartList) {
@@ -968,7 +960,6 @@ export async function processOrder(sendWhatsApp = false) {
         }
       }
       
-      // Free table
       if (currentBill.tableNo && updateFn) {
         const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
         if (matchedTable) {
@@ -1000,7 +991,7 @@ export async function processOrder(sendWhatsApp = false) {
     
     if (sendWhatsApp) {
       const hotelName = currentTenantInfo?.hotelName || "Restaurant ERP";
-      sendInvoiceViaWhatsApp(invoiceData, hotelName);
+      await sendInvoiceViaWhatsApp(invoiceData, hotelName);
     } else {
       await printThermalReceipt(invoiceData);
     }
@@ -1027,13 +1018,12 @@ export async function processOrder(sendWhatsApp = false) {
   }
 }
 
-// 80MM THERMAL RECEIPT PRINTING
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const activeBillPrinters = Object.entries(pr).filter(([k, p]) => p.bill);
 
   if (activeBillPrinters.length === 0) {
-    activeBillPrinters.push(["default", { name: "Cashier Printer", device: "POS-80" }]);
+    activeBillPrinters.push(["default", { name: "Cashier Printer", device: "" }]);
   }
 
   const oId = document.getElementById("receiptOrderId");
@@ -1341,7 +1331,7 @@ export async function handleShiftFloatSubmit(e) {
   }
 }
 
-// 🔄 5-YEAR PRODUCTION HARDENED OFFLINE INVOICES CLOUD SYNC & AUTO-PRUNING ENGINE
+// 🔄 5-YEAR PRODUCTION HARDENED OFFLINE INVOICES CLOUD SYNC
 export async function syncOfflineInvoicesToCloud() {
   if (!navigator.onLine || !localDBInstance || !dbRef || !pushFn || !currentTenant) return;
   if (isOfflineSyncInProgress) return;
@@ -1350,7 +1340,6 @@ export async function syncOfflineInvoicesToCloud() {
     isOfflineSyncInProgress = true;
     const unsyncedInvoices = await localDBInstance.offlineInvoices.where("synced").equals(0).toArray();
     
-    // 🔒 5-YEAR MAINTENANCE: Auto-prune any legacy synced records older than 14 days to prevent disk bloat
     try {
       const twoWeeksAgoIso = new Date(Date.now() - (14 * 24 * 60 * 60 * 1000)).toISOString();
       await localDBInstance.offlineInvoices.where("createdAt").below(twoWeeksAgoIso).delete();
@@ -1397,7 +1386,6 @@ export async function syncOfflineInvoicesToCloud() {
           });
         }
 
-        // Deduct only if Recipe Mode is active
         if (isRecipeMode) {
           for (const item of inv.items || []) {
             const dish = erpState.dishes[item.dishId];
@@ -1426,7 +1414,6 @@ export async function syncOfflineInvoicesToCloud() {
           }
         }
 
-        // 🔒 Immediately clean up synced invoice from local disk
         await localDBInstance.offlineInvoices.delete(inv.id);
       } catch (singleInvErr) {
         console.warn("Single invoice sync bypass:", singleInvErr);
