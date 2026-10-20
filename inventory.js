@@ -118,7 +118,7 @@ export async function handleRawItemSubmit(e) {
     unit: document.getElementById("rawUnitSelect")?.value || "kg",
     cost: parseFloat(document.getElementById("rawCostInput")?.value || 0),
     stock: parseFloat(document.getElementById("rawStockInput")?.value || 0),
-    reorderLevel: 3.0 // Default Reorder Level
+    reorderLevel: 3.0
   };
   
   if (dbRef && currentTenant) {
@@ -133,16 +133,37 @@ export async function handleRawItemSubmit(e) {
   closeRawItemModal();
 }
 
+// 🔍 SEARCHABLE RAW STOCK TABLE ENGINE
+export function onRawSearchInput() {
+  renderRawStockTable();
+}
+
 export function renderRawStockTable() {
   const tbody = document.getElementById("rawTableBody");
   const badge = document.getElementById("rawItemCountBadge");
+  const searchInput = document.getElementById("rawSearchInput");
+  const query = (searchInput?.value || "").toLowerCase().trim();
   if (!tbody) return;
   
-  const list = Object.entries(erpState.rawItems || {});
+  let list = Object.entries(erpState.rawItems || {});
+  
+  // Instant Search by Material Name or Category
+  if (query) {
+    list = list.filter(([id, raw]) => {
+      const name = (raw.name || "").toLowerCase();
+      const cat = (raw.category || "").toLowerCase();
+      return name.includes(query) || cat.includes(query);
+    });
+  }
+
   if (badge) badge.innerText = `${list.length} Items`;
   
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-400">අමුද්‍රව්‍ය තවම ඇතුළත් කර නැත...</td></tr>`;
+    if (query) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-400">"${query}" නමින් අමුද්‍රව්‍ය හමු නොවීය...</td></tr>`;
+    } else {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-400">අමුද්‍රව්‍ය තවම ඇතුළත් කර නැත...</td></tr>`;
+    }
     return;
   }
   
@@ -185,9 +206,7 @@ export async function deleteRawItem(id) {
   }
 }
 
-// ==========================================================================
-// 3. 🔥 DAILY KITCHEN STORE ISSUE ENGINE (දෛනික කුස්සියට බඩු ISSUE කිරීම)
-// ==========================================================================
+// 3. DAILY KITCHEN STORE ISSUE ENGINE
 export function openStoreIssueModal() {
   document.getElementById("storeIssueForm")?.reset();
   const dIn = document.getElementById("issueDate");
@@ -277,10 +296,8 @@ export async function handleStoreIssueSubmit(e) {
 
   try {
     if (dbRef && pushFn && updateFn && currentTenant) {
-      // 1. Save Store Issue Record
       await pushFn(dbRef(`tenants/${currentTenant}/storeIssues`), issuePayload);
 
-      // 2. Deduct Issued Quantities from Raw Stock
       for (const it of items) {
         if (transactionFn) {
           await transactionFn(dbRef(`tenants/${currentTenant}/rawItems/${it.rawId}/stock`), (currentStock) => {
@@ -304,9 +321,7 @@ export async function handleStoreIssueSubmit(e) {
   }
 }
 
-// ==========================================================================
-// 4. MULTI-ITEM KITCHEN WASTAGE / SPOILAGE ENGINE
-// ==========================================================================
+// 4. MULTI-ITEM KITCHEN WASTAGE ENGINE
 export function openWastageModal() {
   document.getElementById("wastageForm")?.reset();
   const dIn = document.getElementById("wastageDate");
@@ -404,10 +419,8 @@ export async function handleWastageSubmit(e) {
 
   try {
     if (dbRef && pushFn && updateFn && currentTenant) {
-      // 1. Save Wastage Log
       await pushFn(dbRef(`tenants/${currentTenant}/wastageLogs`), wastagePayload);
 
-      // 2. Deduct quantities from rawItems Stock
       for (const it of items) {
         if (transactionFn) {
           await transactionFn(dbRef(`tenants/${currentTenant}/rawItems/${it.rawId}/stock`), (currentStock) => {
@@ -448,3 +461,4 @@ window.openWastageModal = openWastageModal;
 window.closeWastageModal = closeWastageModal;
 window.addWastageItemRow = addWastageItemRow;
 window.handleWastageSubmit = handleWastageSubmit;
+window.onRawSearchInput = onRawSearchInput;
