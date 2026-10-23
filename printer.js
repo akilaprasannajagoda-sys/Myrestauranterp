@@ -82,7 +82,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   
   text += CMD_CENTER + "\n" + footer + "\n";
   // 🚀 systems.lk BRANDING
-  text += "Software by systems.lk | Tel: 0760672029\n\n\n\n";
+  text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_DRAWER; // Pop open cash drawer
   text += CMD_CUT; // Cut paper cleanly
   
@@ -112,7 +112,7 @@ export function formatKOTRawText(kot, stationLabel = "") {
   
   text += "================================================\n";
   text += CMD_CENTER + "PREPARE FRESH & QUICK\n";
-  text += "systems.lk | Tel: 0760672029\n\n\n\n";
+  text += "systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
   
   return text;
@@ -144,13 +144,13 @@ export function formatPayslipRawText(p) {
   text += `....................        ....................\n`;
   text += ` Employer Signature          Employee Signature\n\n`;
   // 🚀 systems.lk BRANDING
-  text += "Software by systems.lk | Tel: 0760672029\n\n\n\n";
+  text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
   
   return text;
 }
 
-// 4. SILENT DIRECT PRINT DISPATCHER
+// 4. SILENT DIRECT PRINT DISPATCHER (ZERO BLANK FEED + ATOMIC ELECTRON DISPATCH)
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
   const contentToPrint = el ? el.innerHTML : rawContent;
@@ -164,18 +164,23 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
       });
       if (res && res.success) {
         return true;
-      } else if (res && !res.success) {
-        console.error("Print Error from Driver:", res.error);
-        showLiveToast("⚠️ Printer Warning", res.error || "Printer එක සම්බන්ධ කර නැත හෝ Offline ඇත.", "warning", "fa-print");
+      } else {
+        console.error("Print Error from Driver:", res?.error || "Unknown error");
+        showLiveToast("⚠️ Printer Warning", res?.error || "Printer එක සම්බන්ධ කර නැත හෝ Offline ඇත.", "warning", "fa-print");
+        return false;
       }
     } catch (e) {
       console.warn("Electron direct print fallback:", e);
       showLiveToast("⚠️ Print Error", e.message, "warning", "fa-triangle-exclamation");
+      return false;
     }
   }
   
   // 2. Web Browser Fallback with Controlled Window Display
   if (el) {
+    const allPrintModals = document.querySelectorAll("#receiptModal, #kotPrintModal, #payslipThermalModal, #zReportPrintModal, #xReportPrintModal");
+    allPrintModals.forEach(m => m.style.display = "none");
+    
     el.style.display = "block";
     await new Promise(resolve => setTimeout(resolve, 150));
     window.print();
@@ -274,3 +279,4 @@ export async function testDirectPrinter(slotKey) {
 // Window global exports
 window.testDirectPrinter = testDirectPrinter;
 window.printThermalPayslip = printThermalPayslip;
+window.sendDirectSilentPrint = sendDirectSilentPrint;
