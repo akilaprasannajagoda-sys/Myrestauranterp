@@ -19,6 +19,7 @@ export const erpState = {
   invoices: {},
   kitchenOrders: {},
   customerCredits: {},
+  customers: {}, // 👤 Registered Customers & Loyalty CRM Store
   activeBills: {},
   pettyCash: {},
   employees: {},
@@ -36,7 +37,9 @@ export const erpState = {
     cslEnabled: false,
     cslRate: 2.5,
     shiftHours: 8.0,
-    inventoryMode: "recipe", // Default: "recipe" (Auto-deduct by Recipe) හෝ "issue" (Daily Store Issue)
+    inventoryMode: "recipe", // "recipe" (Auto-deduct by Recipe) හෝ "issue" (Daily Store Issue)
+    loyaltyEnabled: true,
+    loyaltyRate: 100, // Rs. 100 spent = 1 Loyalty Point
     silentPrintEnabled: true,
     printers: {
       p1: { name: "Main Cashier 1", device: "POS-80", bill: true, kot: false },
