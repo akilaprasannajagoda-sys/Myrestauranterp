@@ -88,7 +88,7 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (ZERO MEMORY LEAK + AUTO-FALLBACK)
+// 🖨️ HIGH-SPEED 80MM DEDICATED THERMAL RECEIPT PRINT ENGINE (ZERO MEMORY LEAK + AUTO-FALLBACK + NO SPLIT CUTS)
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let printWin = null;
@@ -135,23 +135,42 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         <head>
           <meta charset="UTF-8">
           <style>
-            @page { margin: 0; size: 80mm auto; }
-            body {
+            @page { 
+              margin: 0; 
+              size: 80mm 297mm; 
+            }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+            html, body {
               margin: 0 !important;
-              padding: 2mm 2mm 15mm 2mm !important;
+              padding: 2mm 2mm 6mm 2mm !important;
               width: 72mm !important;
               font-family: 'Courier New', Courier, monospace, sans-serif !important;
               font-size: 12px !important;
               line-height: 1.3 !important;
               color: #000 !important;
               background: #fff !important;
+              overflow: visible !important;
             }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .flex { display: flex; justify-content: space-between; }
-            .border-b { border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 3px; }
-            .cut-spacer { height: 18mm; display: block; }
+            .text-center { text-align: center !important; }
+            .text-right { text-align: right !important; }
+            .font-bold { font-weight: bold !important; }
+            .font-mono { font-family: monospace, 'Courier New' !important; }
+            .flex { display: flex !important; justify-content: space-between !important; align-items: center !important; }
+            .border-b { border-bottom: 1px dashed #000 !important; padding-bottom: 3px !important; margin-bottom: 3px !important; }
+            .border-b-2 { border-bottom: 2px dashed #000 !important; padding-bottom: 4px !important; margin-bottom: 4px !important; }
+            .border-t { border-top: 1px solid #000 !important; padding-top: 2px !important; }
+            .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .w-12 { width: 48px; }
+            .w-32 { width: 128px; }
+            .w-44 { width: 176px; }
+            .w-1-2 { width: 50%; }
+            .w-1-4 { width: 25%; }
+            .cut-spacer { height: 10mm; display: block; }
           </style>
         </head>
         <body>
@@ -189,7 +208,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
             }
             resolve({ success: false, error: printErr.message });
           }
-        }, 350);
+        }, 400); // 400ms delay ensures DOM is completely styled and rendered
       });
     } catch (err) {
       if (printWin) {
