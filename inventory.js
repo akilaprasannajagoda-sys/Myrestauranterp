@@ -1,15 +1,16 @@
 // ==========================================================================
-// MODULE 05: RAW MATERIALS, PRODUCT INVENTORY, STORE ISSUE & WASTAGE ENGINE
+// MODULE 05: RAW MATERIALS, PRODUCT INVENTORY, STORE ISSUE (DEPT SAFE) & WASTAGE ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast } from './utils.js';
+import { showLiveToast, downloadCSVFile } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
 let updateFn = null;
 let removeFn = null;
 let transactionFn = null;
+let storeIssueSearchDebounceTimer = null;
 
 export function initInventoryContext(dbRefInstance, pushMethod, updateMethod, removeMethod, runTransactionMethod = null) {
   dbRef = dbRefInstance;
@@ -17,6 +18,57 @@ export function initInventoryContext(dbRefInstance, pushMethod, updateMethod, re
   updateFn = updateMethod;
   removeFn = removeMethod;
   transactionFn = runTransactionMethod;
+}
+
+// 🔒 COLLISION-PROOF UNIQUE STORE ISSUE NUMBER GENERATOR
+export function generateCollisionProofIssueNumber() {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const timePart = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0');
+  const salt = String(Math.floor(10 + Math.random() * 90));
+  return `ISS-${yy}${mm}${dd}-${timePart}${salt}`;
+}
+
+// 🔄 SUB-TAB SWITCHER: STOCK VS STORE ISSUE HISTORY
+export function switchInventorySubTab(tabName) {
+  const stockSec = document.getElementById("invSection-stock");
+  const issueSec = document.getElementById("invSection-issues");
+  const stockBtn = document.getElementById("invSubTab-stock");
+  const issueBtn = document.getElementById("invSubTab-issues");
+
+  if (tabName === "issues") {
+    if (stockSec) stockSec.classList.add("hidden");
+    if (issueSec) issueSec.classList.remove("hidden");
+    if (stockBtn) {
+      stockBtn.className = "px-4 py-2 rounded-xl text-gray-600 hover:text-gray-900 font-bold cursor-pointer transition";
+    }
+    if (issueBtn) {
+      issueBtn.className = "px-4 py-2 rounded-xl bg-indigo-600 text-white shadow-sm font-bold cursor-pointer transition";
+    }
+
+    const fromDateInput = document.getElementById("storeIssueFilterFromDate");
+    const toDateInput = document.getElementById("storeIssueFilterToDate");
+    if (fromDateInput && !fromDateInput.value) {
+      const now = new Date();
+      fromDateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    }
+    if (toDateInput && !toDateInput.value) {
+      toDateInput.value = new Date().toISOString().split("T")[0];
+    }
+    renderStoreIssueHistoryTable();
+  } else {
+    if (issueSec) issueSec.classList.add("hidden");
+    if (stockSec) stockSec.classList.remove("hidden");
+    if (issueBtn) {
+      issueBtn.className = "px-4 py-2 rounded-xl text-gray-600 hover:text-gray-900 font-bold cursor-pointer transition";
+    }
+    if (stockBtn) {
+      stockBtn.className = "px-4 py-2 rounded-xl bg-indigo-600 text-white shadow-sm font-bold cursor-pointer transition";
+    }
+    renderRawStockTable();
+  }
 }
 
 // 1. RAW MATERIAL CATEGORIES
@@ -147,7 +199,6 @@ export function renderRawStockTable() {
   
   let list = Object.entries(erpState.rawItems || {});
   
-  // Instant Search by Material Name or Category
   if (query) {
     list = list.filter(([id, raw]) => {
       const name = (raw.name || "").toLowerCase();
@@ -206,12 +257,14 @@ export async function deleteRawItem(id) {
   }
 }
 
-// 3. DAILY KITCHEN STORE ISSUE ENGINE
+// 3. MULTI-DEPARTMENT STORE ISSUE ENGINE (WITH INSTANT SEARCH)
 export function openStoreIssueModal() {
   document.getElementById("storeIssueForm")?.reset();
   const dIn = document.getElementById("issueDate");
+  const deptIn = document.getElementById("issueDepartment");
   const hIn = document.getElementById("issueHandledBy");
   if (dIn) dIn.value = new Date().toISOString().split("T")[0];
+  if (deptIn) deptIn.value = "Kitchen";
   if (hIn) hIn.value = "Head Cook / Store Keeper";
 
   const container = document.getElementById("storeIssueItemsContainer");
@@ -232,32 +285,75 @@ export function addStoreIssueItemRow() {
   if (!container) return;
 
   const row = document.createElement("div");
-  row.className = "grid grid-cols-12 gap-2 bg-white p-2.5 rounded-xl border border-emerald-100 items-center text-xs store-issue-item-row";
+  row.className = "grid grid-cols-12 gap-2 bg-white p-2.5 rounded-xl border border-green-200 items-center text-xs store-issue-item-row shadow-2xs";
 
   let options = `<option value="">-- අමුද්‍රව්‍ය තෝරන්න --</option>`;
   Object.entries(erpState.rawItems || {}).forEach(([id, item]) => {
-    options += `<option value="${id}">${item.name} (${item.unit} - Avail: ${item.stock})</option>`;
+    options += `<option value="${id}" data-cost="${item.cost || 0}">${item.name} (${item.unit} - Avail: ${item.stock})</option>`;
   });
 
   row.innerHTML = `
-    <div class="col-span-12 sm:col-span-6">
-      <select class="w-full p-1.5 border rounded-lg bg-white font-bold outline-none store-issue-raw-id">
+    <div class="col-span-12 sm:col-span-6 space-y-1">
+      <input type="text" placeholder="🔍 Instant search material..." oninput="filterStoreIssueRowSelect(this)" class="w-full p-1.5 border border-gray-200 rounded-md text-xs outline-none bg-gray-50 font-bold text-green-900 store-issue-search-input">
+      <select class="w-full p-1.5 border border-gray-300 rounded-lg bg-white font-bold outline-none store-issue-raw-id text-xs">
         ${options}
       </select>
     </div>
-    <div class="col-span-6 sm:col-span-4">
-      <input type="number" step="0.1" placeholder="Issued Qty" value="1" class="w-full p-1.5 border rounded-lg font-bold text-center outline-none store-issue-qty">
+    <div class="col-span-8 sm:col-span-4">
+      <label class="text-[9px] text-gray-400 font-bold block sm:hidden">Issued Qty</label>
+      <input type="number" step="0.001" placeholder="Issued Qty" value="1" class="w-full p-1.5 border rounded-lg font-bold text-center outline-none store-issue-qty text-xs">
     </div>
-    <div class="col-span-6 sm:col-span-2 text-right">
-      <button type="button" onclick="this.closest('.store-issue-item-row').remove()" class="text-red-500 hover:text-red-700 p-1.5 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
+    <div class="col-span-4 sm:col-span-2 text-right">
+      <button type="button" onclick="this.closest('.store-issue-item-row').remove()" class="text-red-500 hover:text-red-700 p-1.5 cursor-pointer" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
   container.appendChild(row);
 }
 
+// 🔥 DEBOUNCED ZERO-FREEZE SEARCH FOR STORE ISSUE
+export function filterStoreIssueRowSelect(input) {
+  if (storeIssueSearchDebounceTimer) clearTimeout(storeIssueSearchDebounceTimer);
+
+  storeIssueSearchDebounceTimer = setTimeout(() => {
+    const query = (input.value || "").toLowerCase().trim();
+    const row = input.closest(".store-issue-item-row");
+    const select = row ? row.querySelector(".store-issue-raw-id") : null;
+    if (!select) return;
+
+    let html = `<option value="">-- අමුද්‍රව්‍ය තෝරන්න --</option>`;
+    let matchCount = 0;
+    let singleMatchId = null;
+
+    const rawList = Object.entries(erpState.rawItems || {});
+
+    for (let i = 0; i < rawList.length; i++) {
+      const [id, item] = rawList[i];
+      const itemName = (item.name || "").toLowerCase();
+      
+      if (!query || itemName.includes(query)) {
+        html += `<option value="${id}" data-cost="${item.cost || 0}">${item.name} (${item.unit} - Avail: ${item.stock})</option>`;
+        matchCount++;
+        singleMatchId = id;
+        if (matchCount >= 60) break;
+      }
+    }
+
+    if (matchCount === 0 && query) {
+      html = `<option value="">(අමුද්‍රව්‍ය හමු නොවීය - No Match)</option>`;
+    }
+
+    select.innerHTML = html;
+
+    if (matchCount === 1 && singleMatchId && query.length >= 2) {
+      select.value = singleMatchId;
+    }
+  }, 180);
+}
+
 export async function handleStoreIssueSubmit(e) {
   if (e) e.preventDefault();
-  const date = document.getElementById("issueDate")?.value;
+  const date = document.getElementById("issueDate")?.value || new Date().toISOString().split("T")[0];
+  const department = document.getElementById("issueDepartment")?.value || "Kitchen";
   const handledBy = document.getElementById("issueHandledBy")?.value.trim() || "Store Keeper";
   const note = document.getElementById("issueNote")?.value.trim() || "";
 
@@ -285,18 +381,23 @@ export async function handleStoreIssueSubmit(e) {
     return;
   }
 
+  const issueNumber = generateCollisionProofIssueNumber();
+  const totalIssuedCost = items.reduce((sum, i) => sum + i.totalCost, 0);
+
   const issuePayload = {
+    issueNumber,
     date,
+    department,
     handledBy,
     note,
     items,
-    totalIssuedCost: items.reduce((sum, i) => sum + i.totalCost, 0),
+    totalIssuedCost: Math.round(totalIssuedCost * 100) / 100,
     timestamp: new Date().toISOString()
   };
 
   try {
     if (dbRef && pushFn && updateFn && currentTenant) {
-      await pushFn(dbRef(`tenants/${currentTenant}/storeIssues`), issuePayload);
+      const issueRef = await pushFn(dbRef(`tenants/${currentTenant}/storeIssues`), issuePayload);
 
       for (const it of items) {
         if (transactionFn) {
@@ -312,16 +413,160 @@ export async function handleStoreIssueSubmit(e) {
           });
         }
       }
+
+      if (!erpState.storeIssues) erpState.storeIssues = {};
+      erpState.storeIssues[issueRef.key] = issuePayload;
     }
 
     closeStoreIssueModal();
-    showLiveToast("📦 Kitchen Issue Saved", `කුස්සියට බඩු සාර්ථකව Issue කර Stock අඩු කරන ලදී. (Rs. ${issuePayload.totalIssuedCost.toFixed(2)})`, "success", "fa-dolly");
+    showLiveToast("📦 Store Issue Saved", `${department} වෙත බඩු සාර්ථකව Issue කර Stock අඩු කරන ලදී. (Rs. ${issuePayload.totalIssuedCost.toFixed(2)})`, "success", "fa-dolly");
+    
+    switchInventorySubTab("issues");
   } catch (err) {
     alert("Store Issue සටහන් කිරීමේදී දෝෂයක්: " + err.message);
   }
 }
 
-// 4. MULTI-ITEM KITCHEN WASTAGE ENGINE
+// 4. STORE ISSUE HISTORY TABLE & FILTER ENGINE
+export function renderStoreIssueHistoryTable() {
+  const tbody = document.getElementById("storeIssueHistoryTableBody");
+  const countBadge = document.getElementById("storeIssueCountBadge");
+  const totalCostVal = document.getElementById("storeIssueTotalCostVal");
+  if (!tbody) return;
+
+  const fromDate = document.getElementById("storeIssueFilterFromDate")?.value;
+  const toDate = document.getElementById("storeIssueFilterToDate")?.value;
+  const deptFilter = document.getElementById("storeIssueFilterDept")?.value || "ALL";
+
+  let list = Object.entries(erpState.storeIssues || {});
+
+  if (fromDate) list = list.filter(([id, iss]) => (iss.date || iss.timestamp?.split("T")[0]) >= fromDate);
+  if (toDate) list = list.filter(([id, iss]) => (iss.date || iss.timestamp?.split("T")[0]) <= toDate);
+  if (deptFilter !== "ALL") list = list.filter(([id, iss]) => (iss.department || "Kitchen") === deptFilter);
+
+  let grandTotalCost = 0;
+  list.forEach(([id, iss]) => {
+    grandTotalCost += parseFloat(iss.totalIssuedCost || 0);
+  });
+
+  if (countBadge) countBadge.innerText = `${list.length} Notes`;
+  if (totalCostVal) totalCostVal.innerText = `Rs. ${grandTotalCost.toFixed(2)}`;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">තෝරාගත් කාලසීමාවේ නිකුත් කිරීමේ සටහන් (Store Issues) නොමැත...</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = "";
+  list.sort((a, b) => new Date(b[1].timestamp || b[1].date).getTime() - new Date(a[1].timestamp || a[1].date).getTime());
+
+  const deptBadgeStyles = {
+    Kitchen: "bg-yellow-100 text-yellow-800 border-yellow-200",
+    "F&B": "bg-blue-100 text-blue-800 border-blue-200",
+    Bar: "bg-purple-100 text-purple-800 border-purple-200",
+    Bakery: "bg-orange-100 text-orange-800 border-orange-200",
+    Housekeeping: "bg-cyan-100 text-cyan-800 border-cyan-200",
+    StaffMeals: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    Other: "bg-gray-100 text-gray-800 border-gray-200"
+  };
+
+  list.forEach(([id, iss]) => {
+    const dept = iss.department || "Kitchen";
+    const badgeClass = deptBadgeStyles[dept] || "bg-gray-100 text-gray-800";
+    const itemsSummary = (iss.items || []).map(i => `${i.rawName} (${i.qty} ${i.unit})`).join(", ");
+
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-gray-50 border-b border-gray-100";
+    tr.innerHTML = `
+      <td class="p-3.5 font-mono font-bold text-green-700">${iss.issueNumber || 'ISS-NOTE'}</td>
+      <td class="p-3.5 font-semibold text-gray-600">${iss.date || iss.timestamp?.split("T")[0]}</td>
+      <td class="p-3.5">
+        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border uppercase ${badgeClass}">
+          ${dept}
+        </span>
+      </td>
+      <td class="p-3.5 font-bold text-gray-800">${iss.handledBy || 'Store Keeper'}</td>
+      <td class="p-3.5 text-gray-600 truncate max-w-xs" title="${itemsSummary}">${itemsSummary || '-'}</td>
+      <td class="p-3.5 text-right font-black text-green-800">Rs. ${parseFloat(iss.totalIssuedCost || 0).toFixed(2)}</td>
+      <td class="p-3.5 text-right">
+        <button onclick="viewStoreIssueDetail('${id}')" class="bg-green-50 text-green-700 hover:bg-green-700 hover:text-white border border-green-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer">
+          <i class="fa-solid fa-eye mr-1"></i> View
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// 5. VIEW STORE ISSUE DETAIL MODAL
+export function viewStoreIssueDetail(id) {
+  const iss = erpState.storeIssues?.[id];
+  if (!iss) return;
+
+  const title = document.getElementById("storeIssueDetailTitle");
+  const sub = document.getElementById("storeIssueDetailSubtitle");
+  if (title) title.innerText = `Issue #${iss.issueNumber || 'ISS-NOTE'}`;
+  if (sub) sub.innerText = `Department: ${iss.department || 'Kitchen'} | Date: ${iss.date || ''} | Issued to: ${iss.handledBy || ''}`;
+
+  const container = document.getElementById("storeIssueDetailContent");
+  if (!container) return;
+
+  let itemsHtml = (iss.items || []).map(i => `
+    <div class="flex justify-between items-center py-1.5 border-b border-gray-100">
+      <div>
+        <span class="font-bold text-gray-800">${i.rawName}</span>
+        <span class="text-[10px] text-gray-400 block">${i.qty} ${i.unit} @ Rs. ${parseFloat(i.cost || 0).toFixed(2)}</span>
+      </div>
+      <span class="font-black text-gray-900">Rs. ${parseFloat(i.totalCost || (i.qty * i.cost) || 0).toFixed(2)}</span>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <div class="space-y-3">
+      ${iss.note ? `<div class="p-2 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 font-semibold text-xs"><i class="fa-solid fa-note-sticky mr-1"></i> Note: ${iss.note}</div>` : ''}
+      <div class="bg-gray-50 p-3 rounded-xl border border-gray-200 max-h-60 overflow-y-auto space-y-1">
+        ${itemsHtml}
+      </div>
+      <div class="pt-2 flex justify-between items-center font-black text-sm border-t border-gray-200">
+        <span>Total Issued Cost:</span>
+        <span class="text-green-700 text-base">Rs. ${parseFloat(iss.totalIssuedCost || 0).toFixed(2)}</span>
+      </div>
+    </div>
+  `;
+  document.getElementById("storeIssueDetailModal")?.classList.remove("hidden");
+}
+
+export function closeStoreIssueDetailModal() {
+  document.getElementById("storeIssueDetailModal")?.classList.add("hidden");
+}
+
+// 6. EXPORT STORE ISSUES TO CSV
+export function exportStoreIssuesToCSV() {
+  const fromDate = document.getElementById("storeIssueFilterFromDate")?.value;
+  const toDate = document.getElementById("storeIssueFilterToDate")?.value;
+  const deptFilter = document.getElementById("storeIssueFilterDept")?.value || "ALL";
+
+  let list = Object.entries(erpState.storeIssues || {});
+
+  if (fromDate) list = list.filter(([id, iss]) => (iss.date || iss.timestamp?.split("T")[0]) >= fromDate);
+  if (toDate) list = list.filter(([id, iss]) => (iss.date || iss.timestamp?.split("T")[0]) <= toDate);
+  if (deptFilter !== "ALL") list = list.filter(([id, iss]) => (iss.department || "Kitchen") === deptFilter);
+
+  if (list.length === 0) {
+    alert("Export කිරීමට Store Issue දත්ත නොමැත.");
+    return;
+  }
+
+  let csv = "Issue Number,Date,Department,Handled By,Items Breakdown,Total Cost (Rs.),Note\n";
+  list.forEach(([id, iss]) => {
+    const itemsStr = (iss.items || []).map(i => `${i.rawName} (${i.qty} ${i.unit})`).join("; ");
+    csv += `"${iss.issueNumber || ''}","${iss.date || ''}","${iss.department || 'Kitchen'}","${iss.handledBy || ''}","${itemsStr}","${parseFloat(iss.totalIssuedCost || 0).toFixed(2)}","${iss.note || ''}"\n`;
+  });
+
+  downloadCSVFile(csv, `Store_Issues_${deptFilter}_${new Date().toISOString().split("T")[0]}.csv`);
+}
+
+// 7. MULTI-ITEM KITCHEN WASTAGE ENGINE
 export function openWastageModal() {
   document.getElementById("wastageForm")?.reset();
   const dIn = document.getElementById("wastageDate");
@@ -445,6 +690,7 @@ export async function handleWastageSubmit(e) {
 }
 
 // Global Window Exports
+window.switchInventorySubTab = switchInventorySubTab;
 window.openRawCategoryModal = openRawCategoryModal;
 window.closeRawCategoryModal = closeRawCategoryModal;
 window.handleAddRawCategorySubmit = handleAddRawCategorySubmit;
@@ -453,12 +699,17 @@ window.openRawItemModal = openRawItemModal;
 window.closeRawItemModal = closeRawItemModal;
 window.handleRawItemSubmit = handleRawItemSubmit;
 window.deleteRawItem = deleteRawItem;
+window.onRawSearchInput = onRawSearchInput;
 window.openStoreIssueModal = openStoreIssueModal;
 window.closeStoreIssueModal = closeStoreIssueModal;
 window.addStoreIssueItemRow = addStoreIssueItemRow;
+window.filterStoreIssueRowSelect = filterStoreIssueRowSelect;
 window.handleStoreIssueSubmit = handleStoreIssueSubmit;
+window.renderStoreIssueHistoryTable = renderStoreIssueHistoryTable;
+window.viewStoreIssueDetail = viewStoreIssueDetail;
+window.closeStoreIssueDetailModal = closeStoreIssueDetailModal;
+window.exportStoreIssuesToCSV = exportStoreIssuesToCSV;
 window.openWastageModal = openWastageModal;
 window.closeWastageModal = closeWastageModal;
 window.addWastageItemRow = addWastageItemRow;
 window.handleWastageSubmit = handleWastageSubmit;
-window.onRawSearchInput = onRawSearchInput;
