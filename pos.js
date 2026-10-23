@@ -691,6 +691,7 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
+// 🖨️ HIGH-PRECISION KOT THERMAL PRINTER DISPATCHER (NO BLANK CUTS & NO DUPLICATE RE-SPOOLING)
 export async function printPhysicalKOTSlip(kot) {
   const pr = erpState.settings?.printers || {};
   const activeKotPrinters = Object.entries(pr).filter(([k, p]) => p.kot);
@@ -709,18 +710,24 @@ export async function printPhysicalKOTSlip(kot) {
   if (timeEl) timeEl.innerText = `Time: ${new Date(kot.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
   if (itemsContainer) {
-    itemsContainer.innerHTML = kot.items.map(i => `
-      <div class="py-0.5 border-b border-gray-200">
-        <div class="flex justify-between items-center">
-          <span class="truncate w-44 font-bold">${i.name} ${i.isAddOn ? '(➕ ADD-ON)' : ''}</span>
-          <span class="text-sm font-black">x${i.qty}</span>
+    itemsContainer.innerHTML = (kot.items || []).map(i => `
+      <div class="border-b" style="border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 3px;">
+        <div class="flex" style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <span class="font-bold" style="font-weight: bold; width: 75%;">${i.name}${i.isAddOn ? ' (➕ ADD-ON)' : ''}</span>
+          <span class="font-bold text-right" style="font-weight: bold; width: 25%; text-align: right; font-size: 13px;">x${i.qty}</span>
         </div>
-        ${i.note ? `<span class="text-[10px] italic block font-bold text-gray-700">Note: ${i.note}</span>` : ''}
+        ${i.note ? `<div style="font-size: 10px; font-style: italic; color: #333; margin-top: 1px;">📝 NOTE: ${i.note}</div>` : ''}
       </div>
     `).join("");
   }
 
+  // Prevent multiple redundant prints to the same physical device in the same print cycle
+  const printedDevices = new Set();
   for (const [key, p] of activeKotPrinters) {
+    const devKey = (p.device || "default").trim().toLowerCase();
+    if (printedDevices.has(devKey)) continue;
+    printedDevices.add(devKey);
+
     const rawText = formatKOTRawText(kot, p.name);
     await sendDirectSilentPrint(p.device, rawText, "kotPrintModal");
   }
@@ -1018,6 +1025,7 @@ export async function processOrder(sendWhatsApp = false) {
   }
 }
 
+// 🖨️ HIGH-PRECISION BILL THERMAL PRINTER DISPATCHER (DEDUPLICATED DEVICES)
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const activeBillPrinters = Object.entries(pr).filter(([k, p]) => p.bill);
@@ -1142,7 +1150,12 @@ export async function printThermalReceipt(inv) {
     payDiv.innerHTML = payText;
   }
 
+  const printedBillDevices = new Set();
   for (const [key, p] of activeBillPrinters) {
+    const devKey = (p.device || "default").trim().toLowerCase();
+    if (printedBillDevices.has(devKey)) continue;
+    printedBillDevices.add(devKey);
+
     const rawText = formatReceiptRawText(inv, p.name);
     await sendDirectSilentPrint(p.device, rawText, "receiptModal");
   }
