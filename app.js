@@ -45,6 +45,7 @@ import * as Tables from './tables.js';
 import * as Inventory from './inventory.js';
 import * as Menu from './menu.js';
 import * as Suppliers from './suppliers.js';
+import * as Customers from './customers.js';
 import * as Payroll from './payroll.js';
 import * as Reports from './reports.js';
 import * as POS from './pos.js';
@@ -129,6 +130,7 @@ Tables.initTablesContext(dbRef, push, update, remove, set, switchView, POS.rende
 Inventory.initInventoryContext(dbRef, push, update, remove, runTransaction);
 Menu.initMenuContext(dbRef, push, update, remove, POS.renderPOSDishesGrid);
 Suppliers.initSuppliersContext(dbRef, push, update);
+Customers.initCustomersContext(dbRef, push, update, remove, runTransaction);
 Payroll.initPayrollContext(dbRef, push, update, remove, createStaffAuthAccount);
 Reports.initReportsContext(dbRef, push, update, POS.printThermalReceipt, { query, orderByChild, startAt, endAt, limitToLast, equalTo, get });
 POS.initPosContext(dbRef, push, update, remove, set, localDB, runTransaction);
@@ -194,6 +196,7 @@ document.getElementById("dishForm")?.addEventListener("submit", (e) => { e.preve
 document.getElementById("supplierForm")?.addEventListener("submit", (e) => { e.preventDefault(); Suppliers.handleSupplierSubmit(e); });
 document.getElementById("supplierPayForm")?.addEventListener("submit", (e) => { e.preventDefault(); Suppliers.handleSupplierPaySubmit(e); });
 document.getElementById("grnEntryForm")?.addEventListener("submit", (e) => { e.preventDefault(); Suppliers.handleGrnSubmit(e); });
+document.getElementById("customerForm")?.addEventListener("submit", (e) => { e.preventDefault(); Customers.handleCustomerSubmit(e); });
 document.getElementById("employeeForm")?.addEventListener("submit", (e) => { e.preventDefault(); Payroll.handleEmployeeSubmit(e); });
 document.getElementById("salaryAdvanceForm")?.addEventListener("submit", (e) => { e.preventDefault(); Payroll.handleSalaryAdvanceSubmit(e); });
 document.getElementById("staffLoginForm")?.addEventListener("submit", (e) => { e.preventDefault(); Payroll.handleStaffLoginSubmit(e); });
@@ -265,6 +268,7 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
     vatRate: parseFloat(document.getElementById("setVatRate")?.value || 18),
     cslEnabled: document.getElementById("setCslEnabled")?.checked || false,
     cslRate: parseFloat(document.getElementById("setCslRate")?.value || 2.5),
+    loyaltyRate: parseFloat(document.getElementById("setLoyaltyRate")?.value || 100),
     shiftHours: parseFloat(document.getElementById("setShiftHours")?.value || 8.0)
   };
 
@@ -427,6 +431,7 @@ export function applyRoleBasedUI(role = "owner") {
     menu: document.getElementById("nav-menu"),
     inventory: document.getElementById("nav-inventory"),
     suppliersGrn: document.getElementById("nav-suppliersGrn"),
+    customers: document.getElementById("nav-customers"),
     pettyCash: document.getElementById("nav-pettyCash"),
     dayEndBtn: document.getElementById("nav-dayEnd"),
     shiftHandoverBtn: document.getElementById("nav-shiftHandover"),
@@ -445,6 +450,7 @@ export function applyRoleBasedUI(role = "owner") {
     menu: navMap.menu,
     inventory: navMap.inventory,
     suppliersGrn: navMap.suppliersGrn,
+    customers: navMap.customers,
     pettyCash: navMap.pettyCash,
     dayEnd: navMap.dayEndBtn,
     faceScan: navMap.faceScan,
@@ -474,6 +480,7 @@ export function applyRoleBasedUI(role = "owner") {
     navMap.menu?.classList.add("hidden");
     navMap.inventory?.classList.add("hidden");
     navMap.suppliersGrn?.classList.add("hidden");
+    navMap.customers?.classList.add("hidden");
     navMap.pettyCash?.classList.add("hidden");
     navMap.dayEndBtn?.classList.add("hidden");
     navMap.shiftHandoverBtn?.classList.add("hidden");
@@ -487,6 +494,7 @@ export function applyRoleBasedUI(role = "owner") {
     navMap.menu?.classList.add("hidden");
     navMap.inventory?.classList.add("hidden");
     navMap.suppliersGrn?.classList.add("hidden");
+    navMap.customers?.classList.add("hidden");
     navMap.pettyCash?.classList.add("hidden");
     navMap.dayEndBtn?.classList.add("hidden");
     navMap.shiftHandoverBtn?.classList.add("hidden");
@@ -620,7 +628,7 @@ function initializeRealtimeDataStreams(tenantId) {
   // 2. Settings & Taxes
   onValue(ref(dbInstance, `${basePath}/settings`), (snapshot) => {
     if (snapshot.exists()) {
-      erpState.settings = Object.assign({ shiftHours: 8.0, silentPrintEnabled: true, inventoryMode: "recipe" }, snapshot.val());
+      erpState.settings = Object.assign({ shiftHours: 8.0, silentPrintEnabled: true, inventoryMode: "recipe", loyaltyEnabled: true, loyaltyRate: 100 }, snapshot.val());
       syncSettingsUI();
       POS.recalculateCartTotalsUI();
     }
@@ -702,6 +710,12 @@ function initializeRealtimeDataStreams(tenantId) {
     erpState.suppliers = snapshot.val() || {};
     Suppliers.renderSuppliersDirectoryTable();
     Suppliers.populateGRNSupplierDropdown();
+  });
+
+  // 10.1 Registered Customers & Loyalty CRM
+  onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
+    erpState.customers = snapshot.val() || {};
+    Customers.renderCustomersTable();
   });
 
   // 11. Supplier Payments
@@ -870,8 +884,23 @@ function initializeRealtimeDataStreams(tenantId) {
   });
 }
 
+// 🖥️ DUAL SCREEN CUSTOMER DISPLAY TOGGLE ENGINE
+window.toggleCustomerDisplayWindow = async function() {
+  if (window.electronAPI && window.electronAPI.openCustomerDisplay) {
+    await window.electronAPI.openCustomerDisplay();
+    showLiveToast("🖥️ Customer Display", "දෙවන තිරය (Customer Display) සාර්ථකව විවෘත විය.", "info", "fa-desktop");
+  } else {
+    // Web Browser Fallback: Open popup window
+    const cfdWin = window.open("customer-display.html", "CustomerDisplayWindow", "width=1024,height=600,menubar=no,toolbar=no");
+    if (cfdWin) {
+      showLiveToast("🖥️ Display Window", "Customer Display Window එක සාර්ථකව විවෘත විය.", "info", "fa-desktop");
+      setTimeout(() => POS.syncLiveCustomerDisplay(), 1000);
+    }
+  }
+};
+
 // NAVIGATION & VIEW SWITCHER
-const availableViews = ["pos", "tables", "kitchen", "menu", "inventory", "suppliersGrn", "pettyCash", "faceScan", "employees", "reports", "settings"];
+const availableViews = ["pos", "tables", "kitchen", "menu", "inventory", "suppliersGrn", "customers", "pettyCash", "faceScan", "employees", "reports", "settings"];
 
 export function switchView(viewName) {
   const feats = erpState.subscription?.features || {};
@@ -907,6 +936,7 @@ export function switchView(viewName) {
     menu: `<i class="fa-solid fa-bowl-food text-yellow-400"></i> Dish & Recipe Management (BOM)`,
     inventory: `<i class="fa-solid fa-boxes-stacked text-indigo-400"></i> Raw Materials & Stock`,
     suppliersGrn: `<i class="fa-solid fa-truck-ramp-box text-purple-400"></i> Suppliers & GRN Supply Chain`,
+    customers: `<i class="fa-solid fa-users text-pink-600"></i> Customer Directory & Loyalty Program (CRM)`,
     pettyCash: `<i class="fa-solid fa-wallet text-emerald-600"></i> Petty Cash Book (මුදල් පෙට්ටිය)`,
     faceScan: `<i class="fa-solid fa-camera text-pink-600"></i> Smart Attendance Kiosk (PIN + Photo)`,
     employees: `<i class="fa-solid fa-users-gear text-blue-600"></i> Staff, Attendance Logs & Payroll`,
@@ -947,6 +977,7 @@ function syncSettingsUI() {
   const setVatRate = document.getElementById("setVatRate");
   const setCsl = document.getElementById("setCslEnabled");
   const setCslRate = document.getElementById("setCslRate");
+  const setLoyalty = document.getElementById("setLoyaltyRate");
   const setShift = document.getElementById("setShiftHours");
   const setSilent = document.getElementById("silentPrintEnabled");
 
@@ -969,6 +1000,7 @@ function syncSettingsUI() {
   if (setVatRate) setVatRate.value = erpState.settings?.vatRate || 18;
   if (setCsl) setCsl.checked = erpState.settings?.cslEnabled || false;
   if (setCslRate) setCslRate.value = erpState.settings?.cslRate || 2.5;
+  if (setLoyalty) setLoyalty.value = erpState.settings?.loyaltyRate || 100;
   if (setShift) setShift.value = erpState.settings?.shiftHours || 8.0;
   if (setSilent) setSilent.checked = erpState.settings?.silentPrintEnabled ?? true;
 
@@ -1069,6 +1101,21 @@ window.exportGrnToCSV = Suppliers.exportGrnToCSV;
 window.openSupplierPayModal = Suppliers.openSupplierPayModal;
 window.closeSupplierPayModal = Suppliers.closeSupplierPayModal;
 window.onSupPayMethodChange = Suppliers.onSupPayMethodChange;
+
+// Customers CRM & Loyalty Program Exports
+window.openCustomerModal = Customers.openCustomerModal;
+window.closeCustomerModal = Customers.closeCustomerModal;
+window.handleCustomerSubmit = Customers.handleCustomerSubmit;
+window.onCustomerSearchInput = Customers.onCustomerSearchInput;
+window.renderCustomersTable = Customers.renderCustomersTable;
+window.deleteCustomer = Customers.deleteCustomer;
+window.openLoyaltyAdjustModal = Customers.openLoyaltyAdjustModal;
+window.closeLoyaltyAdjustModal = Customers.closeLoyaltyAdjustModal;
+window.submitLoyaltyAdjustment = Customers.submitLoyaltyAdjustment;
+window.onPosCustomerSearch = Customers.onPosCustomerSearch;
+window.selectCustomerForCurrentBill = Customers.selectCustomerForCurrentBill;
+window.removeCustomerFromCurrentBill = Customers.removeCustomerFromCurrentBill;
+window.exportCustomersToCSV = Customers.exportCustomersToCSV;
 
 // Payroll & Attendance Kiosk
 window.kioskKeypadPress = Payroll.kioskKeypadPress;
