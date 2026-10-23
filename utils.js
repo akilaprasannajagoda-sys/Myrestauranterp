@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 02: UTILITIES (AUDIO SYNTH, TOASTS, NOTIFICATIONS, CSV, HELPERS & WHATSAPP)
+// MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP & HELPERS)
 // ==========================================================================
 
 export let alertHistory = [];
@@ -266,11 +266,13 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
   });
 }
 
-// 8. PROFESSIONAL WHATSAPP DIGITAL RECEIPT ENGINE (WITH systems.lk BRANDING)
+// 📲 8. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE (BYPASSES BROWSER LANDING PAGE)
 export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
   let rawPhone = inputPhone;
   
-  if (!rawPhone && invoiceData.payment && invoiceData.payment.customerPhone) {
+  if (!rawPhone && invoiceData.customerPhone) {
+    rawPhone = invoiceData.customerPhone;
+  } else if (!rawPhone && invoiceData.payment && invoiceData.payment.customerPhone) {
     rawPhone = invoiceData.payment.customerPhone;
   }
   
@@ -283,7 +285,7 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
     return;
   }
   
-  let cleanPhone = rawPhone.replace(/\D/g, "");
+  let cleanPhone = String(rawPhone).replace(/\D/g, "");
   if (cleanPhone.startsWith("0")) {
     cleanPhone = "94" + cleanPhone.substring(1);
   } else if (!cleanPhone.startsWith("94") && cleanPhone.length === 9) {
@@ -302,13 +304,17 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   message += `📜 *DIGITAL INVOICE: #${invoiceData.invoiceNumber}*\n`;
   message += `📅 Date: ${dateStr}\n`;
   message += `🏷️ Type: ${invoiceData.orderType} (Table: ${invoiceData.tableNo || 'N/A'})\n`;
+  if (invoiceData.customerName) {
+    message += `👤 Customer: ${invoiceData.customerName}\n`;
+  }
   message += `------------------------------------\n`;
   message += `${itemsListText}`;
   message += `------------------------------------\n`;
   message += `Subtotal: Rs. ${parseFloat(invoiceData.subtotal || 0).toFixed(2)}\n`;
   
-  if (parseFloat(invoiceData.discountAmount || 0) > 0) {
-    message += `Discount: -Rs. ${parseFloat(invoiceData.discountAmount).toFixed(2)}\n`;
+  const totalDiscounts = (parseFloat(invoiceData.discountAmount || 0) + parseFloat(invoiceData.loyaltyDiscount || 0));
+  if (totalDiscounts > 0) {
+    message += `Discount: -Rs. ${totalDiscounts.toFixed(2)}\n`;
   }
   if (parseFloat(invoiceData.scAmount || 0) > 0) {
     message += `Service Charge: Rs. ${parseFloat(invoiceData.scAmount).toFixed(2)}\n`;
@@ -328,12 +334,34 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   } else {
     message += `💳 Payment: ${p.method.toUpperCase()}\n`;
   }
+
+  // ⭐ Loyalty Points Summary in WhatsApp Receipt
+  if (invoiceData.loyaltyPointsEarned > 0) {
+    message += `⭐ *Loyalty Points Earned:* +${invoiceData.loyaltyPointsEarned} Pts\n`;
+  }
+  if (invoiceData.loyaltyPointsRedeemed > 0) {
+    message += `🎁 *Points Redeemed:* -${invoiceData.loyaltyPointsRedeemed} Pts (-Rs. ${invoiceData.loyaltyDiscount})\n`;
+  }
   
   message += `------------------------------------\n`;
   message += `🙏 *Thank you for dining with us! Come again.*\n\n`;
   // 🚀 systems.lk BRANDING
   message += `_Software by systems.lk | Tel: 0760672029_`;
   
+  // 🚀 DIRECT DESKTOP APP PROTOCOL (Electron Windows App)
+  if (window.electronAPI && window.electronAPI.openWhatsAppDirect) {
+    try {
+      const res = await window.electronAPI.openWhatsAppDirect({ phone: cleanPhone, text: message });
+      if (res && res.success) {
+        showLiveToast("📱 WhatsApp App Opened", `Invoice #${invoiceData.invoiceNumber} WhatsApp Desktop වෙත යවන ලදී.`, "success", "fa-brands fa-whatsapp");
+        return;
+      }
+    } catch (err) {
+      console.warn("Direct WhatsApp protocol pass:", err);
+    }
+  }
+
+  // Fallback to Web Browser if not in Electron
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   window.open(waUrl, "_blank");
   showLiveToast("📱 WhatsApp Bill Ready", `Invoice #${invoiceData.invoiceNumber} WhatsApp වෙත යවන ලදී.`, "success", "fa-brands fa-whatsapp");
