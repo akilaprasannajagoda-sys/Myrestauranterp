@@ -22,7 +22,7 @@
     @media print {
       @page {
         margin: 0;
-        size: 80mm auto;
+        size: 80mm 297mm;
       }
       body {
         margin: 0 !important;
@@ -46,16 +46,17 @@
         min-height: auto !important;
         max-height: none !important;
         overflow: visible !important;
-        padding: 2mm 2mm 8mm 2mm !important; 
+        padding: 2mm 2mm 5mm 2mm !important; 
         margin: 0 !important; 
         font-family: 'Courier New', Courier, monospace, sans-serif !important;
         color: #000 !important;
         font-size: 12px !important;
         line-height: 1.3 !important;
         display: block !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
       .no-print { display: none !important; }
-      .thermal-cut-spacer { height: 18mm !important; display: block !important; }
     }
 
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -585,7 +586,7 @@
             <div class="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">සියලුම කෑම වර්ග ලැයිස්තුව</span>
               
-              <!-- 🔍 NEW: INSTANT SEARCH BAR FOR DISHES -->
+              <!-- 🔍 INSTANT SEARCH BAR FOR DISHES -->
               <div class="flex items-center gap-2 w-full sm:w-auto">
                 <div class="relative flex-1 sm:w-64">
                   <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
@@ -618,18 +619,18 @@
           </div>
         </div>
 
-        <!-- VIEW 5: RAW MATERIALS (WITH INSTANT SEARCH) -->
+        <!-- VIEW 5: RAW MATERIALS & STORE ISSUES ENGINE -->
         <div id="viewInventory" class="hidden space-y-5 max-w-6xl mx-auto">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
             <div>
               <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-                <i class="fa-solid fa-boxes-stacked text-indigo-600"></i> Raw Materials & Product Stock Hub
+                <i class="fa-solid fa-boxes-stacked text-indigo-600"></i> Raw Materials, Product Stock & Store Issues
               </h3>
-              <p class="text-xs text-gray-400">අමුද්‍රව්‍ය තොග, කුස්සියට බඩු Issue කිරීම, නාස්තිය (Wastage) සහ Reorder Alerts</p>
+              <p class="text-xs text-gray-400">අමුද්‍රව්‍ය තොග, අංශ අනුව බඩු Issue කිරීම (Kitchen, F&B, Bar), නාස්තිය සහ ඉතිහාසය</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <button type="button" onclick="openStoreIssueModal()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer" title="Issue Materials to Kitchen">
-                <i class="fa-solid fa-dolly"></i> + Issue to Kitchen
+              <button type="button" onclick="openStoreIssueModal()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer" title="Issue Materials to Departments">
+                <i class="fa-solid fa-dolly"></i> + Issue to Department
               </button>
               <button type="button" onclick="openWastageModal()" class="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer" title="Record Food Spoilage / Wastage">
                 <i class="fa-solid fa-trash-can"></i> + Record Wastage
@@ -643,11 +644,21 @@
             </div>
           </div>
 
-          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <!-- SUB-NAVIGATION: STOCK VS STORE ISSUE HISTORY -->
+          <div class="flex bg-gray-200 p-1 rounded-2xl text-xs font-bold w-fit">
+            <button onclick="switchInventorySubTab('stock')" id="invSubTab-stock" class="px-4 py-2 rounded-xl bg-indigo-600 text-white shadow-sm font-bold cursor-pointer transition">
+              📦 Raw Materials Stock
+            </button>
+            <button onclick="switchInventorySubTab('issues')" id="invSubTab-issues" class="px-4 py-2 rounded-xl text-gray-600 hover:text-gray-900 font-bold cursor-pointer transition">
+              📋 Store Issue History & Notes (අංශ නිකුත් කිරීම්)
+            </button>
+          </div>
+
+          <!-- SECTION 1: STOCK VIEW -->
+          <div id="invSection-stock" class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
             <div class="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Raw Material Products Inventory</span>
               
-              <!-- 🔍 NEW: INSTANT SEARCH BAR FOR RAW ITEMS -->
               <div class="flex items-center gap-2 w-full sm:w-auto">
                 <div class="relative flex-1 sm:w-64">
                   <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
@@ -673,6 +684,80 @@
                   <tr><td colspan="6" class="text-center py-10 text-gray-400">අමුද්‍රව්‍ය තවම ඇතුළත් කර නැත...</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- SECTION 2: STORE ISSUE HISTORY TABLE WITH DATE & DEPT FILTERS -->
+          <div id="invSection-issues" class="hidden space-y-4">
+            <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3 text-xs font-bold">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-gray-400 font-semibold">From:</span>
+                    <input type="date" id="storeIssueFilterFromDate" class="p-2 border rounded-xl outline-none bg-gray-50 text-xs">
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-gray-400 font-semibold">To:</span>
+                    <input type="date" id="storeIssueFilterToDate" class="p-2 border rounded-xl outline-none bg-gray-50 text-xs">
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-gray-400 font-semibold">Department:</span>
+                    <select id="storeIssueFilterDept" class="p-2 border rounded-xl outline-none bg-gray-50 font-bold text-xs">
+                      <option value="ALL">All Departments (සියල්ල)</option>
+                      <option value="Kitchen">👨‍🍳 Kitchen (මුළුතැන්ගෙය)</option>
+                      <option value="F&B">🍽️ F&B (ආපනශාලා තට්ටුව)</option>
+                      <option value="Bar">🍹 Bar & Juice (බීම සහ බාර්)</option>
+                      <option value="Bakery">🥐 Bakery & Pastry (බේකරි)</option>
+                      <option value="Housekeeping">🧼 Housekeeping (පිරිසිදු කිරීම්)</option>
+                      <option value="StaffMeals">☕ Staff Refreshment (කාර්ය මණ්ඩල)</option>
+                      <option value="Other">📦 Other Department (වෙනත්)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button onclick="renderStoreIssueHistoryTable()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-filter text-xs"></i> Filter Notes
+                  </button>
+                  <button onclick="exportStoreIssuesToCSV()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Issue History Summary Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div class="bg-white p-3.5 rounded-2xl border border-green-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Total Issue Notes Count</span>
+                <span id="storeIssueCountBadge" class="text-lg font-black text-gray-800 mt-1 block">0 Notes</span>
+              </div>
+              <div class="bg-white p-3.5 rounded-2xl border border-green-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Total Value of Issued Materials</span>
+                <span id="storeIssueTotalCostVal" class="text-lg font-black text-green-700 mt-1 block">Rs. 0.00</span>
+              </div>
+            </div>
+
+            <!-- Store Issue History Table -->
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-100 whitespace-nowrap">
+                    <tr>
+                      <th class="p-3.5">Issue #</th>
+                      <th class="p-3.5">Date</th>
+                      <th class="p-3.5">Department / Section</th>
+                      <th class="p-3.5">Issued / Handled By</th>
+                      <th class="p-3.5">Items Summary</th>
+                      <th class="p-3.5 font-bold text-right">Total Cost (Rs.)</th>
+                      <th class="p-3.5 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="storeIssueHistoryTableBody" class="divide-y divide-gray-100 font-medium text-gray-700 whitespace-nowrap">
+                    <tr><td colspan="7" class="text-center py-10 text-gray-400">නිකුත් කිරීමේ සටහන් (Store Issues) නොමැත...</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -1835,7 +1920,7 @@
             </form>
           </div>
 
-          <!-- CARD 3: TAXES, CHARGES, SHIFTS & INVENTORY MODE (BUTTON FIXED & VISIBLE) -->
+          <!-- CARD 3: TAXES, CHARGES, SHIFTS & INVENTORY MODE -->
           <div class="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
             <div>
               <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
@@ -1869,7 +1954,7 @@
                     <input type="radio" name="setInventoryMode" id="modeIssue" value="issue" class="w-4 h-4 text-indigo-600 mt-0.5">
                     <div>
                       <span class="font-bold text-gray-800 block">2. Daily Store Issue Mode</span>
-                      <span class="text-[10px] text-gray-400 block">දවසට අවශ්‍ය බඩු කුස්සියට එකවර Issue කළ විට පමණක් තොගයෙන් කැපේ.</span>
+                      <span class="text-[10px] text-gray-400 block">දවසට අවශ්‍ය බඩු අංශ වලට (Kitchen, F&B, Bar) Issue කළ විට පමණක් තොගයෙන් කැපේ.</span>
                     </div>
                   </label>
                 </div>
@@ -1933,7 +2018,6 @@
                 </div>
               </div>
 
-              <!-- 🚀 100% VISIBLE & FIXED SAVE BUTTON (WAS INVISIBLE DUE TO TEAL CLASS) -->
               <div class="pt-3 flex justify-end">
                 <button type="submit" id="saveTaxSettingsBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-black px-6 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
                   <i class="fa-solid fa-floppy-disk"></i> Save Taxes & Shifts
@@ -2170,13 +2254,12 @@
       <p>*** END OF Z-REPORT AUDIT ***</p>
       <p>Software by systems.lk | Tel: 0760672029</p>
     </div>
-    <div class="thermal-cut-spacer"></div>
   </div>
 
-  <!-- THERMAL PRINTABLE KOT SLIP (systems.lk BRANDED) -->
+  <!-- THERMAL PRINTABLE KOT SLIP (FIXED CONTINUOUS PRINTING) -->
   <div id="kotPrintModal" style="display: none;" class="font-mono text-black">
     <div class="text-center space-y-0.5 mb-2">
-      <h2 class="text-base font-black tracking-widest">*** KITCHEN ORDER TICKET (KOT) ***</h2>
+      <h2 class="text-base font-black tracking-widest uppercase">*** KITCHEN ORDER TICKET (KOT) ***</h2>
       <p id="kotPrintTable" class="text-sm font-black">TABLE: 01</p>
       <p id="kotPrintType" class="text-xs font-bold">TYPE: Dine-in</p>
       <p id="kotPrintTime" class="text-[10px]">Time: 2026-00-00 00:00</p>
@@ -2190,7 +2273,6 @@
       <p>*** PREPARE FRESH & QUICK ***</p>
       <p class="text-[8px] text-gray-600 mt-0.5">systems.lk | Tel: 0760672029</p>
     </div>
-    <div class="thermal-cut-spacer"></div>
   </div>
 
   <!-- THERMAL PRINTABLE BILL RECEIPT (systems.lk BRANDED) -->
@@ -2237,10 +2319,9 @@
       <p id="receiptFooterNote" class="font-bold">*** THANK YOU! COME AGAIN ***</p>
       <p class="text-[8px] text-gray-600 font-bold">Software by systems.lk | Tel: 0760672029</p>
     </div>
-    <div class="thermal-cut-spacer"></div>
   </div>
 
-  <!-- THERMAL PRINTABLE PAYSLIP (systems.lk BRANDED) -->
+  <!-- THERMAL PRINTABLE PAYSLIP (FIXED SINGLE-CUT CONTINUOUS PRINTING) -->
   <div id="payslipThermalModal" style="display: none;" class="font-mono text-black">
     <div class="text-center space-y-0.5 mb-2">
       <h2 id="payslipThermalHotel" class="text-sm font-black uppercase tracking-wide">HOTEL NAME</h2>
@@ -2272,16 +2353,15 @@
     </div>
     <p class="border-b border-black border-dashed my-1"></p>
 
-    <div class="pt-4 grid grid-cols-2 text-[8.5px] text-center gap-4 font-bold">
-      <div><p class="border-t border-black pt-1">Employer Signature</p></div>
-      <div><p class="border-t border-black pt-1">Employee Signature</p></div>
+    <div class="pt-3 flex justify-between text-[9px] text-center font-bold">
+      <div class="w-32"><p class="border-t border-black pt-1">Employer Signature</p></div>
+      <div class="w-32"><p class="border-t border-black pt-1">Employee Signature</p></div>
     </div>
 
     <div class="text-center text-[8px] pt-3 text-gray-600">
       <p>*** OFFICIAL SALARY RECORD ***</p>
       <p>Software by systems.lk | Tel: 0760672029</p>
     </div>
-    <div class="thermal-cut-spacer"></div>
   </div>
 
   <!-- THERMAL PRINTABLE X-REPORT SLIP (systems.lk BRANDED) -->
@@ -2313,7 +2393,6 @@
       <p>*** DRAWER HANDOVER VERIFIED ***</p>
       <p>Software by systems.lk | Tel: 0760672029</p>
     </div>
-    <div class="thermal-cut-spacer"></div>
   </div>
 
   <!-- MODAL: ADD / EDIT EMPLOYEE -->
@@ -3033,226 +3112,252 @@
           <div class="flex-1 text-right">
             <span class="text-[10px] text-gray-500 font-bold block">Each Person Pays:</span>
             <span id="splitEqualAmountPerPerson" class="text-sm font-black text-purple-700">Rs. 0.00</span>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Mode 2: Item-by-Item Split -->
-              <div class="space-y-2">
-                <span class="text-xs font-black text-gray-700 uppercase block">2. Item-by-Item Split (කෑම වර්ග වෙනම බිලකට වෙන් කිරීම)</span>
-                <p class="text-[10px] text-gray-400">අලුත් බිලකට වෙන් කළ යුතු කෑම වර්ග තෝරන්න:</p>
-                <div id="splitItemsListContainer" class="max-h-48 overflow-y-auto space-y-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-xs"></div>
-              </div>
-              
-              <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
-                <button type="button" onclick="closeSplitBillModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
-                <button type="button" onclick="executeItemSplitToNewBill()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-scissors"></i> Split to New Bill Tab
-                </button>
-              </div>
-            </div>
           </div>
-
-          <!-- MODAL: STORE ISSUE TO KITCHEN (දෛනික බඩු නිකුත් කිරීම) -->
-          <div id="storeIssueModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
-            <div class="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl border border-gray-100 p-5 space-y-4">
-              <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                <div>
-                  <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-dolly text-green-600"></i> Issue Materials to Kitchen (කුස්සියට බඩු නිකුත් කිරීම)
-                  </h3>
-                  <p class="text-xs text-gray-400">එදිනට අවශ්‍ය අමුද්‍රව්‍ය Store එකෙන් කුස්සියට Issue කර Stock අඩු කිරීම</p>
-                </div>
-                <button onclick="closeStoreIssueModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-              
-              <form id="storeIssueForm" class="space-y-3.5 text-xs font-bold">
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-[10px] text-gray-500 uppercase block mb-1">දිනය (Issue Date)</label>
-                    <input type="date" id="issueDate" required class="w-full p-2 border rounded-xl bg-gray-50 outline-none">
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-gray-500 uppercase block mb-1">නිකුත් කළ STORE KEEPER / භාරගත් COOK</label>
-                    <input type="text" id="issueHandledBy" required placeholder="Head Cook / Store Keeper" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-bold">
-                  </div>
-                </div>
-                
-                <div class="p-3 bg-green-50 border border-green-200 rounded-2xl space-y-2.5">
-                  <div class="flex justify-between items-center">
-                    <span class="text-xs font-black text-green-900 uppercase">Issued Raw Material Items</span>
-                    <button type="button" onclick="addStoreIssueItemRow()" class="bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shadow-sm cursor-pointer">
-                      + Add Material Row
-                    </button>
-                  </div>
-                  <div id="storeIssueItemsContainer" class="space-y-1.5"></div>
-                </div>
-                
-                <div>
-                  <label class="text-[10px] text-gray-500 uppercase block mb-1">විශේෂ සටහන (NOTE / SHIFT)</label>
-                  <input type="text" id="issueNote" placeholder="උදා: උදෑසන වැඩ මුරය සඳහා නිකුත් කිරීම" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-normal">
-                </div>
-                
-                <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                  <button type="button" onclick="closeStoreIssueModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
-                  <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-dolly"></i> Issue & Deduct Stock
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <!-- MODAL: KITCHEN WASTAGE / SPOILAGE ENTRY -->
-          <div id="wastageModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
-            <div class="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl border border-gray-100 p-5 space-y-4">
-              <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                <div>
-                  <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-trash-can text-red-600"></i> Record Kitchen Spoilage / Wastage
-                  </h3>
-                  <p class="text-xs text-gray-400">නරක් වූ / අහක දැමූ අමුද්‍රව්‍ය එකවර සටහන් කර Stock අඩු කිරීම</p>
-                </div>
-                <button onclick="closeWastageModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-              
-              <form id="wastageForm" class="space-y-3.5 text-xs font-bold">
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-[10px] text-gray-500 uppercase block mb-1">දිනය (Wastage Date)</label>
-                    <input type="date" id="wastageDate" required class="w-full p-2 border rounded-xl bg-gray-50 outline-none">
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-gray-500 uppercase block mb-1">වාර්තා කළ පුද්ගලයා (Reported By)</label>
-                    <input type="text" id="wastageReportedBy" required placeholder="Head Cook / Store Keeper" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-bold">
-                  </div>
-                </div>
-                
-                <div class="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-2.5">
-                  <div class="flex justify-between items-center">
-                    <span class="text-xs font-black text-red-900 uppercase">Wasted Raw Material Items</span>
-                    <button type="button" onclick="addWastageItemRow()" class="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shadow-sm cursor-pointer">
-                      + Add Item Row
-                    </button>
-                  </div>
-                  <div id="wastageItemsContainer" class="space-y-1.5"></div>
-                </div>
-                
-                <div>
-                  <label class="text-[10px] text-gray-500 uppercase block mb-1">සාමාන්‍ය සටහන (General Note)</label>
-                  <input type="text" id="wastageGeneralNote" placeholder="උදා: ශීතකරණය ක්‍රියාවිරහිත වීම නිසා නරක් විය" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-normal">
-                </div>
-                
-                <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                  <button type="button" onclick="closeWastageModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
-                  <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-floppy-disk"></i> Deduct from Stock
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <!-- MODAL: CASHIER SHIFT HANDOVER (X-REPORT AUDIT) -->
-          <div id="shiftHandoverModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
-            <div class="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 p-5 space-y-4">
-              <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                <div>
-                  <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-arrows-split-up-and-left text-yellow-600"></i> Cashier Shift Handover (X-Report)
-                  </h3>
-                  <p class="text-xs text-gray-400">Cashier මාරු වන විට මුදල් පෙට්ටිය භාරදීමේ විගණනය</p>
-                </div>
-                <button onclick="closeShiftHandoverModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-
-              <form id="shiftHandoverForm" class="space-y-3.5 text-xs font-bold">
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරදෙන Cashier (Outgoing)</label>
-                    <input type="text" id="handoverOutgoingCashier" required placeholder="Kasun (Morning)" class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none">
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරගන්නා Cashier (Incoming)</label>
-                    <input type="text" id="handoverIncomingCashier" required placeholder="Nimal (Evening)" class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none">
-                  </div>
-                </div>
-
-                <div class="bg-yellow-50 border border-yellow-200 p-3 rounded-2xl space-y-1.5 text-yellow-950">
-                  <div class="flex justify-between items-center">
-                    <span>Today's Total POS Cash in Drawer:</span>
-                    <span id="handoverExpectedCashVal" class="text-sm font-black text-green-700">Rs. 0.00</span>
-                  </div>
-                  <p class="text-[10px] text-gray-500 font-normal">දැනට පෙට්ටියේ තිබිය යුතු ඇස්තමේන්තුගත මුදල (Shift Float + POS Cash Sales)</p>
-                </div>
-
-                <div>
-                  <label class="text-[10px] text-gray-700 uppercase block mb-1">ඇත්තටම භාරදෙන මුදල (Handed Over Physical Cash)</label>
-                  <input type="number" step="10" id="handoverActualCashInput" required placeholder="35000.00" class="w-full p-3 border-2 border-yellow-400 rounded-2xl text-base font-black text-yellow-900 bg-yellow-50/40 outline-none">
-                </div>
-
-                <div>
-                  <label class="text-[10px] text-gray-500 uppercase block mb-1">විශේෂ සටහන (Handover Note)</label>
-                  <input type="text" id="handoverNote" placeholder="උදා: රු. 5,000 ක මාරු කාසි පෙට්ටියේ ඇත" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-normal">
-                </div>
-
-                <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                  <button type="button" onclick="closeShiftHandoverModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
-                  <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-print"></i> Save & Print X-Report Slip
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <!-- MODAL: MANAGER SECURITY OVERRIDE (FOR VOID BILLS) -->
-          <div id="managerOverrideModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-3">
-            <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-red-200 p-5 space-y-4 text-center">
-              <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto text-xl">
-                <i class="fa-solid fa-shield-halved"></i>
-              </div>
-              <div>
-                <h3 class="font-black text-gray-800 text-base">Manager Authorization Required</h3>
-                <p id="managerOverrideDesc" class="text-xs text-gray-400 mt-0.5">බිල්පත අවලංගු කිරීමට Manager PIN එක ඇතුළත් කරන්න</p>
-              </div>
-              
-              <input type="password" id="managerOverridePinInput" maxlength="6" placeholder="****" class="w-full text-center text-2xl font-mono font-black tracking-widest p-2.5 bg-gray-50 border-2 border-red-200 rounded-xl outline-none focus:border-red-500">
-              
-              <div class="flex justify-end gap-2 pt-2 border-t border-gray-100 text-xs">
-                <button type="button" onclick="closeManagerOverrideModal()" class="px-4 py-2 rounded-xl border font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
-                <button type="button" onclick="submitManagerOverrideAction()" class="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl shadow-md transition cursor-pointer">
-                  Authorize & Void
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- SCREEN: INACTIVITY AUTO PIN LOCK -->
-          <div id="inactivityLockScreen" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-50 flex flex-col items-center justify-center p-4 text-white">
-            <div class="bg-gray-800 border border-gray-700 p-6 sm:p-8 rounded-3xl max-w-sm w-full shadow-2xl text-center space-y-4">
-              <div class="w-14 h-14 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-lock"></i>
-              </div>
-              <div>
-                <h3 class="font-black text-lg text-white">Counter Screen Locked</h3>
-                <p class="text-xs text-gray-400 mt-0.5">නැවත වැඩ ආරම්භ කිරීමට ඔබගේ PIN අංකය ඇතුළත් කරන්න</p>
-              </div>
-              
-              <input type="password" id="unlockScreenPinInput" maxlength="6" placeholder="****" class="w-full text-center text-3xl font-mono font-black tracking-widest p-3 bg-gray-900 border-2 border-blue-500 rounded-2xl outline-none text-white">
-              
-              <button type="button" onclick="submitCounterUnlock()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-unlock"></i> Unlock Terminal
-              </button>
-            </div>
-          </div>
-
         </div>
-      </main>
-
+      </div>
+      
+      <div class="space-y-2">
+        <span class="text-xs font-black text-gray-700 uppercase block">2. Item-by-Item Split (කෑම වර්ග වෙනම බිලකට වෙන් කිරීම)</span>
+        <p class="text-[10px] text-gray-400">අලුත් බිලකට වෙන් කළ යුතු කෑම වර්ග තෝරන්න:</p>
+        <div id="splitItemsListContainer" class="max-h-48 overflow-y-auto space-y-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-xs"></div>
+      </div>
+      
+      <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+        <button type="button" onclick="closeSplitBillModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+        <button type="button" onclick="executeItemSplitToNewBill()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-scissors"></i> Split to New Bill Tab
+        </button>
+      </div>
     </div>
+  </div>
 
-    <!-- MAIN JS APP MODULE SCRIPT -->
-    <script type="module" src="./app.js"></script>
-  </body>
+  <!-- MODAL: STORE ISSUE TO DEPARTMENTS (KITCHEN, F&B, BAR ETC WITH SEARCHABLE ITEMS) -->
+  <div id="storeIssueModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-3xl w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-2xl border border-gray-100 p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div>
+          <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
+            <i class="fa-solid fa-dolly text-green-600"></i> Issue Materials to Department (අංශ වලට බඩු නිකුත් කිරීම)
+          </h3>
+          <p class="text-xs text-gray-400">Kitchen, F&B, Bar ආදී අංශ වෙත Store එකෙන් අමුද්‍රව්‍ය නිකුත් කර Stock අඩු කිරීම</p>
+        </div>
+        <button onclick="closeStoreIssueModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <form id="storeIssueForm" class="space-y-3.5 text-xs font-bold">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">දිනය (Issue Date)</label>
+            <input type="date" id="issueDate" required class="w-full p-2 border rounded-xl bg-gray-50 outline-none">
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">නිකුත් කරන අංශය (Department)</label>
+            <select id="issueDepartment" required class="w-full p-2 border rounded-xl bg-gray-50 font-bold outline-none text-xs">
+              <option value="Kitchen">👨‍🍳 Kitchen (මුළුතැන්ගෙය)</option>
+              <option value="F&B">🍽️ F&B (ආපනශාලා තට්ටුව / Floor)</option>
+              <option value="Bar">🍹 Bar & Juice (බීම සහ බාර්)</option>
+              <option value="Bakery">🥐 Bakery & Pastry (බේකරි)</option>
+              <option value="Housekeeping">🧼 Housekeeping (පිරිසිදු කිරීම්)</option>
+              <option value="StaffMeals">☕ Staff Refreshments (කාර්ය මණ්ඩල)</option>
+              <option value="Other">📦 Other Department (වෙනත් අංශ)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරගත් / නිකුත් කළ පුද්ගලයා</label>
+            <input type="text" id="issueHandledBy" required placeholder="Chef / Store Keeper" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-bold">
+          </div>
+        </div>
+        
+        <div class="p-3 bg-green-50 border border-green-200 rounded-2xl space-y-2.5">
+          <div class="flex justify-between items-center">
+            <div>
+              <span class="text-xs font-black text-green-900 uppercase block">Issued Raw Material Items</span>
+              <span class="text-[10px] text-gray-500">අමුද්‍රව්‍ය නම Instant Search කර පහසුවෙන් තෝරාගන්න</span>
+            </div>
+            <button type="button" onclick="addStoreIssueItemRow()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm cursor-pointer">
+              + Add Material Row
+            </button>
+          </div>
+          <div id="storeIssueItemsContainer" class="space-y-2"></div>
+        </div>
+        
+        <div>
+          <label class="text-[10px] text-gray-500 uppercase block mb-1">විශේෂ සටහන (Note / Shift Description)</label>
+          <input type="text" id="issueNote" placeholder="උදා: සවස වැඩ මුරය සඳහා හෝ විශේෂ උත්සවයක් සඳහා නිකුත් කිරීම" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-normal">
+        </div>
+        
+        <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+          <button type="button" onclick="closeStoreIssueModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+          <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-dolly"></i> Issue & Deduct Stock
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: STORE ISSUE NOTE DETAILS POPUP -->
+  <div id="storeIssueDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div>
+          <h3 id="storeIssueDetailTitle" class="font-black text-gray-800 text-base">Store Issue Note Details</h3>
+          <p id="storeIssueDetailSubtitle" class="text-xs text-green-700 font-bold">Department: Kitchen</p>
+        </div>
+        <button onclick="closeStoreIssueDetailModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="storeIssueDetailContent" class="space-y-3 text-xs"></div>
+      <div class="flex justify-end pt-2 border-t border-gray-100">
+        <button type="button" onclick="closeStoreIssueDetailModal()" class="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: KITCHEN WASTAGE / SPOILAGE ENTRY -->
+  <div id="wastageModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl border border-gray-100 p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div>
+          <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
+            <i class="fa-solid fa-trash-can text-red-600"></i> Record Kitchen Spoilage / Wastage
+          </h3>
+          <p class="text-xs text-gray-400">නරක් වූ / අහක දැමූ අමුද්‍රව්‍ය එකවර සටහන් කර Stock අඩු කිරීම</p>
+        </div>
+        <button onclick="closeWastageModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <form id="wastageForm" class="space-y-3.5 text-xs font-bold">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">දිනය (Wastage Date)</label>
+            <input type="date" id="wastageDate" required class="w-full p-2 border rounded-xl bg-gray-50 outline-none">
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">වාර්තා කළ පුද්ගලයා (Reported By)</label>
+            <input type="text" id="wastageReportedBy" required placeholder="Head Cook / Store Keeper" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-bold">
+          </div>
+        </div>
+        
+        <div class="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-2.5">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-black text-red-900 uppercase">Wasted Raw Material Items</span>
+            <button type="button" onclick="addWastageItemRow()" class="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shadow-sm cursor-pointer">
+              + Add Item Row
+            </button>
+          </div>
+          <div id="wastageItemsContainer" class="space-y-1.5"></div>
+        </div>
+        
+        <div>
+          <label class="text-[10px] text-gray-500 uppercase block mb-1">සාමාන්‍ය සටහන (General Note)</label>
+          <input type="text" id="wastageGeneralNote" placeholder="උදා: ශීතකරණය ක්‍රියාවිරහිත වීම නිසා නරක් විය" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-normal">
+        </div>
+        
+        <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+          <button type="button" onclick="closeWastageModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+          <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-floppy-disk"></i> Deduct from Stock
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CASHIER SHIFT HANDOVER (X-REPORT AUDIT) -->
+  <div id="shiftHandoverModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div>
+          <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
+            <i class="fa-solid fa-arrows-split-up-and-left text-yellow-600"></i> Cashier Shift Handover (X-Report)
+          </h3>
+          <p class="text-xs text-gray-400">Cashier මාරු වන විට මුදල් පෙට්ටිය භාරදීමේ විගණනය</p>
+        </div>
+        <button onclick="closeShiftHandoverModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form id="shiftHandoverForm" class="space-y-3.5 text-xs font-bold">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරදෙන Cashier (Outgoing)</label>
+            <input type="text" id="handoverOutgoingCashier" required placeholder="Kasun (Morning)" class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none">
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase block mb-1">භාරගන්නා Cashier (Incoming)</label>
+            <input type="text" id="handoverIncomingCashier" required placeholder="Nimal (Evening)" class="w-full p-2.5 border rounded-xl bg-gray-50 outline-none">
+          </div>
+        </div>
+
+        <div class="bg-yellow-50 border border-yellow-200 p-3 rounded-2xl space-y-1.5 text-yellow-950">
+          <div class="flex justify-between items-center">
+            <span>Today's Total POS Cash in Drawer:</span>
+            <span id="handoverExpectedCashVal" class="text-sm font-black text-green-700">Rs. 0.00</span>
+          </div>
+          <p class="text-[10px] text-gray-500 font-normal">දැනට පෙට්ටියේ තිබිය යුතු ඇස්තමේන්තුගත මුදල (Shift Float + POS Cash Sales)</p>
+        </div>
+
+        <div>
+          <label class="text-[10px] text-gray-700 uppercase block mb-1">ඇත්තටම භාරදෙන මුදල (Handed Over Physical Cash)</label>
+          <input type="number" step="10" id="handoverActualCashInput" required placeholder="35000.00" class="w-full p-3 border-2 border-yellow-400 rounded-2xl text-base font-black text-yellow-900 bg-yellow-50/40 outline-none">
+        </div>
+
+        <div>
+          <label class="text-[10px] text-gray-500 uppercase block mb-1">විශේෂ සටහන (Handover Note)</label>
+          <input type="text" id="handoverNote" placeholder="උදා: රු. 5,000 ක මාරු කාසි පෙට්ටියේ ඇත" class="w-full p-2 border rounded-xl bg-gray-50 outline-none font-normal">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+          <button type="button" onclick="closeShiftHandoverModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+          <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-print"></i> Save & Print X-Report Slip
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MANAGER SECURITY OVERRIDE (FOR VOID BILLS) -->
+  <div id="managerOverrideModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-red-200 p-5 space-y-4 text-center">
+      <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto text-xl">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <div>
+        <h3 class="font-black text-gray-800 text-base">Manager Authorization Required</h3>
+        <p id="managerOverrideDesc" class="text-xs text-gray-400 mt-0.5">බිල්පත අවලංගු කිරීමට Manager PIN එක ඇතුළත් කරන්න</p>
+      </div>
+      
+      <input type="password" id="managerOverridePinInput" maxlength="6" placeholder="****" class="w-full text-center text-2xl font-mono font-black tracking-widest p-2.5 bg-gray-50 border-2 border-red-200 rounded-xl outline-none focus:border-red-500">
+      
+      <div class="flex justify-end gap-2 pt-2 border-t border-gray-100 text-xs">
+        <button type="button" onclick="closeManagerOverrideModal()" class="px-4 py-2 rounded-xl border font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+        <button type="button" onclick="submitManagerOverrideAction()" class="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl shadow-md transition cursor-pointer">
+          Authorize & Void
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN: INACTIVITY AUTO PIN LOCK -->
+  <div id="inactivityLockScreen" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-50 flex flex-col items-center justify-center p-4 text-white">
+    <div class="bg-gray-800 border border-gray-700 p-6 sm:p-8 rounded-3xl max-w-sm w-full shadow-2xl text-center space-y-4">
+      <div class="w-14 h-14 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center mx-auto text-2xl">
+        <i class="fa-solid fa-lock"></i>
+      </div>
+      <div>
+        <h3 class="font-black text-lg text-white">Counter Screen Locked</h3>
+        <p class="text-xs text-gray-400 mt-0.5">නැවත වැඩ ආරම්භ කිරීමට ඔබගේ PIN අංකය ඇතුළත් කරන්න</p>
+      </div>
+      
+      <input type="password" id="unlockScreenPinInput" maxlength="6" placeholder="****" class="w-full text-center text-3xl font-mono font-black tracking-widest p-3 bg-gray-900 border-2 border-blue-500 rounded-2xl outline-none text-white">
+      
+      <button type="button" onclick="submitCounterUnlock()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
+        <i class="fa-solid fa-unlock"></i> Unlock Terminal
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN JS APP MODULE SCRIPT -->
+  <script type="module" src="./app.js"></script>
+</body>
 </html>
