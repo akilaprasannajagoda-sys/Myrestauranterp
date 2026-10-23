@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Customer Facing Display - Restaurant ERP</title>
+  
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    .hidden { display: none !important; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+      overflow: hidden;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 6px; }
+    @keyframes pulseSoft {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.02); opacity: 0.95; }
+    }
+    .pulse-soft { animation: pulseSoft 4s infinite ease-in-out; }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col justify-between">
+
+  <!-- TOP BRANDING & LIVE CLOCK HEADER -->
+  <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center shadow-lg">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-2xl font-black shadow-md">
+        <i class="fa-solid fa-utensils"></i>
+      </div>
+      <div>
+        <h1 id="cfdHotelName" class="text-xl font-black text-white tracking-wide uppercase leading-tight">RESTAURANT ERP</h1>
+        <p id="cfdHeaderSub" class="text-xs text-blue-400 font-bold">Smart Customer Display Terminal</p>
+      </div>
+    </div>
+
+    <!-- Live Digital Clock & Order Status Badge -->
+    <div class="flex items-center gap-4">
+      <div id="cfdStatusBadge" class="px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="cfdStatusText">Ready for Order</span>
+      </div>
+      <div class="text-right border-l border-gray-800 pl-4">
+        <div id="cfdClockTime" class="text-lg font-black font-mono text-white leading-tight">00:00:00</div>
+        <div id="cfdClockDate" class="text-[10px] text-gray-400 font-bold">Today</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN DYNAMIC CONTENT CONTAINER -->
+  <main class="flex-1 flex flex-col p-6 overflow-hidden relative">
+
+    <!-- 1. IDLE / WELCOME SCREEN (When cart is empty) -->
+    <div id="cfdIdleScreen" class="flex-1 flex flex-col items-center justify-center text-center p-8">
+      <div class="w-32 h-32 rounded-3xl bg-gradient-to-tr from-blue-600/20 to-indigo-600/20 border-2 border-blue-500/30 flex items-center justify-center text-blue-400 text-6xl shadow-2xl mb-6 pulse-soft">
+        <i class="fa-solid fa-mug-hot"></i>
+      </div>
+      <h2 id="cfdWelcomeHotel" class="text-4xl font-black text-white tracking-tight mb-2">Welcome!</h2>
+      <p class="text-lg text-gray-400 font-medium max-w-md">We prepare fresh, delicious food just for you. Your order will appear here.</p>
+      <div class="mt-8 flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-gray-900 border border-gray-800 text-gray-400 text-xs font-bold">
+        <i class="fa-solid fa-wifi text-emerald-400"></i> Terminal Online & Ready
+      </div>
+    </div>
+
+    <!-- 2. ACTIVE ORDER SCREEN (When cashier is adding items) -->
+    <div id="cfdActiveOrderScreen" class="hidden flex-1 grid grid-cols-12 gap-6 h-full overflow-hidden">
+      
+      <!-- Left: Real-time Order Items List -->
+      <div class="col-span-7 bg-gray-900 rounded-3xl border border-gray-800 p-5 flex flex-col justify-between overflow-hidden shadow-xl">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3 mb-3">
+          <span class="text-xs font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+            <i class="fa-solid fa-receipt text-blue-400"></i> Current Order Items
+          </span>
+          <span id="cfdItemCount" class="text-xs bg-blue-600 text-white font-black px-2.5 py-0.5 rounded-full">0 Items</span>
+        </div>
+
+        <div id="cfdItemsList" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+
+        <div class="pt-3 border-t border-gray-800 text-xs text-gray-500 font-semibold flex justify-between">
+          <span>Prices in LKR (Sri Lankan Rupees)</span>
+          <span class="text-emerald-400 font-bold"><i class="fa-solid fa-check"></i> Live Updating</span>
+        </div>
+      </div>
+
+      <!-- Right: Live Totals & Payment Summary -->
+      <div class="col-span-5 flex flex-col justify-between gap-4">
+        
+        <!-- Totals Card -->
+        <div class="bg-gray-900 rounded-3xl border border-gray-800 p-6 shadow-xl space-y-4">
+          <div class="space-y-2.5 text-sm text-gray-400 border-b border-gray-800 pb-4">
+            <div class="flex justify-between">
+              <span>Items Subtotal:</span>
+              <span id="cfdSubtotal" class="font-bold text-white">Rs. 0.00</span>
+            </div>
+            <div id="cfdDiscountRow" class="hidden flex justify-between text-purple-400 font-bold">
+              <span>Discounts Applied:</span>
+              <span id="cfdDiscountVal">-Rs. 0.00</span>
+            </div>
+            <div id="cfdTaxRow" class="hidden flex justify-between">
+              <span id="cfdTaxLabel">Taxes & Charges:</span>
+              <span id="cfdTaxVal" class="font-bold text-white">Rs. 0.00</span>
+            </div>
+          </div>
+
+          <!-- Grand Net Total Display -->
+          <div class="pt-2">
+            <span class="text-xs font-extrabold text-gray-400 uppercase tracking-widest block mb-1">TOTAL AMOUNT TO PAY</span>
+            <div id="cfdNetTotal" class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 font-mono tracking-tight">
+              Rs. 0.00
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment Settlement & Change Due Card (Shows when paid) -->
+        <div id="cfdSettlementBox" class="bg-gray-900 rounded-3xl border-2 border-emerald-500/40 p-5 shadow-xl space-y-3 hidden">
+          <div class="flex justify-between items-center text-xs text-gray-400 font-bold uppercase">
+            <span>Payment Summary</span>
+            <span id="cfdPayMethod" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-black">CASH</span>
+          </div>
+
+          <div class="space-y-2 text-sm border-t border-gray-800 pt-2">
+            <div class="flex justify-between">
+              <span class="text-gray-400">Cash Received:</span>
+              <span id="cfdTenderedVal" class="font-bold text-white font-mono">Rs. 0.00</span>
+            </div>
+            <div class="flex justify-between items-center text-base pt-1 border-t border-gray-800">
+              <span class="font-black text-emerald-400 uppercase">Change Due (ඉතිරි මුදල):</span>
+              <span id="cfdChangeVal" class="text-2xl font-black text-emerald-400 font-mono">Rs. 0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thank you / Banner -->
+        <div class="p-4 rounded-2xl bg-gradient-to-r from-blue-900/30 to-indigo-900/30 border border-blue-500/20 text-center">
+          <p id="cfdFooterNote" class="text-xs text-gray-300 font-bold">*** Thank You! Please Visit Us Again ***</p>
+          <p class="text-[9px] text-gray-500 mt-1 font-mono">Powered by systems.lk</p>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- JAVASCRIPT: REAL-TIME CUSTOMER DISPLAY CONTROLLER -->
+  <script>
+    // 1. Digital Clock Ticker
+    function startClock() {
+      setInterval(() => {
+        const now = new Date();
+        document.getElementById("cfdClockTime").innerText = now.toLocaleTimeString();
+        document.getElementById("cfdClockDate").innerText = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      }, 1000);
+    }
+    startClock();
+
+    // 2. BroadcastChannel Fallback (for Web Browsers / Multi-tab)
+    const channel = new BroadcastChannel("restaurant_customer_display");
+    channel.onmessage = (event) => {
+      if (event.data) renderCustomerDisplay(event.data);
+    };
+
+    // 3. Electron IPC Listener (for Desktop Dual-screen App)
+    if (window.electronAPI && window.electronAPI.onCustomerDisplayUpdate) {
+      window.electronAPI.onCustomerDisplayUpdate((data) => {
+        if (data) renderCustomerDisplay(data);
+      });
+    }
+
+    // 4. Render Engine
+    function renderCustomerDisplay(payload) {
+      const idleScreen = document.getElementById("cfdIdleScreen");
+      const activeScreen = document.getElementById("cfdActiveOrderScreen");
+      const hotelEl = document.getElementById("cfdHotelName");
+      const welcomeHotelEl = document.getElementById("cfdWelcomeHotel");
+      const footerEl = document.getElementById("cfdFooterNote");
+
+      if (payload.hotelName) {
+        hotelEl.innerText = payload.hotelName.toUpperCase();
+        welcomeHotelEl.innerText = payload.hotelName;
+      }
+      if (payload.footerNote) {
+        footerEl.innerText = payload.footerNote;
+      }
+
+      const cart = payload.cart || [];
+
+      // If cart is completely empty and no pending settlement, show Idle Welcome screen
+      if (cart.length === 0 && !payload.isSettled) {
+        idleScreen.classList.remove("hidden");
+        activeScreen.classList.add("hidden");
+        document.getElementById("cfdStatusText").innerText = "Ready for Order";
+        document.getElementById("cfdStatusBadge").className = "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-2";
+        return;
+      }
+
+      // Show Active Order Screen
+      idleScreen.classList.add("hidden");
+      activeScreen.classList.remove("hidden");
+
+      // Populate Items List
+      const itemsContainer = document.getElementById("cfdItemsList");
+      document.getElementById("cfdItemCount").innerText = `${cart.length} Items`;
+      
+      itemsContainer.innerHTML = cart.map(item => `
+        <div class="p-3 bg-gray-800/70 border border-gray-700/60 rounded-2xl flex justify-between items-center">
+          <div class="truncate max-w-xs">
+            <h4 class="font-extrabold text-sm text-white truncate">${item.name}</h4>
+            <div class="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+              <span>Rs. ${parseFloat(item.price || 0).toFixed(2)}</span>
+              ${item.note ? `<span class="text-purple-400 italic">📝 ${item.note}</span>` : ''}
+            </div>
+          </div>
+          <div class="text-right flex items-center gap-4">
+            <span class="text-xs font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-xl">x${item.qty}</span>
+            <span class="font-black text-sm text-white font-mono w-24 text-right">Rs. ${(item.price * item.qty).toFixed(2)}</span>
+          </div>
+        </div>
+      `).join("");
+
+      // Populate Totals
+      document.getElementById("cfdSubtotal").innerText = `Rs. ${parseFloat(payload.subtotal || 0).toFixed(2)}`;
+      
+      const discRow = document.getElementById("cfdDiscountRow");
+      if (parseFloat(payload.discountAmount || 0) > 0) {
+        discRow.classList.remove("hidden");
+        document.getElementById("cfdDiscountVal").innerText = `-Rs. ${parseFloat(payload.discountAmount).toFixed(2)}`;
+      } else {
+        discRow.classList.add("hidden");
+      }
+
+      const taxRow = document.getElementById("cfdTaxRow");
+      const totalTaxes = (parseFloat(payload.scAmount || 0) + parseFloat(payload.vatAmount || 0) + parseFloat(payload.cslAmount || 0));
+      if (totalTaxes > 0) {
+        taxRow.classList.remove("hidden");
+        document.getElementById("cfdTaxVal").innerText = `+Rs. ${totalTaxes.toFixed(2)}`;
+      } else {
+        taxRow.classList.add("hidden");
+      }
+
+      document.getElementById("cfdNetTotal").innerText = `Rs. ${parseFloat(payload.netTotal || 0).toFixed(2)}`;
+
+      // Payment Settlement & Change Display
+      const settlementBox = document.getElementById("cfdSettlementBox");
+      if (payload.isSettled) {
+        settlementBox.classList.remove("hidden");
+        document.getElementById("cfdPayMethod").innerText = (payload.paymentMethod || "CASH").toUpperCase();
+        document.getElementById("cfdTenderedVal").innerText = `Rs. ${parseFloat(payload.cashTendered || payload.netTotal).toFixed(2)}`;
+        document.getElementById("cfdChangeVal").innerText = `Rs. ${parseFloat(payload.change || 0).toFixed(2)}`;
+        
+        document.getElementById("cfdStatusText").innerText = "Payment Completed";
+        document.getElementById("cfdStatusBadge").className = "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-2";
+      } else {
+        settlementBox.classList.add("hidden");
+        document.getElementById("cfdStatusText").innerText = "Billing in Progress";
+        document.getElementById("cfdStatusBadge").className = "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-2";
+      }
+    }
+  </script>
+</body>
+</html>
