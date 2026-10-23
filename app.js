@@ -402,7 +402,6 @@ window.submitCounterUnlock = function() {
   const employeesList = Object.values(erpState.employees || {});
   const isMatchedEmployee = employeesList.some(e => String(e.password || "").trim() === pin);
   
-  // If no employees are registered yet, allow emergency initial PIN "1234"
   const isInitialSetupUnlock = employeesList.length === 0 && pin === "1234";
 
   if (isMatchedEmployee || isInitialSetupUnlock) {
@@ -656,10 +655,11 @@ function initializeRealtimeDataStreams(tenantId) {
     POS.renderPOSDishesGrid();
   });
 
-  // 6.1 Store Issues
-  const recentStoreIssuesQuery = query(ref(dbInstance, `${basePath}/storeIssues`), limitToLast(80));
+  // 6.1 Store Issues (Real-time Sync to History Table)
+  const recentStoreIssuesQuery = query(ref(dbInstance, `${basePath}/storeIssues`), limitToLast(120));
   onValue(recentStoreIssuesQuery, (snapshot) => {
     erpState.storeIssues = snapshot.val() || {};
+    Inventory.renderStoreIssueHistoryTable();
   });
 
   // 7. Floor Areas
@@ -1013,20 +1013,31 @@ window.linkTableToPos = Tables.linkTableToPos;
 window.openMergeTableModal = Tables.openMergeTableModal;
 window.closeMergeTableModal = Tables.closeMergeTableModal;
 window.handleMergeTables = Tables.handleMergeTables;
+
+// Inventory & Upgraded Multi-Department Store Issues
 window.openRawCategoryModal = Inventory.openRawCategoryModal;
 window.closeRawCategoryModal = Inventory.closeRawCategoryModal;
 window.deleteRawCategory = Inventory.deleteRawCategory;
 window.openRawItemModal = Inventory.openRawItemModal;
 window.closeRawItemModal = Inventory.closeRawItemModal;
 window.deleteRawItem = Inventory.deleteRawItem;
+window.switchInventorySubTab = Inventory.switchInventorySubTab;
 window.openStoreIssueModal = Inventory.openStoreIssueModal;
 window.closeStoreIssueModal = Inventory.closeStoreIssueModal;
 window.addStoreIssueItemRow = Inventory.addStoreIssueItemRow;
+window.filterStoreIssueRowSelect = Inventory.filterStoreIssueRowSelect;
 window.handleStoreIssueSubmit = Inventory.handleStoreIssueSubmit;
+window.renderStoreIssueHistoryTable = Inventory.renderStoreIssueHistoryTable;
+window.viewStoreIssueDetail = Inventory.viewStoreIssueDetail;
+window.closeStoreIssueDetailModal = Inventory.closeStoreIssueDetailModal;
+window.exportStoreIssuesToCSV = Inventory.exportStoreIssuesToCSV;
 window.openWastageModal = Inventory.openWastageModal;
 window.closeWastageModal = Inventory.closeWastageModal;
 window.addWastageItemRow = Inventory.addWastageItemRow;
 window.handleWastageSubmit = Inventory.handleWastageSubmit;
+window.onRawSearchInput = Inventory.onRawSearchInput;
+
+// Menu
 window.openCategoryModal = Menu.openCategoryModal;
 window.closeCategoryModal = Menu.closeCategoryModal;
 window.deleteDishCategory = Menu.deleteDishCategory;
@@ -1036,6 +1047,9 @@ window.addRecipeIngredientRow = Menu.addRecipeIngredientRow;
 window.onRecipeIngredientChange = Menu.onRecipeIngredientChange;
 window.calculateDishCostAndMargin = Menu.calculateDishCostAndMargin;
 window.deleteDish = Menu.deleteDish;
+window.onMenuSearchInput = Menu.onMenuSearchInput;
+
+// Suppliers & GRN
 window.switchGrnTab = Suppliers.switchGrnTab;
 window.openSupplierModal = Suppliers.openSupplierModal;
 window.closeSupplierModal = Suppliers.closeSupplierModal;
@@ -1055,6 +1069,8 @@ window.exportGrnToCSV = Suppliers.exportGrnToCSV;
 window.openSupplierPayModal = Suppliers.openSupplierPayModal;
 window.closeSupplierPayModal = Suppliers.closeSupplierPayModal;
 window.onSupPayMethodChange = Suppliers.onSupPayMethodChange;
+
+// Payroll & Attendance Kiosk
 window.kioskKeypadPress = Payroll.kioskKeypadPress;
 window.kioskKeypadClear = Payroll.kioskKeypadClear;
 window.kioskKeypadBackspace = Payroll.kioskKeypadBackspace;
