@@ -154,7 +154,7 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ XPRINTER & 80MM CONTINUOUS DIRECT HARDWARE PRINT ENGINE (ZERO BLANK FEED + NO 1-INCH CUTS)
+// 🖨️ XPRINTER & 80MM CONTINUOUS DIRECT HARDWARE PRINT ENGINE (100% FIXED ZERO OFFSET & NO BLANK FEED)
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let printWin = null;
@@ -167,7 +167,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       const printers = await mainWindow.webContents.getPrintersAsync();
       let targetDevice = "";
       
-      // 1. පරිගණකයේ ඇති Printers අතරින් නම ගැළපෙන Printer එක සෙවීම (Exact / Partial Match)
+      // 1. පරිගණකයේ ඇති Printers අතරින් නම ගැළපෙන Printer එක සෙවීම
       if (printerName && printerName.trim()) {
         const cleanReqName = printerName.trim().toLowerCase();
         const matched = printers.find(p => p.name.toLowerCase() === cleanReqName || p.name.toLowerCase().includes(cleanReqName));
@@ -176,7 +176,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         }
       }
       
-      // 2. ඔබ දුන් නමින් Printer එකක් නැතිනම්, පරිගණකයේ Default Printer එක හෝ පවතින ප්‍රධාන Printer එක තෝරාගනී
+      // 2. Default Printer එක තෝරාගැනීම
       if (!targetDevice) {
         const def = printers.find(p => p.isDefault);
         targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
@@ -186,46 +186,47 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         return resolve({ success: false, error: "පරිගණකයට කිසිදු Printer එකක් සම්බන්ධ කර නොමැත." });
       }
       
-      // 3. පසුබිමෙන් ධාවනය වන Print Buffer Window එකක් සෑදීම
+      // 3. 80mm Thermal පත්‍රයට නියමිත පළලින් යුත් කවුළුවක් සෑදීම (280px = ~74mm - Zero Right Shift)
       printWin = new BrowserWindow({
-        width: 340,
-        height: 700,
+        width: 280,
+        height: 600,
         show: false,
+        frame: false,
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
-          backgroundThrottling: false // Hidden Window එක Render වීම Freeze වීම වළක්වයි
+          backgroundThrottling: false
         }
       });
       
-      // Xprinter සහ සියලුම 80mm POS Thermal Printers වල තනි පිටුවක් ලෙස පමණක් (Single Page) මුද්‍රණය වන HTML Wrapper එක
+      // Xprinter සහ සියලුම 80mm Thermal Printers වලට අකුරු වමට සහ මැදට නියමිත පළලින් තබන HTML Wrapper එක
       const fullPrintHtml = `
         <!DOCTYPE html>
-        <html>
+        <html lang="si">
         <head>
           <meta charset="UTF-8">
           <style>
             @page { 
               margin: 0 !important; 
-              size: 80mm 297mm !important; 
+              size: 80mm auto !important; 
             }
-            * {
+            *, *::before, *::after {
               box-sizing: border-box !important;
               -webkit-print-color-adjust: exact !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
-              page-break-after: avoid !important;
-              break-after: avoid !important;
+              margin: 0;
+              padding: 0;
             }
             html, body {
-              margin: 0 !important;
-              padding: 2mm 2mm 5mm 2mm !important;
               width: 72mm !important;
+              max-width: 72mm !important;
+              margin: 0 !important;
+              padding: 1mm 1.5mm !important;
               font-family: 'Courier New', Courier, monospace, sans-serif !important;
-              font-size: 12px !important;
-              line-height: 1.3 !important;
+              font-size: 11px !important;
+              line-height: 1.35 !important;
               color: #000 !important;
               background: #fff !important;
+              text-align: left !important;
               visibility: visible !important;
               overflow: visible !important;
             }
@@ -235,23 +236,43 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
             }
             .text-center { text-align: center !important; }
             .text-right { text-align: right !important; }
-            .font-bold { font-weight: bold !important; }
-            .font-mono { font-family: monospace, 'Courier New' !important; }
-            .flex { display: flex !important; justify-content: space-between !important; align-items: flex-start !important; }
+            .text-left { text-align: left !important; }
+            .font-bold { font-weight: 700 !important; }
+            .font-black { font-weight: 900 !important; }
+            .font-mono { font-family: 'Courier New', Courier, monospace !important; }
+            .uppercase { text-transform: uppercase !important; }
+            .flex { 
+              display: flex !important; 
+              justify-content: space-between !important; 
+              align-items: flex-start !important; 
+              width: 100% !important; 
+            }
+            .space-y-0\\.5 > * + * { margin-top: 2px !important; }
+            .space-y-1 > * + * { margin-top: 3px !important; }
+            .space-y-1\\.5 > * + * { margin-top: 4px !important; }
             .border-b { border-bottom: 1px dashed #000 !important; padding-bottom: 3px !important; margin-bottom: 3px !important; }
             .border-b-2 { border-bottom: 2px dashed #000 !important; padding-bottom: 4px !important; margin-bottom: 4px !important; }
-            .border-t { border-top: 1px solid #000 !important; padding-top: 3px !important; }
-            .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
-            .w-12 { width: 48px !important; }
-            .w-32 { width: 128px !important; }
-            .w-44 { width: 176px !important; }
-            .w-1-2 { width: 50% !important; }
-            .w-1-4 { width: 25% !important; }
-            .cut-spacer { height: 8mm !important; display: block !important; }
+            .border-t { border-top: 1px dashed #000 !important; padding-top: 3px !important; margin-top: 3px !important; }
+            .truncate { 
+              overflow: hidden !important; 
+              text-overflow: ellipsis !important; 
+              white-space: nowrap !important; 
+              max-width: 44mm !important; 
+            }
+            .w-12 { width: 12mm !important; }
+            .w-32 { width: 32mm !important; }
+            .w-36 { width: 36mm !important; }
+            .w-44 { width: 44mm !important; }
+            .w-1\\/2, .w-1-2 { width: 50% !important; display: inline-block !important; }
+            .w-1\\/4, .w-1-4 { width: 25% !important; display: inline-block !important; text-align: right !important; }
+            .w-3\\/4, .w-3-4 { width: 75% !important; display: inline-block !important; }
+            .cut-spacer { height: 6mm !important; display: block !important; }
           </style>
         </head>
         <body>
-          ${htmlContent}
+          <div style="width: 72mm; max-width: 72mm; margin: 0; text-align: left;">
+            ${htmlContent}
+          </div>
           <div class="cut-spacer"></div>
         </body>
         </html>
@@ -260,23 +281,22 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
       
       printWin.webContents.on('did-finish-load', () => {
-        // Xprinter Spooler එකට Data සම්පූර්ණයෙන්ම Render වීමට 500ms කාලයක් තබා මුද්‍රණය කරයි
         setTimeout(async () => {
           try {
             await printWin.webContents.print({
               silent: true,
               printBackground: true,
               deviceName: targetDevice,
-              margins: { marginType: 'none' }
+              margins: { marginType: 'none' },
+              pageSize: { width: 80000, height: 297000 } // 80mm Width Lock (පිටුව දකුණට පැනීම 100% වළක්වයි)
             });
             
-            // Spooler එකට භාරදුන් පසු Window එක Destroy කරයි
             setTimeout(() => {
               if (printWin) {
                 printWin.destroy();
                 printWin = null;
               }
-            }, 1000);
+            }, 800);
             
             resolve({ success: true, usedPrinter: targetDevice });
           } catch (printErr) {
@@ -286,7 +306,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
             }
             resolve({ success: false, error: printErr.message });
           }
-        }, 500);
+        }, 350);
       });
     } catch (err) {
       if (printWin) {
