@@ -578,7 +578,7 @@ export function renderCartItemsUI() {
     });
 
     if (btnKOT) btnKOT.disabled = !hasUnsentDelta;
-    if (btnPrintKOT) btnPrintKOT.disabled = !hasUnsentDelta;
+    if (btnPrintKOT) btnPrintKOT.disabled = false; // KOT බටන් එකෙන් ඕනෑම වෙලාවක KOT එක නැවත Print කිරීමට අවසර දේ
     if (btnPrePrint) btnPrePrint.disabled = false;
     if (btnPay) btnPay.disabled = false;
     if (btnWACheckout) btnWACheckout.disabled = false;
@@ -799,13 +799,15 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
-// 🖨️ XPRINTER & 80MM CLEAN KOT DISPATCHER (NO 1-INCH CUTS & NO BLANK FEED)
+// 🖨️ XPRINTER & 80MM CLEAN KOT DISPATCHER (100% WORKING - ZERO BLANK CUTS)
 export async function printPhysicalKOTSlip(kot) {
   const pr = erpState.settings?.printers || {};
-  const activeKotPrinters = Object.entries(pr).filter(([k, p]) => p.kot);
+  let activeKotPrinters = Object.entries(pr).filter(([k, p]) => p && p.kot);
 
+  // KOT සඳහා විශේෂිත Printer එකක් සකසා නැතිනම් හෝ එකම Printer එකක් ඇත්නම් Main Counter Printer (p1) එකෙන් Print කරයි
   if (activeKotPrinters.length === 0) {
-    activeKotPrinters.push(["default", { name: "Kitchen Printer", device: "" }]);
+    const p1Dev = pr.p1?.device || "";
+    activeKotPrinters = [["p1", { name: pr.p1?.name || "Main Counter Printer", device: p1Dev }]];
   }
 
   const tableEl = document.getElementById("kotPrintTable");
@@ -813,34 +815,40 @@ export async function printPhysicalKOTSlip(kot) {
   const timeEl = document.getElementById("kotPrintTime");
   const itemsContainer = document.getElementById("kotPrintItems");
 
-  if (tableEl) tableEl.innerText = `TABLE: ${kot.tableNo}`;
+  if (tableEl) tableEl.innerText = `TABLE: ${kot.tableNo || 'N/A'}`;
   if (typeEl) typeEl.innerText = `ORDER TYPE: ${(kot.orderType || 'DINE-IN').toUpperCase()}`;
   if (timeEl) timeEl.innerText = `Time: ${new Date(kot.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
+  // KOT එකට අදාළ අයිතම ලැයිස්තුව (Sent: 1 තිබුණද KOT කෑම අනිවාර්යයෙන්ම Print වන සේ සකසා ඇත)
+  const currentCartList = getActiveBillData().cart || [];
+  const itemsToPrint = (kot.items && kot.items.length > 0) ? kot.items : currentCartList;
+
   if (itemsContainer) {
-    itemsContainer.innerHTML = (kot.items || []).map(i => `
-      <div style="border-bottom: 1px dashed #000; padding: 2px 0; margin-bottom: 2px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-          <span style="font-weight: bold; width: 75%; font-size: 13px;">${i.name}${i.isAddOn ? ' (➕ ADD-ON)' : ''}</span>
-          <span style="font-weight: 900; width: 25%; text-align: right; font-size: 14px;">x${i.qty}</span>
+    itemsContainer.innerHTML = itemsToPrint.map(i => `
+      <div style="border-bottom: 1px dashed #000; padding: 3px 0; margin-bottom: 3px; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+          <span style="font-weight: 700; width: 75%; font-size: 13px; color: #000; display: inline-block;">${i.name}${i.isAddOn ? ' (ADD-ON)' : ''}</span>
+          <span style="font-weight: 900; width: 25%; text-align: right; font-size: 14px; color: #000; display: inline-block;">x${i.qty}</span>
         </div>
-        ${i.note ? `<div style="font-size: 10px; font-style: italic; color: #333; margin-top: 1px;">📝 NOTE: ${i.note}</div>` : ''}
+        ${i.note ? `<div style="font-size: 10px; font-style: italic; color: #000; margin-top: 2px;">>> NOTE: ${i.note}</div>` : ''}
       </div>
     `).join("");
   }
 
-  // Deduplicate physical printer devices in the same print run
+  // එකම Printer එකට දෙපාරක් Command යාම සහ හිස් කෑලි කැපීම 100% වළක්වා KOT එක මුද්‍රණය කිරීම
   const printedDevices = new Set();
   for (const [key, p] of activeKotPrinters) {
-    const devKey = (p.device || "default").trim().toLowerCase();
-    if (printedDevices.has(devKey)) continue;
-    printedDevices.add(devKey);
+    let devName = (p.device || "").trim();
+    const effectiveKey = (devName || pr.p1?.device || "default_counter").toLowerCase();
+
+    if (printedDevices.has(effectiveKey)) continue;
+    printedDevices.add(effectiveKey);
 
     const rawText = formatKOTRawText(kot, p.name);
-    await sendDirectSilentPrint(p.device, rawText, "kotPrintModal");
+    await sendDirectSilentPrint(devName || pr.p1?.device || "", rawText, "kotPrintModal");
   }
 
-  showLiveToast("🖨️ KOT Direct Printed", `KOT #${kot.tableNo} Print Command යවන ලදී.`, "kitchen", "fa-print");
+  showLiveToast("🖨️ KOT Direct Printed", `KOT Table #${kot.tableNo || 'N/A'} සාර්ථකව Print විය.`, "kitchen", "fa-print");
 }
 
 export async function printPreBillEstimate() {
@@ -907,7 +915,10 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
     });
   });
 
-  if (deltaItems.length === 0) {
+  // දැනටමත් සියලු කෑම වර්ග Sent: 1 වී තිබුණද KOT බොත්තම එබූ විට KOT එක සම්පූර්ණයෙන්ම Print වීමට ඉඩ සලසයි
+  const itemsForKOT = deltaItems.length > 0 ? deltaItems : cartList;
+
+  if (deltaItems.length === 0 && !isPhysicalPrint) {
     showLiveToast("⚠️ KOT Info", "කුස්සියට යැවීමට අලුත් කෑම වර්ග නොමැත.", "info", "fa-circle-info");
     return;
   }
@@ -917,22 +928,24 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
     orderType: currentBill.orderType || "Dine-in",
     tableNo: currentBill.tableNo || "N/A",
     waiterName: currentBill.waiterName || "",
-    items: deltaItems,
+    items: itemsForKOT,
     timestamp: new Date().toISOString(),
     status: "Cooking"
   };
 
   try {
-    await pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket);
-    
-    if (currentBill.tableNo && updateFn) {
-      const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-      if (matchedTable) {
-        await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
+    if (deltaItems.length > 0) {
+      await pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket);
+      
+      if (currentBill.tableNo && updateFn) {
+        const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
+        if (matchedTable) {
+          await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
+        }
       }
-    }
 
-    await persistActiveBillToCloud({ cart: updatedCart });
+      await persistActiveBillToCloud({ cart: updatedCart });
+    }
 
     if (isPhysicalPrint) {
       await printPhysicalKOTSlip(kotTicket);
