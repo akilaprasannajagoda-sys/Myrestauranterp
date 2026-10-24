@@ -2458,71 +2458,82 @@
     </div>
   </div>
 
-  <!-- THERMAL PRINTABLE KOT SLIP (XPRINTER & CONTINUOUS PRINTING COMPLIANT) -->
-  <div id="kotPrintModal" style="display: none;" class="font-mono text-black">
-    <div class="text-center space-y-0.5 mb-2">
-      <h2 class="text-base font-black tracking-widest uppercase">*** KITCHEN ORDER TICKET (KOT) ***</h2>
-      <p id="kotPrintTable" class="text-sm font-black">TABLE: 01</p>
-      <p id="kotPrintType" class="text-xs font-bold">TYPE: Dine-in</p>
-      <p id="kotPrintTime" class="text-[10px]">Time: 2026-00-00 00:00</p>
-      <p class="border-b-2 border-black border-dashed my-1.5"></p>
-    </div>
-
-    <div id="kotPrintItems" class="space-y-1.5 text-xs font-bold"></div>
-
-    <p class="border-b-2 border-black border-dashed my-2"></p>
-    <div class="text-center text-[9px] font-bold">
-      <p>*** PREPARE FRESH & QUICK ***</p>
-      <p class="text-[8px] text-gray-600 mt-0.5">systems.lk | Tel: 0760672029</p>
-    </div>
-  </div>
-
-  <!-- THERMAL PRINTABLE BILL RECEIPT (systems.lk BRANDED) -->
-  <div id="receiptModal" style="display: none;" class="font-mono text-black">
-    <div class="text-center space-y-0.5 mb-2">
-      <h2 id="receiptHotel" class="text-sm font-black uppercase tracking-wide">HOTEL NAME</h2>
-      <p id="receiptAddress" class="text-[9.5px] text-gray-700">Address Line</p>
-      <p id="receiptPhone" class="text-[9.5px] text-gray-700">Tel: 0112345678</p>
-      <p id="receiptTaxNo" style="display: none;" class="text-[9px] font-bold font-mono">TIN/VAT: ...</p>
-      <p id="receiptOrderId" class="text-[10px] font-bold mt-1">Invoice #000000</p>
-      <p id="receiptDate" class="text-[9px]">Date: 2026-00-00 00:00</p>
-      <p id="receiptType" class="text-[10px] font-bold">Dine-in (Table: 01)</p>
-      <p class="border-b border-black border-dashed my-1"></p>
+ <!-- THERMAL PRINTABLE KOT SLIP (100% CHEF-FRIENDLY & ZERO CLIPPING) -->
+<div id="kotPrintModal" style="display: none;" class="font-mono text-black">
+  <div style="text-align: center; border-bottom: 2px dashed #000; padding-bottom: 4px; margin-bottom: 4px;">
+    <div style="font-size: 13px; font-weight: 900; letter-spacing: 0.5px;">*** KITCHEN ORDER TICKET ***</div>
+    <div style="font-size: 11px; font-weight: 800; margin-bottom: 2px;">(KOT)</div>
+    
+    <!-- ලොකුවට කැපී පෙනෙන මේස අංකය -->
+    <div style="font-size: 17px; font-weight: 900; border: 2px solid #000; padding: 2px 4px; margin: 3px auto; display: inline-block; min-width: 44mm; text-align: center;">
+      <span id="kotPrintTable">TABLE: 01</span>
     </div>
     
-    <div class="flex justify-between text-[10px] font-bold border-b border-black border-dashed pb-1 mb-1">
-      <span class="w-1/2">ITEM / QTY</span>
-      <span class="w-1/4 text-right">PRICE</span>
-      <span class="w-1/4 text-right">TOTAL</span>
-    </div>
-
-    <div id="receiptItems" class="space-y-1 text-[10px]"></div>
-    <p class="border-b border-black border-dashed my-1"></p>
-    
-    <div class="space-y-0.5 text-[10px]">
-      <div class="flex justify-between"><span>Subtotal:</span><span id="receiptSubtotal">Rs. 0.00</span></div>
-      <div id="receiptDiscountRow" style="display: none;" class="flex justify-between font-bold"><span>Discount:</span><span id="receiptDiscountVal">-Rs. 0.00</span></div>
-      <div id="receiptScRow" style="display: none;" class="flex justify-between"><span id="receiptScLabel">Service Charge:</span><span id="receiptScVal">Rs. 0.00</span></div>
-      <div id="receiptVatRow" style="display: none;" class="flex justify-between"><span id="receiptVatLabel">VAT:</span><span id="receiptVatVal">Rs. 0.00</span></div>
-      <div id="receiptCslRow" style="display: none;" class="flex justify-between"><span id="receiptCslLabel">SSCL:</span><span id="receiptCslVal">Rs. 0.00</span></div>
-    </div>
-
-    <p class="border-b border-black border-dashed my-1"></p>
-    <div class="flex justify-between font-black text-xs py-0.5">
-      <span>NET TOTAL:</span>
-      <span id="receiptTotal">Rs. 0.00</span>
-    </div>
-
-    <p class="border-b border-black border-dashed my-1"></p>
-    <div id="receiptPayDetails" class="text-[9px] space-y-0.5"></div>
-
-    <p class="border-b border-black border-dashed my-1"></p>
-    <div class="text-center text-[9px] pt-1 space-y-0.5">
-      <p id="receiptFooterNote" class="font-bold">*** THANK YOU! COME AGAIN ***</p>
-      <p class="text-[8px] text-gray-600 font-bold">Software by systems.lk | Tel: 0760672029</p>
+    <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: bold; margin-top: 3px; padding: 0 1mm;">
+      <span id="kotPrintType">TYPE: DINE-IN</span>
+      <span id="kotPrintTime">00:00:00 PM</span>
     </div>
   </div>
+  
+  <!-- කෑම සහ ප්‍රමාණය Header -->
+  <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 900; border-bottom: 1px solid #000; padding: 2px 1mm; margin-bottom: 3px;">
+    <span>ITEM NAME</span>
+    <span style="padding-right: 2mm;">QTY</span>
+  </div>
+  
+  <div id="kotPrintItems" style="width: 100%;"></div>
+  
+  <div style="text-align: center; border-top: 2px dashed #000; padding-top: 4px; margin-top: 4px;">
+    <div style="font-size: 10px; font-weight: 900;">*** PREPARE FRESH & QUICK ***</div>
+    <div style="font-size: 9px; color: #333; margin-top: 2px;">Software by systems.lk | 0760672029</div>
+  </div>
+</div>
 
+<!-- THERMAL PRINTABLE BILL RECEIPT (100% SAFE 68MM - ZERO RIGHT CUT-OFF) -->
+<div id="receiptModal" style="display: none;" class="font-mono text-black">
+  <div style="text-align: center; margin-bottom: 3px;">
+    <h2 id="receiptHotel" style="font-size: 14px; font-weight: 900; text-transform: uppercase;">HOTEL NAME</h2>
+    <p id="receiptAddress" style="font-size: 9.5px; color: #333;">Address Line</p>
+    <p id="receiptPhone" style="font-size: 9.5px; color: #333;">Tel: 0112345678</p>
+    <p id="receiptTaxNo" style="display: none; font-size: 9.5px; font-weight: bold;">TIN/VAT: ...</p>
+    <p id="receiptOrderId" style="font-size: 10.5px; font-weight: 800; margin-top: 2px;">Invoice #000000</p>
+    <p id="receiptDate" style="font-size: 9px; color: #444;">Date: 2026-00-00 00:00</p>
+    <p id="receiptType" style="font-size: 10px; font-weight: bold;">Dine-in (Table: 01)</p>
+    <div style="border-bottom: 1px dashed #000; margin: 3px 0;"></div>
+  </div>
+  
+  <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 3px; padding-right: 1mm;">
+    <span style="width: 48%;">ITEM / QTY</span>
+    <span style="width: 25%; text-align: right;">PRICE</span>
+    <span style="width: 27%; text-align: right;">TOTAL</span>
+  </div>
+  
+  <div id="receiptItems" style="font-size: 10px; padding-right: 1mm;"></div>
+  <div style="border-bottom: 1px dashed #000; margin: 3px 0;"></div>
+  
+  <div style="font-size: 10px; line-height: 1.4; padding-right: 1mm;">
+    <div style="display: flex; justify-content: space-between;"><span>Subtotal:</span><span id="receiptSubtotal">Rs. 0.00</span></div>
+    <div id="receiptDiscountRow" style="display: none; justify-content: space-between; font-weight: bold;"><span>Discount:</span><span id="receiptDiscountVal">-Rs. 0.00</span></div>
+    <div id="receiptScRow" style="display: none; justify-content: space-between;"><span>Service Charge:</span><span id="receiptScVal">Rs. 0.00</span></div>
+    <div id="receiptVatRow" style="display: none; justify-content: space-between;"><span>VAT:</span><span id="receiptVatVal">Rs. 0.00</span></div>
+    <div id="receiptCslRow" style="display: none; justify-content: space-between;"><span>SSCL:</span><span id="receiptCslVal">Rs. 0.00</span></div>
+  </div>
+  
+  <div style="border-bottom: 1px dashed #000; margin: 3px 0;"></div>
+  <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 900; padding: 2px 1mm 2px 0;">
+    <span>NET TOTAL:</span>
+    <span id="receiptTotal">Rs. 0.00</span>
+  </div>
+  
+  <div style="border-bottom: 1px dashed #000; margin: 3px 0;"></div>
+  <div id="receiptPayDetails" style="font-size: 9.5px; line-height: 1.35; padding-right: 1mm;"></div>
+  
+  <div style="border-bottom: 1px dashed #000; margin: 3px 0;"></div>
+  <div style="text-align: center; font-size: 9px; padding-top: 2px;">
+    <p id="receiptFooterNote" style="font-weight: bold;">*** THANK YOU! PLEASE VISIT US AGAIN ***</p>
+    <p style="font-size: 8.5px; color: #444; font-weight: bold; margin-top: 2px;">Software by systems.lk | Tel: 0760672029</p>
+  </div>
+</div>
   <!-- THERMAL PRINTABLE PAYSLIP (XPRINTER & SINGLE-CUT CONTINUOUS PRINTING COMPLIANT) -->
   <div id="payslipThermalModal" style="display: none;" class="font-mono text-black">
     <div class="text-center space-y-0.5 mb-2">
