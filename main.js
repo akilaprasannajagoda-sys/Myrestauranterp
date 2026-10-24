@@ -154,7 +154,10 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ XPRINTER & 80MM CONTINUOUS DIRECT HARDWARE PRINT ENGINE (100% FIXED ZERO OFFSET & NO BLANK FEED)
+// 🖨️ XPRINTER & 80MM CONTINUOUS DIRECT HARDWARE PRINT ENGINE (100% ZERO OFFSET & ZERO BLANK CUTS)
+let lastPrintTimestamp = 0;
+let lastPrintedContentHash = "";
+
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let printWin = null;
@@ -163,6 +166,15 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       if (!htmlContent || !htmlContent.trim()) {
         return resolve({ success: false, error: "Print content is empty" });
       }
+
+      // තත්පර 1ක් ඇතුළත එකම Print Job එක දෙපාරක් වැටීමෙන් හිස් කඩදාසි කැපීම වළක්වයි (Anti-Duplicate Guard)
+      const nowMs = Date.now();
+      const simpleHash = htmlContent.substring(0, 80);
+      if (simpleHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1200) {
+        return resolve({ success: true, duplicateIgnored: true });
+      }
+      lastPrintTimestamp = nowMs;
+      lastPrintedContentHash = simpleHash;
       
       const printers = await mainWindow.webContents.getPrintersAsync();
       let targetDevice = "";
@@ -186,9 +198,9 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         return resolve({ success: false, error: "පරිගණකයට කිසිදු Printer එකක් සම්බන්ධ කර නොමැත." });
       }
       
-      // 3. 80mm Thermal පත්‍රයට නියමිත පළලින් යුත් කවුළුවක් සෑදීම (280px = ~74mm - Zero Right Shift)
+      // 3. 80mm Thermal පත්‍රයේ සැබෑ මුද්‍රණ පළල වන 68mm (260px) පළලින් යුත් කවුළුවක් සෑදීම
       printWin = new BrowserWindow({
-        width: 280,
+        width: 260,
         height: 600,
         show: false,
         frame: false,
@@ -199,7 +211,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         }
       });
       
-      // Xprinter සහ සියලුම 80mm Thermal Printers වලට අකුරු වමට සහ මැදට නියමිත පළලින් තබන HTML Wrapper එක
+      // දකුණු පසින් අකුරු කැපීම 100% වළක්වා (Safe 68mm Zone) තනි පිටුවක් ලෙස මුද්‍රණය කරන HTML සැකිල්ල
       const fullPrintHtml = `
         <!DOCTYPE html>
         <html lang="si">
@@ -217,10 +229,10 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
               padding: 0;
             }
             html, body {
-              width: 72mm !important;
-              max-width: 72mm !important;
+              width: 68mm !important;
+              max-width: 68mm !important;
               margin: 0 !important;
-              padding: 1mm 1.5mm !important;
+              padding: 1mm 1mm 3mm 1mm !important;
               font-family: 'Courier New', Courier, monospace, sans-serif !important;
               font-size: 11px !important;
               line-height: 1.35 !important;
@@ -229,6 +241,8 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
               text-align: left !important;
               visibility: visible !important;
               overflow: visible !important;
+              page-break-inside: avoid !important;
+              page-break-after: avoid !important;
             }
             div, p, span, h2, h3, h4, table, tr, td {
               visibility: visible !important;
@@ -257,23 +271,21 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
               overflow: hidden !important; 
               text-overflow: ellipsis !important; 
               white-space: nowrap !important; 
-              max-width: 44mm !important; 
+              max-width: 40mm !important; 
             }
             .w-12 { width: 12mm !important; }
-            .w-32 { width: 32mm !important; }
-            .w-36 { width: 36mm !important; }
-            .w-44 { width: 44mm !important; }
-            .w-1\\/2, .w-1-2 { width: 50% !important; display: inline-block !important; }
-            .w-1\\/4, .w-1-4 { width: 25% !important; display: inline-block !important; text-align: right !important; }
-            .w-3\\/4, .w-3-4 { width: 75% !important; display: inline-block !important; }
-            .cut-spacer { height: 6mm !important; display: block !important; }
+            .w-32 { width: 30mm !important; }
+            .w-36 { width: 34mm !important; }
+            .w-44 { width: 40mm !important; }
+            .w-1\\/2, .w-1-2 { width: 48% !important; display: inline-block !important; }
+            .w-1\\/4, .w-1-4 { width: 26% !important; display: inline-block !important; text-align: right !important; }
+            .w-3\\/4, .w-3-4 { width: 72% !important; display: inline-block !important; }
           </style>
         </head>
         <body>
-          <div style="width: 72mm; max-width: 72mm; margin: 0; text-align: left;">
+          <div style="width: 68mm; max-width: 68mm; margin: 0; text-align: left;">
             ${htmlContent}
           </div>
-          <div class="cut-spacer"></div>
         </body>
         </html>
       `;
@@ -287,8 +299,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
               silent: true,
               printBackground: true,
               deviceName: targetDevice,
-              margins: { marginType: 'none' },
-              pageSize: { width: 80000, height: 297000 } // 80mm Width Lock (පිටුව දකුණට පැනීම 100% වළක්වයි)
+              margins: { marginType: 'none' }
             });
             
             setTimeout(() => {
@@ -296,7 +307,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
                 printWin.destroy();
                 printWin = null;
               }
-            }, 800);
+            }, 600);
             
             resolve({ success: true, usedPrinter: targetDevice });
           } catch (printErr) {
@@ -306,7 +317,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
             }
             resolve({ success: false, error: printErr.message });
           }
-        }, 350);
+        }, 300);
       });
     } catch (err) {
       if (printWin) {
@@ -324,7 +335,7 @@ ipcMain.handle('get-printers', async () => {
   return await mainWindow.webContents.getPrintersAsync();
 });
 
-// 📲 3. DIRECT WHATSAPP DESKTOP NATIVE PROTOCOL ENGINE (NO BROWSER DOWNLOAD PAGE)
+// 📲 3. DIRECT WHATSAPP DESKTOP NATIVE PROTOCOL ENGINE
 ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
   try {
     let cleanPhone = String(phone || '').replace(/\D/g, '');
@@ -334,13 +345,11 @@ ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
       cleanPhone = '94' + cleanPhone;
     }
 
-    // Windows Native WhatsApp App URI
     const desktopUri = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
     try {
       await shell.openExternal(desktopUri);
       return { success: true, method: 'desktop' };
     } catch (desktopErr) {
-      // WhatsApp Desktop නොමැති නම් Web WhatsApp විවෘත කිරීම
       const webUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
       await shell.openExternal(webUrl);
       return { success: true, method: 'web' };
