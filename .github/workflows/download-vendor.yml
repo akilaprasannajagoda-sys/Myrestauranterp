@@ -1,0 +1,36 @@
+name: Download Offline Vendor Assets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  download-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Offline Libraries
+        run: |
+          mkdir -p vendor/webfonts
+          
+          # 1. Download Dexie.js
+          curl -sL "https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js" -o vendor/dexie.min.js
+          
+          # 2. Download Tailwind CSS
+          curl -sL "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" -o vendor/tailwind.min.css
+          
+          # 3. Download FontAwesome CSS & Webfonts
+          curl -sL "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" -o vendor/font-awesome.min.css
+          sed -i 's|../webfonts/|./webfonts/|g' vendor/font-awesome.min.css
+          
+          curl -sL "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2" -o vendor/webfonts/fa-solid-900.woff2
+          curl -sL "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2" -o vendor/webfonts/fa-brands-400.woff2
+
+      - name: Commit and Push Offline Files
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add vendor/
+          git commit -m "Add offline vendor assets (Tailwind, Dexie, FontAwesome)" || echo "No changes to commit"
+          git push
