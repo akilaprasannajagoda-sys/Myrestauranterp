@@ -234,6 +234,9 @@ export function renderInvoiceReportsList() {
       }
     } else {
       payDetailHtml += `<span class="text-[10px] text-red-600 font-bold block mt-0.5">Reason: ${inv.voidReason || 'Cancelled'}</span>`;
+      if (inv.voidAuthorizedBy) {
+        payDetailHtml += `<span class="text-[9px] text-gray-500 font-semibold block">Authorized By: ${inv.voidAuthorizedBy}</span>`;
+      }
     }
 
     const tr = document.createElement("tr");
@@ -556,7 +559,7 @@ export function renderWaiterSalesReport() {
   });
 }
 
-// 🔒 MANAGER OVERRIDE VERIFICATION (OWNER & MANAGER SAFE)
+// 🔒 MANAGER OVERRIDE VERIFICATION (STRICT REGISTERED MANAGER PIN ENFORCEMENT)
 export function requestManagerVoidOverride(invoiceId) {
   pendingVoidInvoiceId = invoiceId;
   const inv = erpState.invoices[invoiceId];
@@ -580,16 +583,16 @@ export async function submitManagerOverrideAction() {
   const enteredPin = document.getElementById("managerOverridePinInput")?.value.trim();
   if (!enteredPin || !pendingVoidInvoiceId) return;
 
-  const isEmployeeManager = Object.values(erpState.employees || {}).some(e => {
-    const role = (e.role || "").toLowerCase();
-    const isAuthorizedRole = role === "manager" || role === "admin" || role === "owner";
-    return isAuthorizedRole && String(e.password || "").trim() === enteredPin;
+  // Staff & Payroll හි ලියාපදිංචි "Manager", "Owner" හෝ "Admin" කෙනෙකුගේ PIN එකක්දැයි පමණක් දැඩිව පරීක්ෂා කිරීම
+  const matchedManager = Object.values(erpState.employees || {}).find(e => {
+    const role = (e.role || "").toLowerCase().trim();
+    const isManagerRole = role === "manager" || role === "owner" || role === "admin";
+    return isManagerRole && String(e.password || "").trim() === enteredPin;
   });
 
-  const isOwnerSession = (currentUserRole === "owner" || currentUserRole === "admin");
-
-  if (!isEmployeeManager && !isOwnerSession) {
-    alert("❌ වැරදි Manager PIN අංකයකි! Authorization Failed.");
+  // Manager කෙනෙකුගේ නිවැරදි PIN එකක් නොවේ නම් අවලංගු කිරීම සම්පූර්ණයෙන්ම අවහිර කරයි (1234 backdoor ඉවත් කර ඇත)
+  if (!matchedManager) {
+    alert("❌ බලයලත් Manager කෙනෙකුගේ PIN අංකයක් නොවේ! කරුණාකර Staff & Payroll හි ලියාපදිංචි කළමනාකරුගේ PIN එක ඇතුළත් කරන්න.");
     const pinIn = document.getElementById("managerOverridePinInput");
     if (pinIn) pinIn.value = "";
     return;
@@ -597,15 +600,14 @@ export async function submitManagerOverrideAction() {
 
   const idToVoid = pendingVoidInvoiceId;
   closeManagerOverrideModal();
-  await executeVoidInvoiceProcess(idToVoid);
+  await executeVoidInvoiceProcess(idToVoid, matchedManager.name);
 }
 
-// 🔒 EXECUTE VOID INVOICE ENGINE (CRASH-PROOF MODAL REASON)
-export async function executeVoidInvoiceProcess(invoiceId) {
+// 🔒 EXECUTE VOID INVOICE ENGINE (INVENTORY MODE AWARE RESTOCKING & AUDIT LOGGED)
+export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "Manager") {
   const inv = erpState.invoices[invoiceId];
   if (!inv) return;
 
-  // 🔒 CRITICAL FIX: Replaced crash-prone browser prompt() with custom input modal
   const reason = await showCustomInputModal(
     `Void Invoice #${inv.invoiceNumber}`,
     "අවලංගු කිරීමට හේතුව (උදා: Wrong Item, Cancelled)",
@@ -622,28 +624,34 @@ export async function executeVoidInvoiceProcess(invoiceId) {
       await updateFn(dbRef(`tenants/${currentTenant}/invoices/${invoiceId}`), {
         status: "Voided",
         voidReason: reason.trim(),
-        voidedAt: new Date().toISOString()
+        voidedAt: new Date().toISOString(),
+        voidAuthorizedBy: authorizedByName
       });
 
-      for (const item of (inv.items || [])) {
-        const dish = erpState.dishes[item.dishId];
-        if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
-          for (const ing of dish.ingredients) {
-            const rawItem = erpState.rawItems[ing.rawId];
-            if (rawItem) {
-              const convertedQty = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
-              const totalRestock = convertedQty * (parseInt(item.qty) || 1);
-              const currentStock = parseFloat(rawItem.stock || 0);
-              const newStock = currentStock + totalRestock;
+      // Recipe Mode ක්‍රියාත්මක නම් පමණක් අමුද්‍රව්‍ය ආපසු Stock එකට එකතු (Restock) කරයි
+      const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
+      if (isRecipeMode) {
+        for (const item of (inv.items || [])) {
+          const dish = erpState.dishes[item.dishId];
+          if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
+            for (const ing of dish.ingredients) {
+              const rawItem = erpState.rawItems[ing.rawId];
+              if (rawItem) {
+                const convertedQty = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
+                const totalRestock = convertedQty * (parseInt(item.qty) || 1);
+                const currentStock = parseFloat(rawItem.stock || 0);
+                const newStock = currentStock + totalRestock;
 
-              await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
-                stock: parseFloat(newStock.toFixed(3))
-              });
+                await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
+                  stock: parseFloat(newStock.toFixed(3))
+                });
+              }
             }
           }
         }
       }
 
+      // Credit Bill එකක් නම් පාරිභෝගික ණය ලැයිස්තුවෙන්ද Void කරයි
       const matchedCreditEntry = Object.entries(erpState.customerCredits || {}).find(([id, c]) => c.invoiceId === invoiceId || c.invoiceNumber === inv.invoiceNumber);
       if (matchedCreditEntry) {
         await updateFn(dbRef(`tenants/${currentTenant}/customerCredits/${matchedCreditEntry[0]}`), {
@@ -652,7 +660,7 @@ export async function executeVoidInvoiceProcess(invoiceId) {
         });
       }
 
-      showLiveToast("🚫 Bill Voided", `Invoice #${inv.invoiceNumber} සාර්ථකව අවලංගු කරන ලදී.`, "warning", "fa-ban");
+      showLiveToast("🚫 Bill Voided", `Invoice #${inv.invoiceNumber} (${authorizedByName} විසින්) සාර්ථකව අවලංගු කරන ලදී.`, "warning", "fa-ban");
       renderInvoiceReportsList();
     }
   } catch (err) {
