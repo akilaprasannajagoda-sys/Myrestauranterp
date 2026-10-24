@@ -21,14 +21,14 @@
     
     @media print {
       @page {
-        margin: 0;
-        size: 80mm 297mm;
+        margin: 0 !important;
+        size: 80mm auto !important;
       }
       body {
         margin: 0 !important;
         padding: 0 !important;
         background: #fff !important;
-        -webkit-print-color-adjust: exact;
+        -webkit-print-color-adjust: exact !important;
       }
       body * { visibility: hidden !important; }
       #receiptModal, #receiptModal *, 
@@ -43,18 +43,17 @@
         left: 0 !important; 
         top: 0 !important; 
         width: 72mm !important;
+        max-width: 72mm !important;
         min-height: auto !important;
-        max-height: none !important;
         overflow: visible !important;
-        padding: 2mm 2mm 5mm 2mm !important; 
+        padding: 1mm 2mm !important; 
         margin: 0 !important; 
         font-family: 'Courier New', Courier, monospace, sans-serif !important;
         color: #000 !important;
-        font-size: 12px !important;
-        line-height: 1.3 !important;
+        font-size: 11px !important;
+        line-height: 1.35 !important;
         display: block !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+        text-align: left !important;
       }
       .no-print { display: none !important; }
     }
