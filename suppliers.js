@@ -1,9 +1,9 @@
 // ==========================================================================
-// MODULE 07: SUPPLIERS, GRN SUPPLY CHAIN & CASH-BOOK LEDGER ENGINE
+// MODULE 07: SUPPLIERS, GRN SUPPLY CHAIN & CASH-BOOK LEDGER ENGINE (UNFREEZE READY)
 // ==========================================================================
 
 import { erpState, currentTenant, activeSupplierLedgerId, setActiveSupplierLedgerId } from './state.js';
-import { showLiveToast, downloadCSVFile } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -16,15 +16,13 @@ export function initSuppliersContext(dbRefInstance, pushMethod, updateMethod) {
   updateFn = updateMethod;
 }
 
-// 🔒 COLLISION-PROOF UNIQUE GRN NUMBER GENERATOR
+// 🔒 COLLISION-PROOF UNIQUE GRN NUMBER GENERATOR (LOCAL TIME SAFE)
 export function generateCollisionProofGRNNumber() {
+  const dStr = getLocalDateString().replace(/-/g, '').slice(2);
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
   const timePart = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0');
   const salt = String(Math.floor(10 + Math.random() * 90));
-  return `GRN-${yy}${mm}${dd}-${timePart}${salt}`;
+  return `GRN-${dStr}-${timePart}${salt}`;
 }
 
 export function switchGrnTab(tabName) {
@@ -46,7 +44,7 @@ export function switchGrnTab(tabName) {
 
   if (tabName === "entry") {
     const dInput = document.getElementById("grnDate");
-    if (dInput && !dInput.value) dInput.value = new Date().toISOString().split("T")[0];
+    if (dInput && !dInput.value) dInput.value = getLocalDateString();
     if (document.querySelectorAll(".grn-item-row").length === 0) {
       addGrnItemRow();
     }
@@ -80,6 +78,7 @@ export function openSupplierModal(mode, supId = null) {
     if (title) title.innerText = "Add Supplier";
   }
   modal?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("supName")?.focus(), 50);
 }
 
 export function closeSupplierModal() {
@@ -89,15 +88,17 @@ export function closeSupplierModal() {
 export async function handleSupplierSubmit(e) {
   e.preventDefault();
   const supId = document.getElementById("editSupplierId")?.value;
+  const nameIn = document.getElementById("supName");
   const supData = {
-    name: document.getElementById("supName")?.value.trim() || "",
+    name: nameIn?.value.trim() || "",
     phone: document.getElementById("supPhone")?.value.trim() || "",
     email: document.getElementById("supEmail")?.value.trim() || "",
     address: document.getElementById("supAddress")?.value.trim() || ""
   };
 
   if (!supData.name) {
-    alert("කරුණාකර සැපයුම්කරුගේ නම ඇතුළත් කරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර සැපයුම්කරුගේ නම ඇතුළත් කරන්න.", "warning", "fa-truck-field");
+    if (nameIn) nameIn.focus();
     return;
   }
 
@@ -105,15 +106,21 @@ export async function handleSupplierSubmit(e) {
     if (dbRef && currentTenant) {
       if (supId && updateFn) {
         await updateFn(dbRef(`tenants/${currentTenant}/suppliers/${supId}`), supData);
+        if (erpState.suppliers && erpState.suppliers[supId]) {
+          Object.assign(erpState.suppliers[supId], supData);
+        }
         showLiveToast("🚚 Supplier Updated", `${supData.name} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-truck-field");
       } else if (pushFn) {
-        await pushFn(dbRef(`tenants/${currentTenant}/suppliers`), supData);
+        const newSupRef = await pushFn(dbRef(`tenants/${currentTenant}/suppliers`), supData);
+        if (!erpState.suppliers) erpState.suppliers = {};
+        erpState.suppliers[newSupRef.key] = supData;
         showLiveToast("🚚 Supplier Saved", `${supData.name} සාර්ථකව සේව් විය.`, "success", "fa-truck-field");
       }
     }
     closeSupplierModal();
+    renderSuppliersDirectoryTable();
   } catch (err) {
-    alert("Supplier සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Supplier සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -288,7 +295,7 @@ export function exportSupplierLedgerToCSV() {
     }
   });
 
-  downloadCSVFile(csv, `Ledger_${sup.name.replace(/\s+/g, '_')}_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSVFile(csv, `Ledger_${sup.name.replace(/\s+/g, '_')}_${getLocalDateString()}.csv`);
 }
 
 // 3. ZERO-FREEZE SEARCHABLE GRN BUILDER
@@ -329,7 +336,6 @@ export function addGrnItemRow() {
   container.appendChild(row);
 }
 
-// 🔥 DEBOUNCED ZERO-FREEZE SEARCH IMPLEMENTATION
 export function filterGrnRowSelect(input) {
   if (grnSearchDebounceTimer) clearTimeout(grnSearchDebounceTimer);
 
@@ -356,7 +362,7 @@ export function filterGrnRowSelect(input) {
         matchCount++;
         singleMatchId = id;
         singleMatchCost = item.cost || 0;
-        if (matchCount >= 60) break; // Limits DOM repaint footprint to eliminate freezing
+        if (matchCount >= 60) break;
       }
     }
 
@@ -366,7 +372,6 @@ export function filterGrnRowSelect(input) {
 
     select.innerHTML = html;
 
-    // Auto-select and fill unit cost if exact query or single item matched
     if (matchCount === 1 && singleMatchId && query.length >= 2) {
       select.value = singleMatchId;
       if (costInput && !costInput.value) {
@@ -374,7 +379,7 @@ export function filterGrnRowSelect(input) {
         calculateGrnTotals();
       }
     }
-  }, 180); // 180ms debounce completely prevents UI hang
+  }, 180);
 }
 
 export function onGrnRawSelectChange(sel) {
@@ -430,12 +435,14 @@ export function onGrnPaymentMethodChange() {
 
 export async function handleGrnSubmit(e) {
   e.preventDefault();
-  const supId = document.getElementById("grnSupplierSelect")?.value;
+  const supSelect = document.getElementById("grnSupplierSelect");
+  const supId = supSelect?.value;
   const invoiceNo = document.getElementById("grnInvoiceNo")?.value.trim() || "";
-  const date = document.getElementById("grnDate")?.value;
+  const date = document.getElementById("grnDate")?.value || getLocalDateString();
 
   if (!supId) {
-    alert("කරුණාකර Supplier කෙනෙක් තෝරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර Supplier කෙනෙක් තෝරන්න.", "warning", "fa-truck-field");
+    if (supSelect) supSelect.focus();
     return;
   }
 
@@ -456,14 +463,13 @@ export async function handleGrnSubmit(e) {
   });
 
   if (items.length === 0) {
-    alert("අවම වශයෙන් එක් අමුද්‍රව්‍යයක්වත් ඇතුළත් කරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "අවම වශයෙන් එක් අමුද්‍රව්‍යයක්වත් ඇතුළත් කරන්න.", "warning", "fa-boxes-stacked");
     return;
   }
 
   const { subtotal, discount, netTotal } = calculateGrnTotals();
   const paymentMethod = document.getElementById("grnPaymentMethod")?.value || "cash";
 
-  // 🔒 COLLISION-PROOF UNIQUE GRN NUMBER
   const grnRecord = {
     grnNumber: generateCollisionProofGRNNumber(),
     supplierId: supId,
@@ -488,6 +494,10 @@ export async function handleGrnSubmit(e) {
           stock: parseFloat((currentStock + it.qty).toFixed(3)),
           cost: it.cost
         });
+        if (erpState.rawItems[it.rawId]) {
+          erpState.rawItems[it.rawId].stock = parseFloat((currentStock + it.qty).toFixed(3));
+          erpState.rawItems[it.rawId].cost = it.cost;
+        }
       }
     }
 
@@ -497,7 +507,7 @@ export async function handleGrnSubmit(e) {
     if (container) container.innerHTML = "";
     switchGrnTab("history");
   } catch (err) {
-    alert("GRN සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "GRN සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -576,7 +586,7 @@ export function closeGrnDetailModal() {
 export function exportGrnToCSV() {
   const list = Object.values(erpState.grns || {});
   if (list.length === 0) {
-    alert("Export කිරීමට GRN දත්ත නොමැත.");
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට GRN දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
 
@@ -585,10 +595,10 @@ export function exportGrnToCSV() {
     csv += `"${g.grnNumber}","${g.date}","${g.supplierName}","${g.invoiceNo || ''}","${g.paymentMethod}","${g.netTotal}"\n`;
   });
 
-  downloadCSVFile(csv, `GRN_Report_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSVFile(csv, `GRN_Report_${getLocalDateString()}.csv`);
 }
 
-// 4. SUPPLIER DEBT SETTLEMENT
+// 4. SUPPLIER DEBT SETTLEMENT (AUTO-FOCUS SAFE)
 export function openSupplierPayModal(supId, outstanding) {
   const sup = erpState.suppliers[supId];
   if (!sup) return;
@@ -602,6 +612,7 @@ export function openSupplierPayModal(supId, outstanding) {
   if (outVal) outVal.innerText = `Rs. ${outstanding.toFixed(2)}`;
   if (amtInput) amtInput.value = outstanding > 0 ? outstanding : "";
   document.getElementById("supplierPayModal")?.classList.remove("hidden");
+  setTimeout(() => amtInput?.focus(), 50);
 }
 
 export function closeSupplierPayModal() {
@@ -623,10 +634,18 @@ export function onSupPayMethodChange() {
 export async function handleSupplierPaySubmit(e) {
   e.preventDefault();
   const supId = document.getElementById("supPaySupplierId")?.value;
-  const amount = parseFloat(document.getElementById("supPayAmount")?.value || 0);
+  const amtInput = document.getElementById("supPayAmount");
+  const amount = parseFloat(amtInput?.value || 0);
   const method = document.getElementById("supPayMethod")?.value || "cash";
 
-  if (!supId || amount <= 0) return;
+  if (!supId || amount <= 0) {
+    showLiveToast("⚠️ මුදල වැරදිය", "ගෙවීම සඳහා වලංගු මුදලක් ඇතුළත් කරන්න.", "warning", "fa-money-bill-wave");
+    if (amtInput) {
+      amtInput.focus();
+      amtInput.select();
+    }
+    return;
+  }
 
   const payRecord = {
     supplierId: supId,
@@ -643,9 +662,10 @@ export async function handleSupplierPaySubmit(e) {
       await pushFn(dbRef(`tenants/${currentTenant}/supplierPayments`), payRecord);
     }
     closeSupplierPayModal();
+    renderSuppliersDirectoryTable();
     showLiveToast("💰 Supplier Paid", `සැපයුම්කරුට Rs. ${amount.toFixed(2)} ක මුදලක් සාර්ථකව පියවන ලදී.`, "success", "fa-money-bill-wave");
   } catch (err) {
-    alert("ගෙවීම සටහන් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "ගෙවීම සටහන් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
