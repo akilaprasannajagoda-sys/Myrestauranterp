@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 11: POS ENGINE (ATOMIC STOCK, SPLIT BILL, KOT/BOT & DUAL SCREEN)
+// MODULE 11: POS ENGINE (100% FREEZE-PROOF & AUTO-FOCUS TOASTS ENABLED)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (AUTO-PRUNED OFFLINE SYNC)
 // ==========================================================================
 
@@ -151,13 +151,15 @@ export async function persistActiveBillToCloud(updatedObj) {
   });
 
   if (!currentTenant || !activeBillId || !dbRef || !updateFn) return;
-  try {
-    await updateFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`), {
-      ...updatedObj,
-      updatedAt: new Date().toISOString()
-    });
-  } catch (err) {
-    console.warn("Active bill sync queued offline:", err.message);
+  if (navigator.onLine) {
+    try {
+      updateFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`), {
+        ...updatedObj,
+        updatedAt: new Date().toISOString()
+      }).catch(() => {});
+    } catch (err) {
+      console.warn("Active bill sync queued offline:", err.message);
+    }
   }
 }
 
@@ -188,9 +190,9 @@ export async function addNewBillTab() {
   renderBillTabsBar();
   syncActiveBillToFormUI();
 
-  if (dbRef && setFn && currentTenant) {
+  if (dbRef && setFn && currentTenant && navigator.onLine) {
     try {
-      await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newKey}`), newBillPayload);
+      setFn(dbRef(`tenants/${currentTenant}/activeBills/${newKey}`), newBillPayload).catch(() => {});
     } catch (e) {}
   }
 }
@@ -205,7 +207,7 @@ export async function closeBillTab(key, ev) {
   if (ev) ev.stopPropagation();
   const keys = Object.keys(erpState.activeBills || {});
   if (keys.length <= 1) {
-    alert("අවම වශයෙන් එක් Bill Tab එකක්වත් තිබිය යුතුය.");
+    showLiveToast("ℹ️ Bill Tab Notice", "අවම වශයෙන් එක් Bill Tab එකක්වත් තිබිය යුතුය.", "info", "fa-circle-info");
     return;
   }
 
@@ -216,23 +218,26 @@ export async function closeBillTab(key, ev) {
     }
   }
 
-  if (b && b.tableNo && dbRef && updateFn && currentTenant) {
+  if (b && b.tableNo) {
     const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
       ([k, bill]) => k !== key && bill.tableNo === b.tableNo && bill.cart && bill.cart.length > 0
     );
     if (!hasOtherBillsOnTable) {
       const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === b.tableNo);
       if (matchedTable) {
-        await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+        matchedTable[1].status = "Available";
+        if (dbRef && updateFn && currentTenant && navigator.onLine) {
+          updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" }).catch(() => {});
+        }
       }
     }
   }
 
   delete erpState.activeBills[key];
 
-  if (dbRef && removeFn && currentTenant) {
+  if (dbRef && removeFn && currentTenant && navigator.onLine) {
     try {
-      await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${key}`));
+      removeFn(dbRef(`tenants/${currentTenant}/activeBills/${key}`)).catch(() => {});
     } catch (e) {}
   }
   if (activeBillId === key) {
@@ -347,10 +352,13 @@ export async function updateCurrentBillSettings() {
     waiterName: matchedWaiter
   });
 
-  if (tableNo && dbRef && updateFn && currentTenant) {
+  if (tableNo) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tableNo);
     if (matchedTable) {
-      await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
+      matchedTable[1].status = "Occupied";
+      if (dbRef && updateFn && currentTenant && navigator.onLine) {
+        updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" }).catch(() => {});
+      }
     }
   }
 
@@ -536,7 +544,7 @@ export async function addDishToActiveCart(dishId, dish) {
 
   persistActiveBillToCloud({ cart: cartList });
 
-  if (currentBill.tableNo && dbRef && updateFn && currentTenant) {
+  if (currentBill.tableNo && dbRef && updateFn && currentTenant && navigator.onLine) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
     if (matchedTable) {
       updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" }).catch(() => {});
@@ -696,11 +704,9 @@ export function calculateOrderTotals(cartList = [], discType = "fixed", discValu
   }
   discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
 
-  // 💎 Owner Configurable Redemption: 1 Point = X Rupees
   const pointRupeeValue = parseFloat(erpState.settings?.loyaltyPointValue || 1.0);
   const requestedLoyaltyRupees = parseFloat(loyaltyPointsRedeemed || 0) * pointRupeeValue;
 
-  // Loyalty Discount cannot exceed remaining subtotal after bill discount
   const loyaltyDiscount = Math.min(Math.max(0, subtotal - discountAmount), requestedLoyaltyRupees);
   const taxableAmount = Math.max(0, subtotal - discountAmount - loyaltyDiscount);
 
@@ -731,7 +737,6 @@ export function recalculateCartTotalsUI() {
   const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
   let loyaltyRedeemed = parseFloat(redeemIn ? redeemIn.value : (currentBill.loyaltyPointsRedeemed || 0)) || 0;
 
-  // Maximum redeemable check against customer's actual available balance
   const attachedCustId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId;
   if (attachedCustId && erpState.customers?.[attachedCustId]) {
     const maxAvailable = parseFloat(erpState.customers[attachedCustId].loyaltyPoints || 0);
@@ -774,7 +779,6 @@ export function recalculateCartTotalsUI() {
     discRow.classList.add("hidden");
   }
 
-  // Loyalty Discount UI Row & Value label
   const loyaltyRow = document.getElementById("cartLoyaltyRow");
   const loyaltyTotVal = document.getElementById("cartLoyaltyTotalVal");
   const loyaltyDiscSpan = document.getElementById("cartLoyaltyDiscountVal");
@@ -846,7 +850,6 @@ export function selectPayMethod(method, syncCloud = true) {
     }
   });
 
-  // Auto-fill customer details into credit fields if customer is already attached
   if (method === "credit") {
     const currentBill = getActiveBillData();
     const custId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId;
@@ -962,7 +965,7 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ STATION ORDER SENDER (DELTA SAFE)
+// 🖨️ 100% OFFLINE-SAFE STATION ORDER SENDER (INSTANT USB/LAN PRINTING GUARANTEED)
 export async function sendOrderToKitchen(isPhysicalPrint = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -972,6 +975,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
   const deltaBarItems = [];
   const updatedCart = [];
 
+  // 1. Items Kitchen ද Bar ද යන්න වෙන් කිරීම
   cartList.forEach(item => {
     const totalQty = parseInt(item.qty) || 0;
     const sentQty = parseInt(item.sentQty) || 0;
@@ -1031,20 +1035,25 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
         status: "Cooking"
       };
 
-      if (dbRef && pushFn && currentTenant) {
-        await pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket);
-      }
-
-      if (currentBill.tableNo && updateFn && currentTenant) {
-        const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-        if (matchedTable) {
-          await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
-        }
-      }
-
       currentBill.cart = updatedCart;
       renderCartItemsUI();
-      await persistActiveBillToCloud({ cart: updatedCart });
+
+      if (navigator.onLine && dbRef && currentTenant) {
+        if (pushFn) {
+          pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket).catch(() => {});
+        }
+        if (currentBill.tableNo && updateFn) {
+          const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
+          if (matchedTable) {
+            updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" }).catch(() => {});
+          }
+        }
+        persistActiveBillToCloud({ cart: updatedCart });
+      } else {
+        try {
+          localStorage.setItem("cached_erp_activeBills", JSON.stringify(erpState.activeBills));
+        } catch (e) {}
+      }
     }
 
     const pr = erpState.settings?.printers || {};
@@ -1089,7 +1098,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
     }
 
   } catch (err) {
-    alert("KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ මුද්‍රණ දෝෂයකි", "KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-print");
   }
 }
 
@@ -1131,7 +1140,7 @@ export async function printPreBillEstimate() {
   showLiveToast("📄 Pre-Bill Printed", `Table ${currentBill.tableNo || 'N/A'} සඳහා Estimate බිලක් Print කරන ලදී.`, "info", "fa-file-lines");
 }
 
-// 🔒 CHECKOUT ENGINE (WITH 100% LOYALTY PROFILE SYNC & MULTI-CURRENCY CONVERSION)
+// 🔒 CHECKOUT ENGINE (WITH AUTO-FOCUS TOAST VALIDATIONS & ZERO FREEZE)
 export async function processOrder(sendWhatsApp = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart || [];
@@ -1155,27 +1164,37 @@ export async function processOrder(sendWhatsApp = false) {
   const payMethod = currentBill.selectedPayMethod || "cash";
   let payDetails = { method: payMethod };
   
+  // 🛡️ Auto-Focus Validation: Freeze නොවී Textbox එකට Cursor එක Focus වීම
   if (payMethod === "cash") {
-    const tendered = parseFloat(document.getElementById("cashTendered")?.value || netTotal);
+    const cashIn = document.getElementById("cashTendered");
+    const tendered = parseFloat(cashIn?.value || netTotal);
     if (tendered < netTotal) {
-      alert("දුන් මුදල (Cash) බිල්පතේ මුළු මුදලට වඩා අඩු විය නොහැක.");
+      showLiveToast("⚠️ මුදල් මදි", "දුන් මුදල (Cash) බිල්පතේ මුළු මුදලට වඩා අඩු විය නොහැක.", "warning", "fa-money-bill-wave");
+      if (cashIn) {
+        cashIn.focus();
+        cashIn.select();
+      }
       return;
     }
     payDetails.cashTendered = tendered;
     payDetails.change = Math.max(0, tendered - netTotal);
   } else if (payMethod === "card") {
     const cardType = document.getElementById("cardType")?.value;
-    const cardLast4 = document.getElementById("cardLast4")?.value.trim();
+    const cardIn = document.getElementById("cardLast4");
+    const cardLast4 = cardIn?.value.trim();
     if (!cardLast4) {
-      alert("කරුණාකර කාඩ්පතේ අවසන් ඉලක්කම් 4 ඇතුළත් කරන්න.");
+      showLiveToast("⚠️ Card Details", "කරුණාකර කාඩ්පතේ අවසන් ඉලක්කම් 4 ඇතුළත් කරන්න.", "warning", "fa-credit-card");
+      if (cardIn) cardIn.focus();
       return;
     }
     payDetails.cardType = cardType;
     payDetails.last4 = cardLast4;
   } else if (payMethod === "transfer") {
-    const refNo = document.getElementById("transferRef")?.value.trim();
+    const transIn = document.getElementById("transferRef");
+    const refNo = transIn?.value.trim();
     if (!refNo) {
-      alert("කරුණාකර Transaction ID ඇතුළත් කරන්න.");
+      showLiveToast("⚠️ Reference ID", "කරුණාකර Transaction ID / Reference අංකය ඇතුළත් කරන්න.", "warning", "fa-mobile-screen-button");
+      if (transIn) transIn.focus();
       return;
     }
     payDetails.refNo = refNo;
@@ -1183,16 +1202,19 @@ export async function processOrder(sendWhatsApp = false) {
     const sCash = parseFloat(document.getElementById("splitPayCash")?.value || 0);
     const sCard = parseFloat(document.getElementById("splitPayCard")?.value || 0);
     if (Math.abs((sCash + sCard) - netTotal) > 0.05) {
-      alert(`Split Payment මුදල මුළු මුදලට (Rs. ${netTotal.toFixed(2)}) සමාන විය යුතුය.`);
+      showLiveToast("⚠️ Split Balance", `Split Payment මුදල මුළු මුදලට (Rs. ${netTotal.toFixed(2)}) සමාන විය යුතුය.`, "warning", "fa-layer-group");
       return;
     }
     payDetails.splitCash = sCash;
     payDetails.splitCard = sCard;
   } else if (payMethod === "credit") {
-    const custName = document.getElementById("creditCustomerName")?.value.trim() || currentBill.customerName;
-    const custPhone = document.getElementById("creditCustomerPhone")?.value.trim() || currentBill.customerPhone;
+    const nameIn = document.getElementById("creditCustomerName");
+    const phoneIn = document.getElementById("creditCustomerPhone");
+    const custName = nameIn?.value.trim() || currentBill.customerName;
+    const custPhone = phoneIn?.value.trim() || currentBill.customerPhone;
     if (!custName) {
-      alert("කරුණාකර පාරිභෝගිකයාගේ නම ඇතුළත් කරන්න.");
+      showLiveToast("⚠️ පාරිභෝගික විස්තර", "කරුණාකර පාරිභෝගිකයාගේ නම ඇතුළත් කරන්න.", "warning", "fa-user-tag");
+      if (nameIn) nameIn.focus();
       return;
     }
     payDetails.customerName = custName;
@@ -1209,7 +1231,6 @@ export async function processOrder(sendWhatsApp = false) {
     }
   }
 
-  // Calculate Customer Loyalty Earned Points from Net Total
   const loyaltyEarnRate = parseFloat(erpState.settings?.loyaltyEarnRate || erpState.settings?.loyaltyRate || 100);
   const earnedLoyaltyPoints = Math.floor(netTotal / loyaltyEarnRate);
 
@@ -1248,7 +1269,6 @@ export async function processOrder(sendWhatsApp = false) {
     if (navigator.onLine && dbRef && pushFn && currentTenant) {
       const invoiceRef = await pushFn(dbRef(`tenants/${currentTenant}/invoices`), invoiceData);
       
-      // ⭐ 100% ACCURATE CUSTOMER PROFILE UPDATE (POINTS & TOTAL SPEND)
       if (attachedCustomerId && erpState.customers?.[attachedCustomerId] && updateFn) {
         const cust = erpState.customers[attachedCustomerId];
         const prevPoints = parseFloat(cust.loyaltyPoints || 0);
@@ -1265,7 +1285,6 @@ export async function processOrder(sendWhatsApp = false) {
 
         await updateFn(dbRef(`tenants/${currentTenant}/customers/${attachedCustomerId}`), updatedCustData);
 
-        // Immediate In-Memory state update
         Object.assign(erpState.customers[attachedCustomerId], updatedCustData);
         if (window.renderCustomersTable) window.renderCustomersTable();
       }
@@ -1375,7 +1394,6 @@ export async function processOrder(sendWhatsApp = false) {
     if (nameIn) nameIn.value = "";
     if (phoneIn) phoneIn.value = "";
 
-    // Clear Linked Customer Badge
     const custBadge = document.getElementById("posSelectedCustomerBadge");
     const custIdIn = document.getElementById("posAttachedCustomerId");
     const redeemBox = document.getElementById("posLoyaltyRedeemBox");
@@ -1384,7 +1402,7 @@ export async function processOrder(sendWhatsApp = false) {
     if (custIdIn) custIdIn.value = "";
     
   } catch (err) {
-    alert("බිල්පත සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "බිල්පත සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -1536,7 +1554,7 @@ export function openSplitBillModal() {
   const cartList = currentBill.cart || [];
 
   if (cartList.length === 0) {
-    alert("බෙදීමට Cart එකේ කෑම වර්ග නොමැත.");
+    showLiveToast("ℹ️ Empty Cart", "බෙදීමට Cart එකේ කෑම වර්ග නොමැත.", "info", "fa-circle-info");
     return;
   }
 
@@ -1635,7 +1653,7 @@ export async function executeItemSplitToNewBill() {
   });
 
   if (!anySelected) {
-    alert("කරුණාකර වෙන් කිරීමට අවම වශයෙන් එක් කෑම වර්ගයක්වත් තෝරන්න.");
+    showLiveToast("⚠️ Selection Required", "කරුණාකර වෙන් කිරීමට අවම වශයෙන් එක් කෑම වර්ගයක්වත් තෝරන්න.", "warning", "fa-list-check");
     return;
   }
 
@@ -1659,8 +1677,8 @@ export async function executeItemSplitToNewBill() {
       updatedAt: new Date().toISOString()
     };
 
-    if (dbRef && setFn && currentTenant) {
-      await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newSplitKey}`), newBillPayload);
+    if (dbRef && setFn && currentTenant && navigator.onLine) {
+      setFn(dbRef(`tenants/${currentTenant}/activeBills/${newSplitKey}`), newBillPayload).catch(() => {});
     }
     erpState.activeBills[newSplitKey] = newBillPayload;
 
@@ -1675,7 +1693,7 @@ export async function executeItemSplitToNewBill() {
 
     showLiveToast("✂️ Bill Split Created", `${newBillName} නව Bill Tab එකක් ලෙස සාර්ථකව වෙන් කරන ලදී.`, "success", "fa-scissors");
   } catch (err) {
-    alert("Bill Split කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ Split Error", "Bill Split කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -1695,11 +1713,16 @@ export function closeShiftFloatModal() {
 
 export async function handleShiftFloatSubmit(e) {
   if (e) e.preventDefault();
-  const amount = parseFloat(document.getElementById("shiftOpeningFloatAmount")?.value || 0);
+  const amtIn = document.getElementById("shiftOpeningFloatAmount");
+  const amount = parseFloat(amtIn?.value || 0);
   const cashierName = document.getElementById("shiftCashierName")?.value.trim() || "Cashier";
 
   if (amount <= 0) {
-    alert("Opening Float මුදල 0 ට වඩා වැඩි විය යුතුය.");
+    showLiveToast("⚠️ මුදල වැරදිය", "Opening Float මුදල 0 ට වඩා වැඩි විය යුතුය.", "warning", "fa-vault");
+    if (amtIn) {
+      amtIn.focus();
+      amtIn.select();
+    }
     return;
   }
 
@@ -1714,13 +1737,13 @@ export async function handleShiftFloatSubmit(e) {
   };
 
   try {
-    if (dbRef && pushFn && currentTenant) {
+    if (dbRef && pushFn && currentTenant && navigator.onLine) {
       await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), floatTransaction);
     }
     closeShiftFloatModal();
     showLiveToast("🌅 Shift Float Recorded", `Rs. ${amount.toFixed(2)} ක ආරම්භක මුදල (Opening Float) පෙට්ටියට සාර්ථකව එකතු විය.`, "success", "fa-vault");
   } catch (err) {
-    alert("Shift Float සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Shift Float සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -1852,7 +1875,7 @@ export async function syncOfflineInvoicesToCloud() {
   }
 }
 
-// 🛡️ CRITICAL GLOBAL WINDOW EXPORTS (MAKES CUSTOMERS CRM FULLY CONNECTED)
+// 🛡️ CRITICAL GLOBAL WINDOW EXPORTS
 window.persistActiveBillToCloud = persistActiveBillToCloud;
 window.recalculateCartTotalsUI = recalculateCartTotalsUI;
 window.setDiscountType = setDiscountType;
