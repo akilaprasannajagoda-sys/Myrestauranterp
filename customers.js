@@ -3,13 +3,16 @@
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast, downloadCSVFile } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
 let updateFn = null;
 let removeFn = null;
 let transactionFn = null;
+
+// 🛡️ Double-Submission Lock (පාරිභෝගිකයා දෙපාරක් Save වීම 100% ක් වළක්වයි)
+let isSubmittingCustomer = false;
 
 export function initCustomersContext(dbRefInstance, pushMethod, updateMethod, removeMethod, runTransactionMethod = null) {
   dbRef = dbRefInstance;
@@ -55,11 +58,17 @@ export function openCustomerModal(mode = 'add', customerId = null) {
 
 export function closeCustomerModal() {
   document.getElementById("customerModal")?.classList.add("hidden");
+  isSubmittingCustomer = false;
 }
 
-// 2. SUBMIT / SAVE CUSTOMER RECORD
+// 2. SUBMIT / SAVE CUSTOMER RECORD (WITH DUPLICATE GUARD)
 export async function handleCustomerSubmit(e) {
   if (e) e.preventDefault();
+  
+  // 🛡️ Guard against rapid double-clicks or dual event listener triggers
+  if (isSubmittingCustomer) return;
+  isSubmittingCustomer = true;
+
   const editId = document.getElementById("editCustomerId")?.value;
   const name = document.getElementById("custNameInput")?.value.trim() || "";
   const phone = document.getElementById("custPhoneInput")?.value.trim() || "";
@@ -69,6 +78,7 @@ export async function handleCustomerSubmit(e) {
 
   if (!name || !phone) {
     alert("කරුණාකර පාරිභෝගිකයාගේ නම සහ දුරකථන අංකය ඇතුළත් කරන්න.");
+    isSubmittingCustomer = false;
     return;
   }
 
@@ -88,6 +98,9 @@ export async function handleCustomerSubmit(e) {
     if (dbRef && currentTenant) {
       if (editId && updateFn) {
         await updateFn(dbRef(`tenants/${currentTenant}/customers/${editId}`), customerData);
+        if (erpState.customers && erpState.customers[editId]) {
+          Object.assign(erpState.customers[editId], customerData);
+        }
         showLiveToast("👤 Customer Updated", `${name} ගේ විස්තර සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-user-check");
       } else if (pushFn) {
         // Initial metrics for new customer
@@ -99,8 +112,10 @@ export async function handleCustomerSubmit(e) {
           createdAt: new Date().toISOString()
         };
         const newRef = await pushFn(dbRef(`tenants/${currentTenant}/customers`), newRecord);
+        if (!erpState.customers) erpState.customers = {};
+        erpState.customers[newRef.key] = newRecord;
 
-        // Auto select in POS if called from billing
+        // Auto select in POS if called from billing screen
         const posCustInput = document.getElementById("posCustomerSearchInput");
         if (posCustInput) {
           selectCustomerForCurrentBill(newRef.key);
@@ -113,6 +128,8 @@ export async function handleCustomerSubmit(e) {
     renderCustomersTable();
   } catch (err) {
     alert("පාරිභෝගික විස්තර සේව් කිරීමේදී දෝෂයක්: " + err.message);
+  } finally {
+    isSubmittingCustomer = false;
   }
 }
 
@@ -150,7 +167,7 @@ export function renderCustomersTable() {
   }
 
   tbody.innerHTML = "";
-  // Sort by highest loyalty points or total visits
+  // Sort by highest loyalty points or total spend
   list.sort((a, b) => (parseFloat(b[1].loyaltyPoints || 0)) - (parseFloat(a[1].loyaltyPoints || 0)));
 
   list.forEach(([id, c]) => {
@@ -193,6 +210,7 @@ export async function deleteCustomer(id) {
   if (confirm("මෙම පාරිභෝගිකයා ඉවත් කිරීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/customers/${id}`));
+      if (erpState.customers) delete erpState.customers[id];
       showLiveToast("🗑️ Customer Removed", "පාරිභෝගිකයා සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
       renderCustomersTable();
     }
@@ -253,6 +271,10 @@ export async function submitLoyaltyAdjustment(e) {
         });
       }
 
+      if (erpState.customers[currentAdjustCustomerId]) {
+        erpState.customers[currentAdjustCustomerId].loyaltyPoints = newPoints;
+      }
+
       showLiveToast("⭐ Loyalty Updated", `Points අගය සාර්ථකව යාවත්කාලීන විය. (New Balance: ${newPoints})`, "success", "fa-star");
     }
     closeLoyaltyAdjustModal();
@@ -262,7 +284,7 @@ export async function submitLoyaltyAdjustment(e) {
   }
 }
 
-// 6. POS CUSTOMER SELECTION & REALTIME ATTACHMENT
+// 6. POS CUSTOMER SELECTION & ATTACHMENT (100% LINKED TO ACTIVE BILL)
 export function onPosCustomerSearch(input) {
   const query = (input?.value || "").toLowerCase().trim();
   const dropdown = document.getElementById("posCustomerSearchResults");
@@ -282,9 +304,9 @@ export function onPosCustomerSearch(input) {
 
   if (list.length === 0) {
     dropdown.innerHTML = `
-      <div class="p-2 text-center text-gray-400 text-xs font-bold">
+      <div class="p-2.5 text-center text-gray-400 text-xs font-bold">
         පාරිභෝගිකයා හමු නොවීය.
-        <button type="button" onclick="openCustomerModal('add')" class="text-blue-600 underline block mx-auto mt-1">+ Register New</button>
+        <button type="button" onclick="openCustomerModal('add')" class="text-blue-600 underline block mx-auto mt-1 cursor-pointer">+ Register New Customer</button>
       </div>
     `;
     dropdown.classList.remove("hidden");
@@ -313,6 +335,8 @@ export function selectCustomerForCurrentBill(customerId) {
   const nameLabel = document.getElementById("posSelectedCustomerName");
   const pointsBadge = document.getElementById("posSelectedCustomerPoints");
   const hiddenId = document.getElementById("posAttachedCustomerId");
+  const redeemBox = document.getElementById("posLoyaltyRedeemBox");
+  const redeemInput = document.getElementById("cartLoyaltyRedeemInput");
 
   if (!cust) return;
 
@@ -321,27 +345,41 @@ export function selectCustomerForCurrentBill(customerId) {
   if (nameLabel) nameLabel.innerText = `${cust.name} (${cust.phone})`;
   if (pointsBadge) pointsBadge.innerText = `⭐ ${cust.loyaltyPoints || 0} Points Available`;
   if (badgeContainer) badgeContainer.classList.remove("hidden");
-
-  // Sync to active bill cloud state
-  if (window.persistActiveBillToCloud) {
-    window.persistActiveBillToCloud({
-      customerId: customerId,
-      customerName: cust.name,
-      customerPhone: cust.phone,
-      loyaltyPointsAvailable: cust.loyaltyPoints || 0
-    });
+  if (redeemBox) redeemBox.classList.remove("hidden");
+  if (redeemInput) {
+    redeemInput.value = "";
+    redeemInput.max = cust.loyaltyPoints || 0;
   }
 
-  showLiveToast("👤 Customer Linked", `${cust.name} මෙම බිලට සාර්ථකව සම්බන්ධ කරන ලදී.`, "info", "fa-user-check");
+  // 🛡️ Ensure direct attachment to the Active Bill state in POS
+  const customerLinkData = {
+    customerId: customerId,
+    customerName: cust.name,
+    customerPhone: cust.phone,
+    loyaltyPointsAvailable: cust.loyaltyPoints || 0,
+    loyaltyPointsRedeemed: 0
+  };
+
+  if (window.persistActiveBillToCloud) {
+    window.persistActiveBillToCloud(customerLinkData);
+  }
+
+  if (window.recalculateCartTotalsUI) {
+    window.recalculateCartTotalsUI();
+  }
+
+  showLiveToast("👤 Customer Linked", `${cust.name} (${cust.loyaltyPoints || 0} Pts) මෙම බිලට සම්බන්ධ කරන ලදී.`, "info", "fa-user-check");
 }
 
 export function removeCustomerFromCurrentBill() {
   const badgeContainer = document.getElementById("posSelectedCustomerBadge");
   const hiddenId = document.getElementById("posAttachedCustomerId");
-  if (badgeContainer) badgeContainer.classList.add("hidden");
-  if (hiddenId) hiddenId.value = "";
-
+  const redeemBox = document.getElementById("posLoyaltyRedeemBox");
   const redeemInput = document.getElementById("cartLoyaltyRedeemInput");
+
+  if (badgeContainer) badgeContainer.classList.add("hidden");
+  if (redeemBox) redeemBox.classList.add("hidden");
+  if (hiddenId) hiddenId.value = "";
   if (redeemInput) redeemInput.value = "";
 
   if (window.persistActiveBillToCloud) {
@@ -357,6 +395,8 @@ export function removeCustomerFromCurrentBill() {
   if (window.recalculateCartTotalsUI) {
     window.recalculateCartTotalsUI();
   }
+
+  showLiveToast("👤 Customer Unlinked", "පාරිභෝගිකයා බිලෙන් ඉවත් කරන ලදී.", "info", "fa-user-minus");
 }
 
 // 7. EXPORT CUSTOMERS DIRECTORY TO CSV
@@ -372,7 +412,7 @@ export function exportCustomersToCSV() {
     csv += `"${c.name || ''}","${c.phone || ''}","${c.email || ''}","${c.address || ''}","${c.totalVisits || 0}","${parseFloat(c.totalSpend || 0).toFixed(2)}","${c.loyaltyPoints || 0}","${c.notes || ''}"\n`;
   });
 
-  downloadCSVFile(csv, `Customer_Directory_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSVFile(csv, `Customer_Directory_${getLocalDateString()}.csv`);
 }
 
 // Global Window Exports
