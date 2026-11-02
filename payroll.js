@@ -1,9 +1,9 @@
 // ==========================================================================
-// MODULE 09: STAFF, ATTENDANCE KIOSK (OVERNIGHT SHIFTS SAFE), PAYROLL ENGINE
+// MODULE 09: STAFF, ATTENDANCE KIOSK, USER MANAGEMENT & PAYROLL ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans } from './state.js';
-import { showLiveToast, downloadCSVFile } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
 import { printThermalPayslip } from './printer.js';
 
 let dbRef = null;
@@ -12,6 +12,17 @@ let updateFn = null;
 let removeFn = null;
 let createAuthUserFn = null;
 let wakeLockSentinel = null;
+
+// Offline Attendance Dexie Instance
+let offlineAttDb = null;
+if (typeof Dexie !== 'undefined') {
+  offlineAttDb = new Dexie("RestaurantERP_OfflineDB");
+  offlineAttDb.version(1).stores({
+    offlineInvoices: '++id, invoiceNumber, createdAt, synced',
+    offlinePettyCash: '++id, timestamp, synced',
+    offlineAttendance: '++id, date, synced'
+  });
+}
 
 // Stores current active payslip payload for instant 80mm thermal reprint
 export let activePayslipData = null;
@@ -70,8 +81,17 @@ export async function startKioskCameraStream() {
 export function stopKioskCameraStream() {
   releaseKioskWakeLock();
   if (kioskCameraStream) {
-    kioskCameraStream.getTracks().forEach(t => t.stop());
+    try {
+      kioskCameraStream.getTracks().forEach(t => {
+        t.stop();
+        t.enabled = false;
+      });
+    } catch (e) {}
     setKioskCameraStream(null);
+  }
+  const videoEl = document.getElementById("kioskCameraVideo");
+  if (videoEl) {
+    videoEl.srcObject = null;
   }
 }
 
@@ -92,24 +112,24 @@ export function kioskKeypadBackspace() {
   if (input) input.value = input.value.slice(0, -1);
 }
 
-// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE (2KB Size)
+// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE (~700 Bytes - Zero Database Quota Bloat)
 export function captureInstantCameraSnapshot() {
   const videoEl = document.getElementById("kioskCameraVideo");
   const canvasEl = document.getElementById("kioskSnapshotCanvas");
   if (!videoEl || !canvasEl || !videoEl.videoWidth) return "";
 
   try {
-    canvasEl.width = 90;
-    canvasEl.height = 68;
+    canvasEl.width = 64;
+    canvasEl.height = 48;
     const ctx = canvasEl.getContext("2d");
-    ctx.drawImage(videoEl, 0, 0, 90, 68);
-    return canvasEl.toDataURL("image/jpeg", 0.35);
+    ctx.drawImage(videoEl, 0, 0, 64, 48);
+    return canvasEl.toDataURL("image/jpeg", 0.25);
   } catch (e) {
     return "";
   }
 }
 
-// 🔒 ROBUST ATTENDANCE ENGINE (SUPPORTS OVERNIGHT & MIDNIGHT CROSSOVER SHIFTS)
+// 🔒 ROBUST ATTENDANCE ENGINE (OFFLINE DEXIE SUPPORT + OVERNIGHT SHIFTS SAFE)
 export async function submitKioskAttendance(mode) {
   const pinInput = document.getElementById("kioskPinInput");
   const enteredPin = (pinInput?.value || "").trim();
@@ -132,20 +152,19 @@ export async function submitKioskAttendance(mode) {
   const [empKey, emp] = matchedEmpEntry;
   const snapshotDataUrl = captureInstantCameraSnapshot();
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
+  const dateStr = getLocalDateString(now);
   const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const stdShift = parseFloat(erpState.settings?.shiftHours || 8.0);
 
-  // Find any active uncompleted Check-In record (Within the last 36 hours for overnight shifts)
   const openAttendanceEntries = Object.entries(erpState.attendance || {}).filter(([k, a]) => {
     if (a.employeeId !== empKey) return false;
     if (a.status !== "Present" || a.outTime) return false;
     const inTimeMs = new Date(a.inTimestamp || (a.date + " " + (a.inTime || "00:00"))).getTime();
+    if (isNaN(inTimeMs)) return false;
     const hoursElapsed = (now.getTime() - inTimeMs) / (1000 * 60 * 60);
-    return hoursElapsed <= 36; // Valid open shift window
+    return hoursElapsed <= 36;
   });
 
-  // Sort to pick the latest open Check-In
   openAttendanceEntries.sort((a, b) => new Date(b[1].inTimestamp || b[1].createdAt).getTime() - new Date(a[1].inTimestamp || a[1].createdAt).getTime());
   const activeOpenRecord = openAttendanceEntries.length > 0 ? openAttendanceEntries[0] : null;
 
@@ -174,12 +193,20 @@ export async function submitKioskAttendance(mode) {
         createdAt: now.toISOString()
       };
 
-      if (dbRef && pushFn && currentTenant) {
-        await pushFn(dbRef(`tenants/${currentTenant}/attendance`), newRecord);
+      if (navigator.onLine && dbRef && pushFn && currentTenant) {
+        const attRef = await pushFn(dbRef(`tenants/${currentTenant}/attendance`), newRecord);
+        if (!erpState.attendance) erpState.attendance = {};
+        erpState.attendance[attRef.key] = newRecord;
+        showLiveToast("🟢 Check-In Successful", `${emp.name} (${emp.role}) පැමිණීම සටහන් විය.`, "success", "fa-circle-check");
+      } else if (offlineAttDb) {
+        const tempKey = "offline_att_" + Date.now();
+        await offlineAttDb.offlineAttendance.add({ ...newRecord, synced: 0 });
+        if (!erpState.attendance) erpState.attendance = {};
+        erpState.attendance[tempKey] = newRecord;
+        showLiveToast("⚠️ Check-In Saved Offline", `${emp.name} පැමිණීම Offline සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
       }
-      showLiveToast("🟢 Check-In Successful", `${emp.name} (${emp.role}) පැමිණීම සටහන් විය.`, "success", "fa-circle-check");
+
     } else {
-      // Check-Out Action
       if (!activeOpenRecord) {
         alert(`⚠️ ${emp.name} සක්‍රීය Check-In එකක් හමු නොවීය. කරුණාකර පළමුව Check-In වන්න.`);
         if (pinInput) pinInput.value = "";
@@ -192,19 +219,33 @@ export async function submitKioskAttendance(mode) {
       const workedHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
       const otHours = Math.max(0, workedHours - stdShift);
 
-      if (dbRef && updateFn && currentTenant) {
-        await updateFn(dbRef(`tenants/${currentTenant}/attendance/${existingAttKey}`), {
-          outTime: timeStr,
-          outTimestamp: now.toISOString(),
-          outDate: dateStr, // Captures cross-day checkout date
-          outSnapshot: snapshotDataUrl,
-          totalWorkedHours: parseFloat(workedHours.toFixed(2)),
-          otHours: parseFloat(otHours.toFixed(2)),
-          status: "Completed"
-        });
-      }
+      const updateData = {
+        outTime: timeStr,
+        outTimestamp: now.toISOString(),
+        outDate: dateStr,
+        outSnapshot: snapshotDataUrl,
+        totalWorkedHours: parseFloat(workedHours.toFixed(2)),
+        otHours: parseFloat(otHours.toFixed(2)),
+        status: "Completed"
+      };
 
-      showLiveToast("🔴 Check-Out Successful", `${emp.name} පිටවීම සටහන් විය. (${workedHours.toFixed(1)} hrs worked)`, "success", "fa-door-open");
+      if (navigator.onLine && dbRef && updateFn && currentTenant) {
+        await updateFn(dbRef(`tenants/${currentTenant}/attendance/${existingAttKey}`), updateData);
+        if (erpState.attendance && erpState.attendance[existingAttKey]) {
+          Object.assign(erpState.attendance[existingAttKey], updateData);
+        }
+        showLiveToast("🔴 Check-Out Successful", `${emp.name} පිටවීම සටහන් විය. (${workedHours.toFixed(1)} hrs worked)`, "success", "fa-door-open");
+      } else if (offlineAttDb) {
+        await offlineAttDb.offlineAttendance.add({
+          ...attRec,
+          ...updateData,
+          synced: 0
+        });
+        if (erpState.attendance && erpState.attendance[existingAttKey]) {
+          Object.assign(erpState.attendance[existingAttKey], updateData);
+        }
+        showLiveToast("⚠️ Check-Out Saved Offline", `${emp.name} පිටවීම Offline සුරැකිණි.`, "warning", "fa-floppy-disk");
+      }
     }
 
     todayLiveScans.unshift({
@@ -216,12 +257,31 @@ export async function submitKioskAttendance(mode) {
       type: mode === 'in' ? '🟢 Check-In' : '🔴 Check-Out'
     });
 
+    if (todayLiveScans.length > 50) {
+      todayLiveScans.pop();
+    }
+
     renderTodayLiveScansTable();
     if (pinInput) pinInput.value = "";
   } catch (err) {
     alert("Attendance සේව් කිරීමේදී දෝෂයක්: " + err.message);
   }
 }
+
+export async function syncOfflineAttendanceToCloud() {
+  if (!navigator.onLine || !offlineAttDb || !dbRef || !pushFn || !currentTenant) return;
+  try {
+    const unsynced = await offlineAttDb.offlineAttendance.where("synced").equals(0).toArray();
+    for (const rec of unsynced) {
+      const cleanRec = { ...rec };
+      delete cleanRec.id;
+      delete cleanRec.synced;
+      await pushFn(dbRef(`tenants/${currentTenant}/attendance`), cleanRec);
+      await offlineAttDb.offlineAttendance.delete(rec.id);
+    }
+  } catch (e) {}
+}
+window.addEventListener("online", syncOfflineAttendanceToCloud);
 
 export function renderTodayLiveScansTable() {
   const tbody = document.getElementById("todayLiveScansTableBody");
@@ -347,39 +407,129 @@ export async function handleEmployeeSubmit(e) {
     if (dbRef && currentTenant) {
       if (editId && updateFn) {
         await updateFn(dbRef(`tenants/${currentTenant}/employees/${editId}`), empData);
+        if (erpState.employees && erpState.employees[editId]) {
+          Object.assign(erpState.employees[editId], empData);
+        }
       } else if (pushFn) {
-        await pushFn(dbRef(`tenants/${currentTenant}/employees`), empData);
+        const newEmpRef = await pushFn(dbRef(`tenants/${currentTenant}/employees`), empData);
+        if (!erpState.employees) erpState.employees = {};
+        erpState.employees[newEmpRef.key] = empData;
       }
     }
     closeEmployeeModal();
+    renderEmployeesTable();
     showLiveToast("👤 Employee Saved", `${empData.name} (${empData.role}) සාර්ථකව සේව් විය.`, "success", "fa-user-check");
   } catch (err) {
     alert("සේවක විස්තර සේව් කිරීමේදී දෝෂයක්: " + err.message);
   }
 }
 
-// 4. STAFF SYSTEM USER LOGIN MANAGEMENT
+// ==========================================================================
+// 4. ⭐ ADVANCED USER MANAGEMENT & GRANULAR PERMISSIONS ENGINE (FREEZE-PROOF)
+// ==========================================================================
+
+// All available access modules in the Restaurant ERP system
+export const systemModulesList = [
+  { id: "pos", name: "POS & Billing", icon: "fa-cash-register" },
+  { id: "tables", name: "Floor Plan & Tables", icon: "fa-chair" },
+  { id: "kitchen", name: "Kitchen Display (KDS)", icon: "fa-fire-burner" },
+  { id: "menu", name: "Menu & BOM Recipes", icon: "fa-bowl-food" },
+  { id: "inventory", name: "Raw Materials & Stock", icon: "fa-boxes-stacked" },
+  { id: "suppliersGrn", name: "Suppliers & GRN Supply", icon: "fa-truck-ramp-box" },
+  { id: "customers", name: "Customers & Loyalty CRM", icon: "fa-users" },
+  { id: "pettyCash", name: "Petty Cash Book", icon: "fa-wallet" },
+  { id: "shiftHandover", name: "Shift Handover (X-Report)", icon: "fa-arrows-split-up-and-left" },
+  { id: "dayEnd", name: "Day-End Cash (Z-Report)", icon: "fa-vault" },
+  { id: "faceScan", name: "Attendance Kiosk", icon: "fa-camera" },
+  { id: "employees", name: "Staff & Payroll Management", icon: "fa-users-gear" },
+  { id: "reports", name: "Reports & Financial Analytics", icon: "fa-chart-line" },
+  { id: "settings", name: "Settings & System Backup", icon: "fa-gear" }
+];
+
+export function applyStaffRolePreset(preset) {
+  const roleSelect = document.getElementById("staffLoginRoleSelect");
+  if (roleSelect && preset !== "custom") {
+    roleSelect.value = preset;
+  }
+
+  // Clear all checkboxes first
+  systemModulesList.forEach(m => {
+    const cb = document.getElementById(`perm_${m.id}`);
+    if (cb) cb.checked = false;
+  });
+
+  const presetMaps = {
+    cashier: ["pos", "tables", "customers", "shiftHandover"],
+    cook: ["kitchen"],
+    waiter: ["tables", "pos"],
+    manager: ["pos", "tables", "kitchen", "menu", "inventory", "suppliersGrn", "customers", "pettyCash", "shiftHandover", "dayEnd", "reports"],
+    admin: systemModulesList.map(m => m.id)
+  };
+
+  const selectedList = presetMaps[preset] || presetMaps.cashier;
+  selectedList.forEach(modId => {
+    const cb = document.getElementById(`perm_${modId}`);
+    if (cb) cb.checked = true;
+  });
+}
+window.applyStaffRolePreset = applyStaffRolePreset;
+
 export function openStaffLoginModal(empId) {
   const emp = erpState.employees[empId];
   if (!emp) return;
 
   const keyInput = document.getElementById("staffLoginEmpKey");
   const nameLabel = document.getElementById("staffLoginEmpName");
+  const modalTitle = document.getElementById("staffLoginModalTitle");
   const roleSelect = document.getElementById("staffLoginRoleSelect");
   const emailInput = document.getElementById("staffLoginEmail");
   const passInput = document.getElementById("staffLoginPassword");
+  const passHelp = document.getElementById("staffLoginPassHelp");
+  const submitBtn = document.getElementById("saveStaffLoginBtn");
+
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save Permissions`;
+  }
 
   if (keyInput) keyInput.value = empId;
-  if (nameLabel) nameLabel.innerText = `Employee: ${emp.name} (${emp.empId || 'EMP'})`;
+  if (nameLabel) nameLabel.innerText = `${emp.name} (${emp.empId || 'EMP'}) - Role: ${emp.role || 'Staff'}`;
+
+  const hasLogin = !!emp.hasSystemLogin;
+  if (modalTitle) {
+    modalTitle.innerHTML = hasLogin 
+      ? `<i class="fa-solid fa-user-gear text-blue-600"></i> Manage Staff Login & Access Permissions`
+      : `<i class="fa-solid fa-user-plus text-blue-600"></i> Create Staff Login & Assign Permissions`;
+  }
 
   let defRole = "cashier";
   if (emp.role === "Cook") defRole = "cook";
   else if (emp.role === "Waiter") defRole = "waiter";
-  else if (emp.role === "Manager") defRole = "owner";
+  else if (emp.role === "Manager") defRole = "manager";
 
   if (roleSelect) roleSelect.value = emp.systemRole || defRole;
-  if (emailInput) emailInput.value = emp.loginEmail || "";
+  if (emailInput) {
+    emailInput.value = emp.loginEmail || "";
+    // If login already exists, email is preserved
+    emailInput.disabled = hasLogin;
+  }
   if (passInput) passInput.value = "";
+
+  if (passHelp) {
+    passHelp.innerText = hasLogin 
+      ? "මුරපදය වෙනස් කිරීමට අවශ්‍ය නම් පමණක් නව Password එකක් ඇතුළත් කරන්න (නැතහොත් හිස්ව තබන්න)." 
+      : "අවම වශයෙන් ඉලක්කම් 6ක මුරපදයක් (Password) ඇතුළත් කරන්න.";
+  }
+
+  // Load existing granular permissions or apply default preset
+  if (emp.permissions && typeof emp.permissions === "object") {
+    systemModulesList.forEach(m => {
+      const cb = document.getElementById(`perm_${m.id}`);
+      if (cb) cb.checked = !!emp.permissions[m.id];
+    });
+  } else {
+    applyStaffRolePreset(emp.systemRole || defRole);
+  }
 
   document.getElementById("staffLoginModal")?.classList.remove("hidden");
 }
@@ -389,36 +539,98 @@ export function closeStaffLoginModal() {
 }
 
 export async function handleStaffLoginSubmit(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   const empId = document.getElementById("staffLoginEmpKey")?.value;
   const sysRole = document.getElementById("staffLoginRoleSelect")?.value || "cashier";
   const email = document.getElementById("staffLoginEmail")?.value.trim() || "";
   const password = document.getElementById("staffLoginPassword")?.value || "";
+  const submitBtn = document.getElementById("saveStaffLoginBtn");
 
-  if (!empId || !email || !password) return;
-
+  if (!empId) return;
   const emp = erpState.employees[empId];
+  if (!emp) return;
+
+  const hasLogin = !!emp.hasSystemLogin;
+
+  if (!hasLogin && (!email || !password || password.length < 6)) {
+    alert("කරුණාකර වලංගු Email ලිපිනයක් සහ අවම වශයෙන් ඉලක්කම් 6 ක Password එකක් ඇතුළත් කරන්න.");
+    return;
+  }
+
+  // Collect Granular Module Permissions
+  const permissions = {};
+  systemModulesList.forEach(m => {
+    const cb = document.getElementById(`perm_${m.id}`);
+    permissions[m.id] = cb ? cb.checked : false;
+  });
+
+  // Ensure at least one module is selected
+  const hasAnyPermission = Object.values(permissions).some(v => v === true);
+  if (!hasAnyPermission) {
+    alert("කරුණාකර මෙම සේවකයාට අවම වශයෙන් එක් Module එකක්වත් තෝරා දෙන්න (Check කරන්න).");
+    return;
+  }
 
   try {
-    if (createAuthUserFn) {
-      await createAuthUserFn(email, password, sysRole, emp?.name || "Staff", currentTenant);
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
     }
 
+    let authUid = emp.authUid || null;
+
+    // 1. If Brand New Login Account: Create Firebase Auth User
+    if (!hasLogin) {
+      if (createAuthUserFn) {
+        authUid = await createAuthUserFn(email, password, sysRole, emp.name, currentTenant, permissions);
+      }
+    } else {
+      // 2. If Updating Existing Account: Update Permissions & Role directly in DB
+      if (authUid && dbRef && updateFn) {
+        await updateFn(dbRef(`users/${authUid}`), {
+          role: sysRole,
+          permissions: permissions,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // 3. Update Employee Profile in Tenant Database
     if (dbRef && updateFn && currentTenant) {
-      await updateFn(dbRef(`tenants/${currentTenant}/employees/${empId}`), {
-        loginEmail: email,
+      const updateData = {
+        loginEmail: email || emp.loginEmail,
         systemRole: sysRole,
-        hasSystemLogin: true
-      });
+        hasSystemLogin: true,
+        permissions: permissions
+      };
+      if (authUid) updateData.authUid = authUid;
+
+      await updateFn(dbRef(`tenants/${currentTenant}/employees/${empId}`), updateData);
+
+      if (erpState.employees && erpState.employees[empId]) {
+        Object.assign(erpState.employees[empId], updateData);
+      }
     }
 
     closeStaffLoginModal();
-    showLiveToast("🔑 Staff Login Created", `${emp ? emp.name : 'Staff'} සඳහා ${sysRole.toUpperCase()} Login එක සාර්ථකව සාදන ලදී.`, "success", "fa-user-lock");
+    renderEmployeesTable();
+    showLiveToast("🔑 Access Permissions Saved", `${emp.name} සඳහා අනුමත Modules සහ Login සාර්ථකව සුරැකිණි.`, "success", "fa-user-check");
+
   } catch (err) {
-    alert("Login සෑදීමේදී දෝෂයක්: " + err.message);
+    let msg = err.message || "Failed to update login";
+    if (err.code === "auth/email-already-in-use") {
+      msg = "මෙම Email ලිපිනය දැනටමත් වෙනත් සේවකයෙකු සඳහා ලියාපදිංචි කර ඇත. කරුණාකර වෙනත් Email එකක් යොදන්න.";
+    }
+    alert("දෝෂයක්: " + msg);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save Permissions`;
+    }
   }
 }
 
+// 🔒 PIN MASKED SECURE EMPLOYEE DIRECTORY TABLE
 export function renderEmployeesTable() {
   const tbody = document.getElementById("employeesTableBody");
   if (!tbody) return;
@@ -453,6 +665,7 @@ export function renderEmployeesTable() {
     };
 
     const hasLogin = !!emp.hasSystemLogin;
+    const activePermsCount = emp.permissions ? Object.values(emp.permissions).filter(v => v === true).length : 0;
 
     const tr = document.createElement("tr");
     tr.className = "hover:bg-gray-50 border-b border-gray-100";
@@ -460,16 +673,25 @@ export function renderEmployeesTable() {
       <td class="p-3.5 font-mono font-bold text-blue-600">${emp.empId || 'EMP'}</td>
       <td class="p-3.5">
         <span class="font-bold text-gray-800 block">${emp.name}</span>
-        ${hasLogin ? `<span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">Login: ${emp.systemRole || 'user'}</span>` : ''}
+        ${
+          hasLogin 
+            ? `<span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded inline-block mt-0.5">
+                <i class="fa-solid fa-key text-[8px] mr-0.5"></i> ${emp.systemRole || 'user'} (${activePermsCount} modules)
+              </span>`
+            : `<span class="text-[9px] bg-gray-100 text-gray-500 font-semibold px-1.5 py-0.2 rounded inline-block mt-0.5">No System Login</span>`
+        }
       </td>
       <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${roleColors[emp.role] || 'bg-gray-100 text-gray-800'}">${emp.role}</span></td>
       <td class="p-3.5 text-gray-500">${emp.phone}</td>
-      <td class="p-3.5 font-mono font-bold text-pink-600">PIN: ${emp.password || '----'}</td>
+      <td class="p-3.5 font-mono">
+        <span class="tracking-widest font-black text-xs text-pink-700 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100 select-none">••••</span>
+        <span class="text-[9px] text-gray-400 block font-normal mt-0.5">Protected PIN</span>
+      </td>
       <td class="p-3.5 font-bold text-emerald-600">Rs. ${parseFloat(emp.salary || 0).toFixed(2)}</td>
       <td class="p-3.5 font-bold text-blue-600">Rs. ${parseFloat(emp.otRate || 0).toFixed(2)}</td>
       <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
-        <button onclick="openStaffLoginModal('${id}')" title="Create / Manage System Login" class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-200 px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer">
-          <i class="fa-solid fa-key mr-0.5"></i> Login
+        <button onclick="openStaffLoginModal('${id}')" title="Manage Staff Login & Access Permissions" class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer">
+          <i class="fa-solid fa-user-shield mr-0.5"></i> Permissions
         </button>
         <button onclick="openEmployeeModal('edit', '${id}')" class="text-blue-600 hover:text-blue-800 p-1 cursor-pointer"><i class="fa-solid fa-pen"></i></button>
         <button onclick="deleteEmployee('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
@@ -483,7 +705,9 @@ export async function deleteEmployee(id) {
   if (confirm("මෙම සේවකයා ඉවත් කිරීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/employees/${id}`));
+      if (erpState.employees) delete erpState.employees[id];
       showLiveToast("🗑️ Employee Removed", "සේවකයා සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
+      renderEmployeesTable();
     }
   }
 }
@@ -494,25 +718,24 @@ export function setAttendancePeriodPreset(preset) {
   const toEl = document.getElementById("attFilterToDate");
   if (!fromEl || !toEl) return;
   const now = new Date();
-  const formatDate = (d) => d.toISOString().split("T")[0];
 
   if (preset === "today") {
-    fromEl.value = formatDate(now);
-    toEl.value = formatDate(now);
+    fromEl.value = getLocalDateString(now);
+    toEl.value = getLocalDateString(now);
   } else if (preset === "yesterday") {
     const y = new Date(now.setDate(now.getDate() - 1));
-    fromEl.value = formatDate(y);
-    toEl.value = formatDate(y);
+    fromEl.value = getLocalDateString(y);
+    toEl.value = getLocalDateString(y);
   } else if (preset === "thisWeek") {
     const cur = new Date();
     const first = new Date(cur.setDate(cur.getDate() - cur.getDay()));
-    fromEl.value = formatDate(first);
-    toEl.value = formatDate(new Date());
+    fromEl.value = getLocalDateString(first);
+    toEl.value = getLocalDateString(new Date());
   } else if (preset === "thisMonth") {
     const first = new Date(now.getFullYear(), now.getMonth(), 1);
     const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    fromEl.value = formatDate(first);
-    toEl.value = formatDate(last);
+    fromEl.value = getLocalDateString(first);
+    toEl.value = getLocalDateString(last);
   } else if (preset === "all") {
     fromEl.value = "";
     toEl.value = "";
@@ -602,7 +825,9 @@ export async function deleteAttendanceRecord(id) {
   if (confirm("මෙම Attendance සටහන මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/attendance/${id}`));
+      if (erpState.attendance) delete erpState.attendance[id];
       showLiveToast("🗑️ Attendance Removed", "පැමිණීමේ සටහන සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
+      renderAttendanceLogsTable();
     }
   }
 }
@@ -622,14 +847,14 @@ export function exportAttendanceToCSV() {
     }
   });
 
-  downloadCSVFile(csv, `Attendance_Logs_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSVFile(csv, `Attendance_Logs_${getLocalDateString()}.csv`);
 }
 
 // 6. SALARY ADVANCES & MONTHLY PAYROLL
 export function openSalaryAdvanceModal() {
   document.getElementById("salaryAdvanceForm")?.reset();
   const dIn = document.getElementById("advDate");
-  if (dIn) dIn.value = new Date().toISOString().split("T")[0];
+  if (dIn) dIn.value = getLocalDateString();
   populateSalaryAdvanceEmployeeDropdown();
   document.getElementById("salaryAdvanceModal")?.classList.remove("hidden");
 }
@@ -667,7 +892,9 @@ export async function handleSalaryAdvanceSubmit(e) {
 
   try {
     if (dbRef && pushFn && currentTenant) {
-      await pushFn(dbRef(`tenants/${currentTenant}/salaryAdvances`), advRecord);
+      const advRef = await pushFn(dbRef(`tenants/${currentTenant}/salaryAdvances`), advRecord);
+      if (!erpState.salaryAdvances) erpState.salaryAdvances = {};
+      erpState.salaryAdvances[advRef.key] = advRecord;
     }
     closeSalaryAdvanceModal();
     showLiveToast("💸 Advance Recorded", `Rs. ${amount.toFixed(2)} ක වැටුප් අත්තිකාරම් මුදල සාර්ථකව සටහන් විය.`, "success", "fa-hand-holding-dollar");
@@ -765,7 +992,6 @@ export function printEmployeePayslip(empId, monthStr, daysWorked, basic, otHours
   const emp = erpState.employees[empId];
   if (!emp) return;
 
-  // Cache data for instant thermal print
   activePayslipData = {
     empId: emp.empId || 'EMP',
     empName: emp.name,
@@ -780,7 +1006,6 @@ export function printEmployeePayslip(empId, monthStr, daysWorked, basic, otHours
     netSalary: netSalary
   };
 
-  // Populate on-screen preview modal
   const mLabel = document.getElementById("payslipMonthLabel");
   const nameLabel = document.getElementById("payslipEmpName");
   const roleLabel = document.getElementById("payslipEmpIdRole");
@@ -810,7 +1035,6 @@ export function printEmployeePayslip(empId, monthStr, daysWorked, basic, otHours
   document.getElementById("payslipModal")?.classList.remove("hidden");
 }
 
-// Dedicated 80mm Pure Thermal Print trigger (Stops runaway paper roll and blur)
 export async function printActiveThermalPayslip() {
   if (!activePayslipData) return;
   await printThermalPayslip(activePayslipData);
@@ -821,7 +1045,7 @@ export function closePayslipModal() {
 }
 
 export function exportPayrollToCSV() {
-  const month = document.getElementById("payrollMonthSelect")?.value || new Date().toISOString().split("T")[0].substring(0, 7);
+  const month = document.getElementById("payrollMonthSelect")?.value || getLocalDateString().substring(0, 7);
   const rows = document.querySelectorAll("#payrollTableBody tr");
 
   if (rows.length === 0) {
@@ -841,6 +1065,7 @@ export function exportPayrollToCSV() {
 }
 
 // Global Window Exports
+window.applyStaffRolePreset = applyStaffRolePreset;
 window.kioskKeypadPress = kioskKeypadPress;
 window.kioskKeypadClear = kioskKeypadClear;
 window.kioskKeypadBackspace = kioskKeypadBackspace;
