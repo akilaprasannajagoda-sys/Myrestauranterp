@@ -1,9 +1,9 @@
 // ==========================================================================
-// MODULE 05: RAW MATERIALS, PRODUCT INVENTORY, STORE ISSUE (DEPT SAFE) & WASTAGE ENGINE
+// MODULE 05: RAW MATERIALS, PRODUCT INVENTORY, STORE ISSUE & WASTAGE ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast, downloadCSVFile } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -22,13 +22,11 @@ export function initInventoryContext(dbRefInstance, pushMethod, updateMethod, re
 
 // 🔒 COLLISION-PROOF UNIQUE STORE ISSUE NUMBER GENERATOR
 export function generateCollisionProofIssueNumber() {
+  const dStr = getLocalDateString().replace(/-/g, '').slice(2);
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
   const timePart = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0');
   const salt = String(Math.floor(10 + Math.random() * 90));
-  return `ISS-${yy}${mm}${dd}-${timePart}${salt}`;
+  return `ISS-${dStr}-${timePart}${salt}`;
 }
 
 // 🔄 SUB-TAB SWITCHER: STOCK VS STORE ISSUE HISTORY
@@ -55,7 +53,7 @@ export function switchInventorySubTab(tabName) {
       fromDateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     }
     if (toDateInput && !toDateInput.value) {
-      toDateInput.value = new Date().toISOString().split("T")[0];
+      toDateInput.value = getLocalDateString();
     }
     renderStoreIssueHistoryTable();
   } else {
@@ -74,6 +72,7 @@ export function switchInventorySubTab(tabName) {
 // 1. RAW MATERIAL CATEGORIES
 export function openRawCategoryModal() {
   document.getElementById("rawCategoryModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("newRawCategoryName")?.focus(), 50);
 }
 
 export function closeRawCategoryModal() {
@@ -82,10 +81,17 @@ export function closeRawCategoryModal() {
 
 export async function handleAddRawCategorySubmit(e) {
   e.preventDefault();
-  const name = document.getElementById("newRawCategoryName")?.value.trim();
-  if (!name || !dbRef || !pushFn || !currentTenant) return;
-  await pushFn(dbRef(`tenants/${currentTenant}/rawCategories`), { name });
   const input = document.getElementById("newRawCategoryName");
+  const name = input?.value.trim();
+  
+  if (!name) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර Category නම ඇතුළත් කරන්න.", "warning", "fa-tag");
+    if (input) input.focus();
+    return;
+  }
+
+  if (!dbRef || !pushFn || !currentTenant) return;
+  await pushFn(dbRef(`tenants/${currentTenant}/rawCategories`), { name });
   if (input) input.value = "";
   showLiveToast("📦 Category Added", `"${name}" Category එක සාර්ථකව එකතු විය.`, "success", "fa-tags");
 }
@@ -155,6 +161,7 @@ export function openRawItemModal(mode, rawId = null) {
     if (title) title.innerText = "Add Material Product";
   }
   modal?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("rawNameInput")?.focus(), 50);
 }
 
 export function closeRawItemModal() {
@@ -164,14 +171,21 @@ export function closeRawItemModal() {
 export async function handleRawItemSubmit(e) {
   e.preventDefault();
   const rawId = document.getElementById("editRawId")?.value;
+  const nameIn = document.getElementById("rawNameInput");
   const rawData = {
-    name: document.getElementById("rawNameInput")?.value.trim() || "",
+    name: nameIn?.value.trim() || "",
     category: document.getElementById("rawCategorySelect")?.value || "",
     unit: document.getElementById("rawUnitSelect")?.value || "kg",
     cost: parseFloat(document.getElementById("rawCostInput")?.value || 0),
     stock: parseFloat(document.getElementById("rawStockInput")?.value || 0),
     reorderLevel: 3.0
   };
+
+  if (!rawData.name) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර අමුද්‍රව්‍යයේ නම ඇතුළත් කරන්න.", "warning", "fa-boxes-stacked");
+    if (nameIn) nameIn.focus();
+    return;
+  }
   
   if (dbRef && currentTenant) {
     if (rawId && updateFn) {
@@ -263,7 +277,7 @@ export function openStoreIssueModal() {
   const dIn = document.getElementById("issueDate");
   const deptIn = document.getElementById("issueDepartment");
   const hIn = document.getElementById("issueHandledBy");
-  if (dIn) dIn.value = new Date().toISOString().split("T")[0];
+  if (dIn) dIn.value = getLocalDateString();
   if (deptIn) deptIn.value = "Kitchen";
   if (hIn) hIn.value = "Head Cook / Store Keeper";
 
@@ -352,7 +366,7 @@ export function filterStoreIssueRowSelect(input) {
 
 export async function handleStoreIssueSubmit(e) {
   if (e) e.preventDefault();
-  const date = document.getElementById("issueDate")?.value || new Date().toISOString().split("T")[0];
+  const date = document.getElementById("issueDate")?.value || getLocalDateString();
   const department = document.getElementById("issueDepartment")?.value || "Kitchen";
   const handledBy = document.getElementById("issueHandledBy")?.value.trim() || "Store Keeper";
   const note = document.getElementById("issueNote")?.value.trim() || "";
@@ -377,7 +391,7 @@ export async function handleStoreIssueSubmit(e) {
   });
 
   if (items.length === 0) {
-    alert("කරුණාකර අවම වශයෙන් එක් අමුද්‍රව්‍යයක්වත් තෝරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර අවම වශයෙන් එක් අමුද්‍රව්‍යයක්වත් තෝරන්න.", "warning", "fa-boxes-stacked");
     return;
   }
 
@@ -423,7 +437,7 @@ export async function handleStoreIssueSubmit(e) {
     
     switchInventorySubTab("issues");
   } catch (err) {
-    alert("Store Issue සටහන් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Store Issue සටහන් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -553,7 +567,7 @@ export function exportStoreIssuesToCSV() {
   if (deptFilter !== "ALL") list = list.filter(([id, iss]) => (iss.department || "Kitchen") === deptFilter);
 
   if (list.length === 0) {
-    alert("Export කිරීමට Store Issue දත්ත නොමැත.");
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Store Issue දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
 
@@ -563,7 +577,7 @@ export function exportStoreIssuesToCSV() {
     csv += `"${iss.issueNumber || ''}","${iss.date || ''}","${iss.department || 'Kitchen'}","${iss.handledBy || ''}","${itemsStr}","${parseFloat(iss.totalIssuedCost || 0).toFixed(2)}","${iss.note || ''}"\n`;
   });
 
-  downloadCSVFile(csv, `Store_Issues_${deptFilter}_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSVFile(csv, `Store_Issues_${deptFilter}_${getLocalDateString()}.csv`);
 }
 
 // 7. MULTI-ITEM KITCHEN WASTAGE ENGINE
@@ -571,7 +585,7 @@ export function openWastageModal() {
   document.getElementById("wastageForm")?.reset();
   const dIn = document.getElementById("wastageDate");
   const rIn = document.getElementById("wastageReportedBy");
-  if (dIn) dIn.value = new Date().toISOString().split("T")[0];
+  if (dIn) dIn.value = getLocalDateString();
   if (rIn) rIn.value = "Head Cook";
   
   const container = document.getElementById("wastageItemsContainer");
@@ -625,7 +639,7 @@ export function addWastageItemRow() {
 
 export async function handleWastageSubmit(e) {
   if (e) e.preventDefault();
-  const date = document.getElementById("wastageDate")?.value;
+  const date = document.getElementById("wastageDate")?.value || getLocalDateString();
   const reportedBy = document.getElementById("wastageReportedBy")?.value.trim() || "Staff";
   const generalNote = document.getElementById("wastageGeneralNote")?.value.trim() || "";
 
@@ -649,7 +663,7 @@ export async function handleWastageSubmit(e) {
   });
 
   if (items.length === 0) {
-    alert("කරුණාකර අවම වශයෙන් එක් අමුද්‍රව්‍යයක්වත් තෝරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර අවම වශයෙන් එක් අමුද්‍රව්‍යයක්වත් තෝරන්න.", "warning", "fa-trash-can");
     return;
   }
 
@@ -685,7 +699,7 @@ export async function handleWastageSubmit(e) {
     closeWastageModal();
     showLiveToast("🗑️ Wastage Deducted", "නරක් වූ අමුද්‍රව්‍ය තොගයෙන් සාර්ථකව අඩු කරන ලදී.", "warning", "fa-trash-can");
   } catch (err) {
-    alert("Wastage සටහන් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Wastage සටහන් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
