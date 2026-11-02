@@ -1,6 +1,6 @@
 // ==========================================================================
 // RESTAURANT ERP - ENTERPRISE 10/10 ZERO-LAG HIGH-SPEED RESTAURANT PLATFORM
-// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HOT/COLD DATA BOUNDED)
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HOT/COLD DATA BOUNDED & AUTO-PRUNED)
 // ==========================================================================
 
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -36,7 +36,7 @@ import {
 } from './state.js';
 
 import { 
-  showLiveToast, toggleNotificationPanel, clearAllNotifications, manualPurgeSystemMemory, sendInvoiceViaWhatsApp, triggerAudioAlert 
+  showLiveToast, toggleNotificationPanel, clearAllNotifications, manualPurgeSystemMemory, sendInvoiceViaWhatsApp, triggerAudioAlert, getLocalDateString 
 } from './utils.js';
 
 import * as PettyCash from './pettycash.js';
@@ -68,6 +68,54 @@ const authInstance = getAuth(appInstance);
 const dbInstance = getDatabase(appInstance);
 const dbRef = (path) => ref(dbInstance, path);
 
+// 🛡️ MEMORY LEAK UNSUBSCRIBE TRACKER
+let activeFirebaseUnsubscribers = [];
+
+export function clearAllFirebaseStreams() {
+  activeFirebaseUnsubscribers.forEach(unsub => {
+    try {
+      if (typeof unsub === 'function') unsub();
+    } catch (e) {}
+  });
+  activeFirebaseUnsubscribers = [];
+}
+window.clearAllFirebaseStreams = clearAllFirebaseStreams;
+
+// 🛡️ PRE-LOAD LOCAL CACHED MENU ON APPLICATION STARTUP (TRUE OFFLINE BOOT)
+try {
+  const cachedDishes = localStorage.getItem("cached_erp_dishes");
+  const cachedCats = localStorage.getItem("cached_erp_dishCategories");
+  if (cachedDishes) erpState.dishes = JSON.parse(cachedDishes);
+  if (cachedCats) erpState.dishCategories = JSON.parse(cachedCats);
+} catch (e) {}
+
+// Store logged in staff member's specific permissions
+let currentStaffPermissions = null;
+
+// 🖨️ AUTO-DETECT WINDOWS PRINTERS INTO SETTINGS
+export async function loadInstalledPrintersToUI() {
+  const datalist = document.getElementById("installedPrintersList");
+  if (!datalist) return;
+
+  try {
+    if (window.electronAPI && window.electronAPI.getPrinters) {
+      const printers = await window.electronAPI.getPrinters();
+      if (printers && Array.isArray(printers)) {
+        datalist.innerHTML = "";
+        printers.forEach(p => {
+          const option = document.createElement("option");
+          option.value = p.name;
+          option.innerText = `${p.name} ${p.isDefault ? '(Default Printer)' : ''}`;
+          datalist.appendChild(option);
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Printers fetch bypass:", err.message);
+  }
+}
+window.loadInstalledPrintersToUI = loadInstalledPrintersToUI;
+
 // --- TERMINAL PAIRING SECURITY ENGINE ---
 function updateDeviceTerminalBadgeUI() {
   const badgeText = document.getElementById("deviceTerminalText");
@@ -84,8 +132,8 @@ function updateDeviceTerminalBadgeUI() {
   }
 }
 
-// 🔒 BULLETPROOF SECONDARY AUTH ENGINE
-async function createStaffAuthAccount(email, password, role, staffName, tenantId) {
+// 🔒 BULLETPROOF SECONDARY AUTH ENGINE WITH GRANULAR PERMISSIONS
+async function createStaffAuthAccount(email, password, role, staffName, tenantId, permissions = null) {
   const tempAppName = "SecondaryAuthApp_" + Date.now() + "_" + Math.random().toString(36).substring(7);
   const tempApp = initializeApp(firebaseConfig, tempAppName);
   const tempAuth = getAuth(tempApp);
@@ -100,6 +148,7 @@ async function createStaffAuthAccount(email, password, role, staffName, tenantId
       tenantId: tenantId,
       ownerName: staffName,
       role: role,
+      permissions: permissions || null,
       createdAt: new Date().toISOString()
     });
 
@@ -132,10 +181,11 @@ Menu.initMenuContext(dbRef, push, update, remove, POS.renderPOSDishesGrid);
 Suppliers.initSuppliersContext(dbRef, push, update);
 Customers.initCustomersContext(dbRef, push, update, remove, runTransaction);
 Payroll.initPayrollContext(dbRef, push, update, remove, createStaffAuthAccount);
-Reports.initReportsContext(dbRef, push, update, POS.printThermalReceipt, { query, orderByChild, startAt, endAt, limitToLast, equalTo, get });
+Reports.initReportsContext(dbRef, push, update, POS.printThermalReceipt, { query, orderByChild, startAt, endAt, limitToLast, equalTo, get }, runTransaction);
 POS.initPosContext(dbRef, push, update, remove, set, localDB, runTransaction);
 
 updateDeviceTerminalBadgeUI();
+loadInstalledPrintersToUI();
 
 document.querySelectorAll("form").forEach(f => {
   f.addEventListener("submit", (e) => e.preventDefault());
@@ -149,6 +199,7 @@ function renderAuthAlert(msgText, isError = true) {
   box.classList.remove("hidden");
 }
 
+// 🛡️ FREEZE-PROOF SECURE LOGIN SUBMIT HANDLER
 export async function handleLoginSubmit(ev) {
   if (ev) ev.preventDefault();
   const emailVal = document.getElementById("loginEmail")?.value.trim() || "";
@@ -238,7 +289,7 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
   const printersData = {
     p1: { name: document.getElementById("p1_name")?.value.trim() || "Main Cashier 1", device: document.getElementById("p1_device")?.value.trim() || "POS-80", bill: document.getElementById("p1_bill")?.checked || false, kot: document.getElementById("p1_kot")?.checked || false },
     p2: { name: document.getElementById("p2_name")?.value.trim() || "Hot Kitchen KOT", device: document.getElementById("p2_device")?.value.trim() || "POS80-Kitchen", bill: document.getElementById("p2_bill")?.checked || false, kot: document.getElementById("p2_kot")?.checked || false },
-    p3: { name: document.getElementById("p3_name")?.value.trim() || "Juice & Bar KOT", device: document.getElementById("p3_device")?.value.trim() || "POS80-Bar", bill: document.getElementById("p3_bill")?.checked || false, kot: document.getElementById("p3_kot")?.checked || false },
+    p3: { name: document.getElementById("p3_name")?.value.trim() || "Juice & Bar BOT", device: document.getElementById("p3_device")?.value.trim() || "POS80-Bar", bill: document.getElementById("p3_bill")?.checked || false, kot: document.getElementById("p3_kot")?.checked || false },
     p4: { name: document.getElementById("p4_name")?.value.trim() || "Cashier 2 / Accounts", device: document.getElementById("p4_device")?.value.trim() || "POS80-Accounts", bill: document.getElementById("p4_bill")?.checked || false, kot: document.getElementById("p4_kot")?.checked || false }
   };
 
@@ -253,7 +304,7 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
   }
 });
 
-// TAX & INVENTORY SETTINGS
+// TAX & INVENTORY SETTINGS (WITH OWNER-CONFIGURABLE LOYALTY POINT RUPEE VALUE)
 document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -269,6 +320,7 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
     cslEnabled: document.getElementById("setCslEnabled")?.checked || false,
     cslRate: parseFloat(document.getElementById("setCslRate")?.value || 2.5),
     loyaltyRate: parseFloat(document.getElementById("setLoyaltyRate")?.value || 100),
+    loyaltyPointValue: parseFloat(document.getElementById("setLoyaltyPointValue")?.value || 1.0),
     shiftHours: parseFloat(document.getElementById("setShiftHours")?.value || 8.0)
   };
 
@@ -276,13 +328,13 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
     await update(ref(dbInstance, `tenants/${currentTenant}/settings`), settingsData);
     erpState.settings = Object.assign(erpState.settings || {}, settingsData);
     POS.recalculateCartTotalsUI();
-    showLiveToast("⚙️ Settings Saved", `Settings සාර්ථකව ස්ථිරව යාවත්කාලීන විය. (Mode: ${inventoryMode.toUpperCase()})`, "success", "fa-sliders");
+    showLiveToast("⚙️ Settings Saved", `Settings සාර්ථකව ස්ථිරව යාවත්කාලීන විය. (1 Point = Rs. ${settingsData.loyaltyPointValue.toFixed(2)})`, "success", "fa-sliders");
   } catch (err) {
     alert("Settings Error: " + err.message);
   }
 });
 
-// 100% COMPLETE DATABASE BACKUP
+// 100% COMPLETE DATABASE BACKUP (LOCAL DATE SAFE)
 export async function downloadFullDatabaseBackup() {
   if (!dbRef || !currentTenant) return;
 
@@ -316,7 +368,7 @@ export async function downloadFullDatabaseBackup() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const hName = (currentTenantInfo?.hotelName || "Hotel").replace(/\s+/g, '_');
-    const dStr = new Date().toISOString().split("T")[0];
+    const dStr = getLocalDateString();
     
     a.href = url;
     a.download = `RestaurantERP_Backup_${hName}_${dStr}.json`;
@@ -374,7 +426,7 @@ export async function handleRestoreBackupFile(event) {
 }
 window.handleRestoreBackupFile = handleRestoreBackupFile;
 
-// 🔥 INACTIVITY AUTO PIN-LOCK ENGINE (OWNER-SAFE)
+// INACTIVITY AUTO PIN-LOCK ENGINE (OWNER-SAFE)
 let inactivityTimer = null;
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
@@ -398,14 +450,12 @@ function resetInactivityTimer() {
   window.addEventListener(evt, resetInactivityTimer, { passive: true });
 });
 
-// 🔒 STRICT & OWNER-SAFE COUNTER PIN UNLOCK
 window.submitCounterUnlock = function() {
   const pin = document.getElementById("unlockScreenPinInput")?.value.trim();
   if (!pin) return;
 
   const employeesList = Object.values(erpState.employees || {});
   const isMatchedEmployee = employeesList.some(e => String(e.password || "").trim() === pin);
-  
   const isInitialSetupUnlock = employeesList.length === 0 && pin === "1234";
 
   if (isMatchedEmployee || isInitialSetupUnlock) {
@@ -419,9 +469,12 @@ window.submitCounterUnlock = function() {
   }
 };
 
-// ROLE & FEATURE TOGGLE ENFORCEMENT
-export function applyRoleBasedUI(role = "owner") {
+// ==========================================================================
+// ⭐ 2. GRANULAR ROLE & ACCESS PERMISSIONS ENFORCEMENT ENGINE
+// ==========================================================================
+export function applyRoleBasedUI(role = "owner", permissions = null) {
   setCurrentUserRole(role);
+  currentStaffPermissions = permissions;
   const roleBadge = document.getElementById("sideUserRole");
 
   const navMap = {
@@ -433,37 +486,54 @@ export function applyRoleBasedUI(role = "owner") {
     suppliersGrn: document.getElementById("nav-suppliersGrn"),
     customers: document.getElementById("nav-customers"),
     pettyCash: document.getElementById("nav-pettyCash"),
-    dayEndBtn: document.getElementById("nav-dayEnd"),
-    shiftHandoverBtn: document.getElementById("nav-shiftHandover"),
+    dayEnd: document.getElementById("nav-dayEnd"),
+    shiftHandover: document.getElementById("nav-shiftHandover"),
     faceScan: document.getElementById("nav-faceScan"),
     employees: document.getElementById("nav-employees"),
     reports: document.getElementById("nav-reports"),
     settings: document.getElementById("nav-settings")
   };
 
+  // Initially display all according to SaaS package features
   Object.values(navMap).forEach(btn => btn?.classList.remove("hidden"));
 
   const feats = erpState.subscription?.features || {};
-  const featureNavMap = {
-    tables: navMap.tables,
-    kitchen: navMap.kitchen,
-    menu: navMap.menu,
-    inventory: navMap.inventory,
-    suppliersGrn: navMap.suppliersGrn,
-    customers: navMap.customers,
-    pettyCash: navMap.pettyCash,
-    dayEnd: navMap.dayEndBtn,
-    faceScan: navMap.faceScan,
-    employees: navMap.employees,
-    reports: navMap.reports
-  };
-
-  Object.entries(featureNavMap).forEach(([fKey, el]) => {
+  Object.entries(navMap).forEach(([fKey, el]) => {
     if (feats[fKey] === false && el) {
       el.classList.add("hidden");
     }
   });
 
+  // Owner / SuperAdmin has 100% full unrestricted access to everything
+  if (role === "owner" || role === "superAdmin" || role === "superadmin") {
+    if (roleBadge) roleBadge.innerText = "Owner Admin";
+    return;
+  }
+
+  // 🛡️ GRANULAR CUSTOM PERMISSIONS CHECK:
+  // If specific permissions object exists for this staff login, apply exactly what owner selected!
+  if (permissions && typeof permissions === "object" && Object.keys(permissions).length > 0) {
+    let firstAllowedView = null;
+
+    Object.entries(navMap).forEach(([modKey, btn]) => {
+      if (btn) {
+        if (permissions[modKey] === false) {
+          btn.classList.add("hidden");
+        } else if (permissions[modKey] === true) {
+          btn.classList.remove("hidden");
+          if (!firstAllowedView) firstAllowedView = modKey;
+        }
+      }
+    });
+
+    if (roleBadge) roleBadge.innerText = (role ? role.toUpperCase() : "STAFF");
+    if (firstAllowedView) {
+      switchView(firstAllowedView);
+    }
+    return;
+  }
+
+  // Fallback to legacy default presets if permissions object is not yet configured
   if (role === "cashier") {
     if (roleBadge) roleBadge.innerText = "Cashier";
     navMap.menu?.classList.add("hidden");
@@ -482,8 +552,8 @@ export function applyRoleBasedUI(role = "owner") {
     navMap.suppliersGrn?.classList.add("hidden");
     navMap.customers?.classList.add("hidden");
     navMap.pettyCash?.classList.add("hidden");
-    navMap.dayEndBtn?.classList.add("hidden");
-    navMap.shiftHandoverBtn?.classList.add("hidden");
+    navMap.dayEnd?.classList.add("hidden");
+    navMap.shiftHandover?.classList.add("hidden");
     navMap.employees?.classList.add("hidden");
     navMap.reports?.classList.add("hidden");
     navMap.settings?.classList.add("hidden");
@@ -496,18 +566,18 @@ export function applyRoleBasedUI(role = "owner") {
     navMap.suppliersGrn?.classList.add("hidden");
     navMap.customers?.classList.add("hidden");
     navMap.pettyCash?.classList.add("hidden");
-    navMap.dayEndBtn?.classList.add("hidden");
-    navMap.shiftHandoverBtn?.classList.add("hidden");
+    navMap.dayEnd?.classList.add("hidden");
+    navMap.shiftHandover?.classList.add("hidden");
     navMap.employees?.classList.add("hidden");
     navMap.reports?.classList.add("hidden");
     navMap.settings?.classList.add("hidden");
     switchView("tables");
   } else {
-    if (roleBadge) roleBadge.innerText = "Owner Admin";
+    if (roleBadge) roleBadge.innerText = (role || "Staff").toUpperCase();
   }
 }
 
-// AUTH STATE LISTENER
+// 🛡️ AUTH STATE LISTENER (WITH AUTOMATIC PERMISSIONS RESOLVER & FREEZE GUARD)
 onAuthStateChanged(authInstance, async (activeUser) => {
   const loginBtn = document.getElementById("loginBtn");
   if (loginBtn) {
@@ -528,11 +598,16 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       if (!snap.exists()) {
         renderAuthAlert(`🚫 මෙම ගිණුම Database හි users node යටතේ ලියාපදිංචි වී නොමැත.`, true);
         await signOut(authInstance);
+        if (loginBtn) {
+          loginBtn.disabled = false;
+          loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
+        }
         return;
       }
 
       const uData = snap.val();
       const userRole = uData.role || "owner";
+      let userPermissions = uData.permissions || null;
       const pairedTenant = localStorage.getItem("pairedHotelTenantId");
 
       if (userRole !== "owner") {
@@ -540,6 +615,10 @@ onAuthStateChanged(authInstance, async (activeUser) => {
           renderAuthAlert(`🚫 Access Denied: කරුණාකර පළමුව Owner Account එකෙන් ලොග් වන්න.`, true);
           await signOut(authInstance);
           updateDeviceTerminalBadgeUI();
+          if (loginBtn) {
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
+          }
           return;
         }
       }
@@ -554,6 +633,20 @@ onAuthStateChanged(authInstance, async (activeUser) => {
 
       setCurrentTenant(uData.tenantId);
 
+      // Check if employee record has updated permissions in tenant database
+      if (userRole !== "owner" && !userPermissions) {
+        try {
+          const empSnap = await get(ref(dbInstance, `tenants/${uData.tenantId}/employees`));
+          if (empSnap.exists()) {
+            const allEmps = Object.values(empSnap.val());
+            const matchedEmp = allEmps.find(e => e.authUid === activeUser.uid || e.loginEmail === activeUser.email);
+            if (matchedEmp && matchedEmp.permissions) {
+              userPermissions = matchedEmp.permissions;
+            }
+          }
+        } catch (e) {}
+      }
+
       document.getElementById("authScreen")?.classList.add("hidden");
       document.getElementById("mainApp")?.classList.remove("hidden");
       const sideUser = document.getElementById("sideUserName");
@@ -561,10 +654,11 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       if (sideUser) sideUser.innerText = uData.ownerName || activeUser.email;
       if (sideTen) sideTen.innerText = uData.tenantId;
 
-      applyRoleBasedUI(userRole);
+      applyRoleBasedUI(userRole, userPermissions);
       initializeRealtimeDataStreams(uData.tenantId);
       startLiveClockWidget();
       resetInactivityTimer();
+      loadInstalledPrintersToUI();
 
       if (navigator.onLine) {
         POS.syncOfflineInvoicesToCloud();
@@ -572,13 +666,23 @@ onAuthStateChanged(authInstance, async (activeUser) => {
     } catch (err) {
       console.error("Auth state error:", err);
       renderAuthAlert("දත්ත ලබාගැනීමේ දෝෂයකි: " + err.message, true);
+      if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
+      }
     }
   } else {
     setCurrentTenant(null);
+    currentStaffPermissions = null;
+    clearAllFirebaseStreams();
     document.getElementById("authScreen")?.classList.remove("hidden");
     document.getElementById("mainApp")?.classList.add("hidden");
     Payroll.stopKioskCameraStream();
     updateDeviceTerminalBadgeUI();
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
+    }
   }
 });
 
@@ -590,6 +694,7 @@ setInterval(() => {
 
 window.logout = function() {
   if (confirm("ඔබට Logout වීමට අවශ්‍යද?")) {
+    clearAllFirebaseStreams();
     Payroll.stopKioskCameraStream();
     signOut(authInstance);
   }
@@ -597,10 +702,11 @@ window.logout = function() {
 
 // 🔒 5-YEAR ZERO-LAG BOUNDED REALTIME DATA LISTENERS
 function initializeRealtimeDataStreams(tenantId) {
+  clearAllFirebaseStreams();
   const basePath = `tenants/${tenantId}`;
 
   // 1. Profile & Branding
-  onValue(ref(dbInstance, `${basePath}/profile`), (snapshot) => {
+  const unsubProfile = onValue(ref(dbInstance, `${basePath}/profile`), (snapshot) => {
     const prof = snapshot.val() || {};
     setCurrentTenantInfo(prof);
     const titleStr = prof.hotelName || "My Restaurant";
@@ -624,69 +730,91 @@ function initializeRealtimeDataStreams(tenantId) {
     if (pTax && !pTax.value) pTax.value = prof.taxNo || "";
     if (pFoot && !pFoot.value) pFoot.value = prof.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
   });
+  activeFirebaseUnsubscribers.push(unsubProfile);
 
   // 2. Settings & Taxes
-  onValue(ref(dbInstance, `${basePath}/settings`), (snapshot) => {
+  const unsubSettings = onValue(ref(dbInstance, `${basePath}/settings`), (snapshot) => {
     if (snapshot.exists()) {
-      erpState.settings = Object.assign({ shiftHours: 8.0, silentPrintEnabled: true, inventoryMode: "recipe", loyaltyEnabled: true, loyaltyRate: 100 }, snapshot.val());
+      erpState.settings = Object.assign({ 
+        shiftHours: 8.0, 
+        silentPrintEnabled: true, 
+        inventoryMode: "recipe", 
+        loyaltyEnabled: true, 
+        loyaltyRate: 100, 
+        loyaltyPointValue: 1.0 
+      }, snapshot.val());
       syncSettingsUI();
       POS.recalculateCartTotalsUI();
     }
   });
+  activeFirebaseUnsubscribers.push(unsubSettings);
 
   // 3. Menu Categories
-  onValue(ref(dbInstance, `${basePath}/dishCategories`), (snapshot) => {
+  const unsubDishCat = onValue(ref(dbInstance, `${basePath}/dishCategories`), (snapshot) => {
     erpState.dishCategories = snapshot.val() || {};
+    try {
+      localStorage.setItem("cached_erp_dishCategories", JSON.stringify(erpState.dishCategories));
+    } catch (e) {}
     POS.renderDishCategoriesFilterUI();
     Menu.renderDishCategoryListUI();
     Menu.populateDishCategoryDropdown();
   });
+  activeFirebaseUnsubscribers.push(unsubDishCat);
 
   // 4. Dishes & BOM Recipes
-  onValue(ref(dbInstance, `${basePath}/dishes`), (snapshot) => {
+  const unsubDishes = onValue(ref(dbInstance, `${basePath}/dishes`), (snapshot) => {
     erpState.dishes = snapshot.val() || {};
+    try {
+      localStorage.setItem("cached_erp_dishes", JSON.stringify(erpState.dishes));
+    } catch (e) {}
     POS.renderPOSDishesGrid();
     Menu.renderMenuDishesTable();
   });
+  activeFirebaseUnsubscribers.push(unsubDishes);
 
   // 5. Raw Material Categories
-  onValue(ref(dbInstance, `${basePath}/rawCategories`), (snapshot) => {
+  const unsubRawCat = onValue(ref(dbInstance, `${basePath}/rawCategories`), (snapshot) => {
     erpState.rawCategories = snapshot.val() || {};
     Inventory.renderRawCategoryListUI();
     Inventory.populateRawCategoryDropdown();
   });
+  activeFirebaseUnsubscribers.push(unsubRawCat);
 
   // 6. Raw Items Stock
-  onValue(ref(dbInstance, `${basePath}/rawItems`), (snapshot) => {
+  const unsubRawItems = onValue(ref(dbInstance, `${basePath}/rawItems`), (snapshot) => {
     erpState.rawItems = snapshot.val() || {};
     Inventory.renderRawStockTable();
     POS.renderPOSDishesGrid();
   });
+  activeFirebaseUnsubscribers.push(unsubRawItems);
 
-  // 6.1 Store Issues (Real-time Sync to History Table)
+  // 6.1 Store Issues
   const recentStoreIssuesQuery = query(ref(dbInstance, `${basePath}/storeIssues`), limitToLast(120));
-  onValue(recentStoreIssuesQuery, (snapshot) => {
+  const unsubStoreIssues = onValue(recentStoreIssuesQuery, (snapshot) => {
     erpState.storeIssues = snapshot.val() || {};
     Inventory.renderStoreIssueHistoryTable();
   });
+  activeFirebaseUnsubscribers.push(unsubStoreIssues);
 
   // 7. Floor Areas
-  onValue(ref(dbInstance, `${basePath}/areas`), (snapshot) => {
+  const unsubAreas = onValue(ref(dbInstance, `${basePath}/areas`), (snapshot) => {
     erpState.areas = snapshot.val() || {};
     Tables.renderAreaFiltersUI();
     Tables.renderAreaListModalUI();
     Tables.populateTableAreaDropdown();
   });
+  activeFirebaseUnsubscribers.push(unsubAreas);
 
   // 8. Tables Floor Plan
-  onValue(ref(dbInstance, `${basePath}/tables`), (snapshot) => {
+  const unsubTables = onValue(ref(dbInstance, `${basePath}/tables`), (snapshot) => {
     erpState.tables = snapshot.val() || {};
     Tables.renderTablesFloorGrid();
   });
+  activeFirebaseUnsubscribers.push(unsubTables);
 
   // 9. Kitchen Orders
   const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(100));
-  onValue(recentKitchenQuery, (snapshot) => {
+  const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
     const prevOrders = erpState.kitchenOrders || {};
     erpState.kitchenOrders = snapshot.val() || {};
     KDS.renderKDSOrdersGrid();
@@ -704,38 +832,43 @@ function initializeRealtimeDataStreams(tenantId) {
       }
     });
   });
+  activeFirebaseUnsubscribers.push(unsubKitchen);
 
   // 10. Suppliers Directory
-  onValue(ref(dbInstance, `${basePath}/suppliers`), (snapshot) => {
+  const unsubSuppliers = onValue(ref(dbInstance, `${basePath}/suppliers`), (snapshot) => {
     erpState.suppliers = snapshot.val() || {};
     Suppliers.renderSuppliersDirectoryTable();
     Suppliers.populateGRNSupplierDropdown();
   });
+  activeFirebaseUnsubscribers.push(unsubSuppliers);
 
   // 10.1 Registered Customers & Loyalty CRM
-  onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
+  const unsubCustomers = onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
     erpState.customers = snapshot.val() || {};
     Customers.renderCustomersTable();
   });
+  activeFirebaseUnsubscribers.push(unsubCustomers);
 
   // 11. Supplier Payments
   const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(80));
-  onValue(recentSupPayQuery, (snapshot) => {
+  const unsubSupPay = onValue(recentSupPayQuery, (snapshot) => {
     erpState.supplierPayments = snapshot.val() || {};
     Suppliers.renderSuppliersDirectoryTable();
   });
+  activeFirebaseUnsubscribers.push(unsubSupPay);
 
   // 12. GRNs
   const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(80));
-  onValue(recentGrnQuery, (snapshot) => {
+  const unsubGrns = onValue(recentGrnQuery, (snapshot) => {
     erpState.grns = snapshot.val() || {};
     Suppliers.renderGRNHistoryTable();
     Suppliers.renderSuppliersDirectoryTable();
   });
+  activeFirebaseUnsubscribers.push(unsubGrns);
 
   // 13. Invoices & Reports Sync
   const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(100));
-  onValue(recentInvoicesQuery, (snapshot) => {
+  const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
     const fromVal = document.getElementById("repFromDate")?.value;
     const toVal = document.getElementById("repToDate")?.value;
     
@@ -756,25 +889,28 @@ function initializeRealtimeDataStreams(tenantId) {
       }
     }
   });
+  activeFirebaseUnsubscribers.push(unsubInvoices);
 
   // 14. Customer Credits
-  onValue(ref(dbInstance, `${basePath}/customerCredits`), (snapshot) => {
+  const unsubCredits = onValue(ref(dbInstance, `${basePath}/customerCredits`), (snapshot) => {
     erpState.customerCredits = snapshot.val() || {};
     Reports.renderCustomerCreditsLedger();
   });
+  activeFirebaseUnsubscribers.push(unsubCredits);
 
   // 15. Petty Cash
   const recentPettyQuery = query(ref(dbInstance, `${basePath}/pettyCash`), limitToLast(100));
-  onValue(recentPettyQuery, (snapshot) => {
+  const unsubPetty = onValue(recentPettyQuery, (snapshot) => {
     erpState.pettyCash = snapshot.val() || {};
     PettyCash.renderPettyCashTable();
     if (Reports.activeReportTabName === "pnl") {
       Reports.renderPnLStatement();
     }
   });
+  activeFirebaseUnsubscribers.push(unsubPetty);
 
-  // 16. Employees
-  onValue(ref(dbInstance, `${basePath}/employees`), (snapshot) => {
+  // 16. Employees (Live Updates Staff Permissions if Owner changes them in real-time)
+  const unsubEmployees = onValue(ref(dbInstance, `${basePath}/employees`), (snapshot) => {
     erpState.employees = snapshot.val() || {};
     Payroll.renderEmployeesTable();
     Tables.populateTableWaiterDropdown();
@@ -784,25 +920,36 @@ function initializeRealtimeDataStreams(tenantId) {
     if (Reports.activeReportTabName === "waiters") {
       Reports.renderWaiterSalesReport();
     }
+
+    // 🛡️ Live Update: If currently logged in user is a staff member, reflect updated permissions dynamically!
+    if (authInstance.currentUser && currentUserRole !== "owner") {
+      const currentStaffEmp = Object.values(erpState.employees).find(e => e.authUid === authInstance.currentUser.uid || e.loginEmail === authInstance.currentUser.email);
+      if (currentStaffEmp && currentStaffEmp.permissions) {
+        applyRoleBasedUI(currentStaffEmp.systemRole || currentUserRole, currentStaffEmp.permissions);
+      }
+    }
   });
+  activeFirebaseUnsubscribers.push(unsubEmployees);
 
   // 17. Attendance Logs
   const recentAttQuery = query(ref(dbInstance, `${basePath}/attendance`), limitToLast(100));
-  onValue(recentAttQuery, (snapshot) => {
+  const unsubAtt = onValue(recentAttQuery, (snapshot) => {
     erpState.attendance = snapshot.val() || {};
     Payroll.renderAttendanceLogsTable();
     Payroll.renderMonthlyPayrollSheet();
   });
+  activeFirebaseUnsubscribers.push(unsubAtt);
 
   // 18. Salary Advances
   const recentAdvQuery = query(ref(dbInstance, `${basePath}/salaryAdvances`), limitToLast(80));
-  onValue(recentAdvQuery, (snapshot) => {
+  const unsubAdvances = onValue(recentAdvQuery, (snapshot) => {
     erpState.salaryAdvances = snapshot.val() || {};
     Payroll.renderMonthlyPayrollSheet();
   });
+  activeFirebaseUnsubscribers.push(unsubAdvances);
 
   // 19. Active Bills
-  onValue(ref(dbInstance, `${basePath}/activeBills`), (snapshot) => {
+  const unsubActiveBills = onValue(ref(dbInstance, `${basePath}/activeBills`), (snapshot) => {
     erpState.activeBills = snapshot.val() || {};
     const billKeys = Object.keys(erpState.activeBills);
 
@@ -828,10 +975,11 @@ function initializeRealtimeDataStreams(tenantId) {
     POS.renderBillTabsBar();
     POS.syncActiveBillToFormUI();
   });
+  activeFirebaseUnsubscribers.push(unsubActiveBills);
 
   // 20. LIVE HEARTBEAT & SAAS SUBSCRIPTION
   const sendHeartbeat = () => {
-    if (currentTenant && dbRef) {
+    if (currentTenant && dbRef && navigator.onLine) {
       update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
         lastHeartbeat: new Date().toISOString()
       }).catch(() => {});
@@ -840,7 +988,7 @@ function initializeRealtimeDataStreams(tenantId) {
   sendHeartbeat();
   setInterval(sendHeartbeat, 45000);
 
-  onValue(ref(dbInstance, `${basePath}/subscription`), (snapshot) => {
+  const unsubSub = onValue(ref(dbInstance, `${basePath}/subscription`), (snapshot) => {
     const sub = snapshot.val() || {};
     erpState.subscription = sub;
 
@@ -848,7 +996,7 @@ function initializeRealtimeDataStreams(tenantId) {
       showLiveToast("📢 Notice", sub.broadcastNotice, "info", "fa-bullhorn");
     }
 
-    applyRoleBasedUI(currentUserRole);
+    applyRoleBasedUI(currentUserRole, currentStaffPermissions);
 
     if (sub.status === "suspended") {
       document.getElementById("mainApp")?.classList.add("hidden");
@@ -882,6 +1030,14 @@ function initializeRealtimeDataStreams(tenantId) {
       }
     }
   });
+  activeFirebaseUnsubscribers.push(unsubSub);
+
+  // 21. DAY-END Z-REPORTS SYNC
+  const recentDayEndQuery = query(ref(dbInstance, `${basePath}/dayEndReports`), limitToLast(40));
+  const unsubDayEnd = onValue(recentDayEndQuery, (snapshot) => {
+    erpState.dayEndReports = snapshot.val() || {};
+  });
+  activeFirebaseUnsubscribers.push(unsubDayEnd);
 }
 
 // 🖥️ DUAL SCREEN CUSTOMER DISPLAY TOGGLE ENGINE
@@ -890,7 +1046,6 @@ window.toggleCustomerDisplayWindow = async function() {
     await window.electronAPI.openCustomerDisplay();
     showLiveToast("🖥️ Customer Display", "දෙවන තිරය (Customer Display) සාර්ථකව විවෘත විය.", "info", "fa-desktop");
   } else {
-    // Web Browser Fallback: Open popup window
     const cfdWin = window.open("customer-display.html", "CustomerDisplayWindow", "width=1024,height=600,menubar=no,toolbar=no");
     if (cfdWin) {
       showLiveToast("🖥️ Display Window", "Customer Display Window එක සාර්ථකව විවෘත විය.", "info", "fa-desktop");
@@ -899,7 +1054,7 @@ window.toggleCustomerDisplayWindow = async function() {
   }
 };
 
-// NAVIGATION & VIEW SWITCHER
+// NAVIGATION & VIEW SWITCHER (WITH REAL-TIME STAFF ACCESS RESTRICTION GUARD)
 const availableViews = ["pos", "tables", "kitchen", "menu", "inventory", "suppliersGrn", "customers", "pettyCash", "faceScan", "employees", "reports", "settings"];
 
 export function switchView(viewName) {
@@ -907,6 +1062,14 @@ export function switchView(viewName) {
   if (feats[viewName] === false) {
     showLiveToast("🚫 Access Restricted", `මෙම Feature එක ඔබගේ Package එකට අනුව අක්‍රීය කර ඇත.`, "warning", "fa-lock");
     viewName = "pos";
+  }
+
+  // 🛡️ Staff Permissions Guard: Prevent accessing disallowed modules
+  if (currentUserRole !== "owner" && currentStaffPermissions && typeof currentStaffPermissions === "object") {
+    if (currentStaffPermissions[viewName] === false) {
+      showLiveToast("🚫 Access Denied", "මෙම අංශයට පිවිසීමට ඔබට Owner විසින් අවසර ලබා දී නොමැත.", "warning", "fa-lock");
+      return;
+    }
   }
 
   availableViews.forEach(v => {
@@ -937,7 +1100,7 @@ export function switchView(viewName) {
     inventory: `<i class="fa-solid fa-boxes-stacked text-indigo-400"></i> Raw Materials & Stock`,
     suppliersGrn: `<i class="fa-solid fa-truck-ramp-box text-purple-400"></i> Suppliers & GRN Supply Chain`,
     customers: `<i class="fa-solid fa-users text-pink-600"></i> Customer Directory & Loyalty Program (CRM)`,
-    pettyCash: `<i class="fa-solid fa-wallet text-emerald-600"></i> Petty Cash Book (මුදල් පෙට්ටිය)`,
+    pettyCash: `<i class="fa-solid fa-wallet text-green-600"></i> Petty Cash Book (මුදල් පෙට්ටිය)`,
     faceScan: `<i class="fa-solid fa-camera text-pink-600"></i> Smart Attendance Kiosk (PIN + Photo)`,
     employees: `<i class="fa-solid fa-users-gear text-blue-600"></i> Staff, Attendance Logs & Payroll`,
     reports: `<i class="fa-solid fa-chart-line text-green-400"></i> Reports & Financial Analytics`,
@@ -949,6 +1112,10 @@ export function switchView(viewName) {
     Payroll.startKioskCameraStream();
   } else {
     Payroll.stopKioskCameraStream();
+  }
+
+  if (viewName === "settings") {
+    loadInstalledPrintersToUI();
   }
 
   const sidebarElem = document.getElementById("sidebar");
@@ -978,6 +1145,7 @@ function syncSettingsUI() {
   const setCsl = document.getElementById("setCslEnabled");
   const setCslRate = document.getElementById("setCslRate");
   const setLoyalty = document.getElementById("setLoyaltyRate");
+  const setLoyaltyPointVal = document.getElementById("setLoyaltyPointValue");
   const setShift = document.getElementById("setShiftHours");
   const setSilent = document.getElementById("silentPrintEnabled");
 
@@ -1001,6 +1169,7 @@ function syncSettingsUI() {
   if (setCsl) setCsl.checked = erpState.settings?.cslEnabled || false;
   if (setCslRate) setCslRate.value = erpState.settings?.cslRate || 2.5;
   if (setLoyalty) setLoyalty.value = erpState.settings?.loyaltyRate || 100;
+  if (setLoyaltyPointVal) setLoyaltyPointVal.value = erpState.settings?.loyaltyPointValue ?? 1.0;
   if (setShift) setShift.value = erpState.settings?.shiftHours || 8.0;
   if (setSilent) setSilent.checked = erpState.settings?.silentPrintEnabled ?? true;
 
@@ -1118,6 +1287,7 @@ window.removeCustomerFromCurrentBill = Customers.removeCustomerFromCurrentBill;
 window.exportCustomersToCSV = Customers.exportCustomersToCSV;
 
 // Payroll & Attendance Kiosk
+window.applyStaffRolePreset = Payroll.applyStaffRolePreset;
 window.kioskKeypadPress = Payroll.kioskKeypadPress;
 window.kioskKeypadClear = Payroll.kioskKeypadClear;
 window.kioskKeypadBackspace = Payroll.kioskKeypadBackspace;
@@ -1135,6 +1305,7 @@ window.deleteAttendanceRecord = Payroll.deleteAttendanceRecord;
 window.exportAttendanceToCSV = Payroll.exportAttendanceToCSV;
 window.openSalaryAdvanceModal = Payroll.openSalaryAdvanceModal;
 window.closeSalaryAdvanceModal = Payroll.closeSalaryAdvanceModal;
+window.handleSalaryAdvanceSubmit = Payroll.handleSalaryAdvanceSubmit;
 window.renderMonthlyPayrollSheet = Payroll.renderMonthlyPayrollSheet;
 window.printEmployeePayslip = Payroll.printEmployeePayslip;
 window.printActiveThermalPayslip = Payroll.printActiveThermalPayslip;
@@ -1152,17 +1323,19 @@ window.exportCurrentReportToCSV = Reports.exportCurrentReportToCSV;
 window.renderPnLStatement = Reports.renderPnLStatement;
 window.renderHourlyVelocityReport = Reports.renderHourlyVelocityReport;
 window.renderWaiterSalesReport = Reports.renderWaiterSalesReport;
-window.openDayEndModal = Reports.openDayEndModal;
-window.closeDayEndModal = Reports.closeDayEndModal;
-window.openShiftHandoverModal = Reports.openShiftHandoverModal;
-window.closeShiftHandoverModal = Reports.closeShiftHandoverModal;
-window.handleShiftHandoverSubmit = Reports.handleShiftHandoverSubmit;
-window.calculateDayEndVariance = Reports.calculateDayEndVariance;
-window.printAndSaveZReport = Reports.printAndSaveZReport;
-window.voidInvoice = Reports.executeVoidInvoiceProcess;
+window.renderItemWiseSalesSummary = Reports.renderItemWiseSalesSummary;
+window.renderCustomerCreditsLedger = Reports.renderCustomerCreditsLedger;
 window.requestManagerVoidOverride = Reports.requestManagerVoidOverride;
 window.closeManagerOverrideModal = Reports.closeManagerOverrideModal;
 window.submitManagerOverrideAction = Reports.submitManagerOverrideAction;
+window.openDayEndModal = Reports.openDayEndModal;
+window.closeDayEndModal = Reports.closeDayEndModal;
+window.calculateCashDenominations = calculateCashDenominations;
+window.calculateDayEndVariance = calculateDayEndVariance;
+window.printAndSaveZReport = printAndSaveZReport;
+window.openShiftHandoverModal = Reports.openShiftHandoverModal;
+window.closeShiftHandoverModal = Reports.closeShiftHandoverModal;
+window.handleShiftHandoverSubmit = Reports.handleShiftHandoverSubmit;
 
 // POS Global Window Exports
 window.addNewBillTab = POS.addNewBillTab;
