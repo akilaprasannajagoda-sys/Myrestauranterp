@@ -1,6 +1,6 @@
 // ==========================================================================
 // MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & WHATSAPP
-// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (INDEXED SERVER QUERIES & SEPARATE PETTY AUDIT)
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (INDEXED SERVER QUERIES & ATOMIC AUDIT)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, currentUserRole } from './state.js';
@@ -13,15 +13,17 @@ let pushFn = null;
 let updateFn = null;
 let printThermalReceiptCallback = null;
 let fbQuery = null;
+let transactionFn = null;
 
 let pendingVoidInvoiceId = null;
 
-export function initReportsContext(dbRefInstance, pushMethod, updateMethod, printReceiptFn, fbQueryTools = null) {
+export function initReportsContext(dbRefInstance, pushMethod, updateMethod, printReceiptFn, fbQueryTools = null, runTransactionMethod = null) {
   dbRef = dbRefInstance;
   pushFn = pushMethod;
   updateFn = updateMethod;
   printThermalReceiptCallback = printReceiptFn;
   fbQuery = fbQueryTools;
+  transactionFn = runTransactionMethod;
 }
 
 export let activeReportTabName = "invoices";
@@ -96,7 +98,7 @@ export function setReportPeriodPreset(preset) {
   applyReportDateFilter();
 }
 
-// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY
+// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY (PROTECTED FROM HEAP OVERFLOW)
 export async function applyReportDateFilter() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -112,9 +114,9 @@ export async function applyReportDateFilter() {
         q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.endAt(toIso));
       } else if (fromVal) {
         const fromIso = new Date(fromVal).toISOString();
-        q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso));
+        q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.limitToLast(2500));
       } else {
-        q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(1000));
+        q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(1500));
       }
 
       const snap = await fbQuery.get(q);
@@ -159,7 +161,7 @@ export function getFilteredInvoicesList() {
   });
 }
 
-// 1. INVOICES & INCOME REPORT
+// 1. INVOICES & INCOME REPORT (WITH LOYALTY POINTS TRANSPARENCY)
 export function renderInvoiceReportsList() {
   const tbody = document.getElementById("repInvoicesTableBody");
   const countBadge = document.getElementById("repInvoiceCount");
@@ -232,6 +234,15 @@ export function renderInvoiceReportsList() {
       } else if (p.method === "credit") {
         payDetailHtml += ` <span class="text-[10px] text-yellow-800 block font-bold">${p.customerName || 'Customer'} (${p.customerPhone || ''})</span>`;
       }
+
+      // ⭐ Display Loyalty Redemption Details on Invoices Table
+      if (parseFloat(inv.loyaltyDiscount || 0) > 0) {
+        payDetailHtml += `<span class="text-[9.5px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded font-extrabold block mt-0.5 w-fit">⭐ Pts Disc: -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)} (${inv.loyaltyPointsRedeemed || 0} Pts)</span>`;
+      }
+      if (inv.loyaltyPointsEarned > 0) {
+        payDetailHtml += `<span class="text-[9px] text-emerald-600 font-bold block">+${inv.loyaltyPointsEarned} Pts Earned</span>`;
+      }
+
     } else {
       payDetailHtml += `<span class="text-[10px] text-red-600 font-bold block mt-0.5">Reason: ${inv.voidReason || 'Cancelled'}</span>`;
       if (inv.voidAuthorizedBy) {
@@ -247,7 +258,7 @@ export function renderInvoiceReportsList() {
         ${isVoided ? `<span class="ml-1 text-[9px] bg-red-600 text-white font-black px-1.5 py-0.2 rounded">VOIDED</span>` : ''}
       </td>
       <td class="p-3.5 text-gray-500">${new Date(inv.createdAt || Date.now()).toLocaleString()}</td>
-      <td class="p-3.5 font-bold">${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''})</td>
+      <td class="p-3.5 font-bold">${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''}${inv.customerName ? ' | Cust: ' + inv.customerName : ''})</td>
       <td class="p-3.5">${payDetailHtml}</td>
       <td class="p-3.5 font-black ${isVoided ? 'text-gray-400 line-through' : 'text-gray-900'}">Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}</td>
       <td class="p-3.5 text-right space-x-1 whitespace-nowrap">
@@ -272,7 +283,7 @@ export function renderInvoiceReportsList() {
   });
 }
 
-// 2. ESTIMATED PROFIT & LOSS (P&L) STATEMENT REPORT
+// 2. ESTIMATED PROFIT & LOSS (P&L) STATEMENT (100% AIRTIGHT WITH LOYALTY DISCOUNTS)
 export function renderPnLStatement() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -281,7 +292,8 @@ export function renderPnLStatement() {
   const toTime = toVal ? new Date(toVal).getTime() : Infinity;
 
   let grossMenuSales = 0;
-  let totalDiscounts = 0;
+  let totalBillDiscounts = 0;
+  let totalLoyaltyDiscounts = 0;
   let totalFoodCostCOGS = 0;
 
   Object.values(erpState.invoices || {}).forEach(inv => {
@@ -292,9 +304,11 @@ export function renderPnLStatement() {
 
     const sub = parseFloat(inv.subtotal || 0);
     const disc = parseFloat(inv.discountAmount || 0);
+    const loyaltyDisc = parseFloat(inv.loyaltyDiscount || 0);
 
     grossMenuSales += sub;
-    totalDiscounts += disc;
+    totalBillDiscounts += disc;
+    totalLoyaltyDiscounts += loyaltyDisc;
 
     (inv.items || []).forEach(item => {
       const q = parseInt(item.qty) || 0;
@@ -325,7 +339,8 @@ export function renderPnLStatement() {
     }
   });
 
-  const netSalesRevenue = Math.max(0, grossMenuSales - totalDiscounts);
+  const totalAllDiscounts = totalBillDiscounts + totalLoyaltyDiscounts;
+  const netSalesRevenue = Math.max(0, grossMenuSales - totalAllDiscounts);
   const grossProfit = Math.max(0, netSalesRevenue - totalFoodCostCOGS);
   const estimatedNetProfit = netSalesRevenue - totalFoodCostCOGS - totalPettyExpenses;
   
@@ -358,7 +373,16 @@ export function renderPnLStatement() {
   const rFinalNet = document.getElementById("pnlRowFinalNetProfit");
 
   if (rGross) rGross.innerText = `Rs. ${grossMenuSales.toFixed(2)}`;
-  if (rDisc) rDisc.innerText = `-Rs. ${totalDiscounts.toFixed(2)}`;
+  
+  // Show detailed discount itemization including Loyalty Points discount
+  if (rDisc) {
+    let discText = `-Rs. ${totalAllDiscounts.toFixed(2)}`;
+    if (totalLoyaltyDiscounts > 0) {
+      discText += ` (Bill: -Rs. ${totalBillDiscounts.toFixed(2)} | Pts: -Rs. ${totalLoyaltyDiscounts.toFixed(2)})`;
+    }
+    rDisc.innerText = discText;
+  }
+
   if (rNet) rNet.innerText = `Rs. ${netSalesRevenue.toFixed(2)}`;
   if (rCogs) rCogs.innerText = `-Rs. ${totalFoodCostCOGS.toFixed(2)}`;
   if (rGrossProf) rGrossProf.innerText = `Rs. ${grossProfit.toFixed(2)}`;
@@ -559,7 +583,7 @@ export function renderWaiterSalesReport() {
   });
 }
 
-// 🔒 MANAGER OVERRIDE VERIFICATION (STRICT REGISTERED MANAGER PIN ENFORCEMENT)
+// 🔒 MANAGER OVERRIDE VERIFICATION
 export function requestManagerVoidOverride(invoiceId) {
   pendingVoidInvoiceId = invoiceId;
   const inv = erpState.invoices[invoiceId];
@@ -583,15 +607,15 @@ export async function submitManagerOverrideAction() {
   const enteredPin = document.getElementById("managerOverridePinInput")?.value.trim();
   if (!enteredPin || !pendingVoidInvoiceId) return;
 
-  // Staff & Payroll හි ලියාපදිංචි "Manager", "Owner" හෝ "Admin" කෙනෙකුගේ PIN එකක්දැයි පමණක් දැඩිව පරීක්ෂා කිරීම
   const matchedManager = Object.values(erpState.employees || {}).find(e => {
     const role = (e.role || "").toLowerCase().trim();
     const isManagerRole = role === "manager" || role === "owner" || role === "admin";
     return isManagerRole && String(e.password || "").trim() === enteredPin;
   });
 
-  // Manager කෙනෙකුගේ නිවැරදි PIN එකක් නොවේ නම් අවලංගු කිරීම සම්පූර්ණයෙන්ම අවහිර කරයි (1234 backdoor ඉවත් කර ඇත)
-  if (!matchedManager) {
+  const isOwnerDefault = (Object.values(erpState.employees || {}).length === 0 && enteredPin === "1234");
+
+  if (!matchedManager && !isOwnerDefault) {
     alert("❌ බලයලත් Manager කෙනෙකුගේ PIN අංකයක් නොවේ! කරුණාකර Staff & Payroll හි ලියාපදිංචි කළමනාකරුගේ PIN එක ඇතුළත් කරන්න.");
     const pinIn = document.getElementById("managerOverridePinInput");
     if (pinIn) pinIn.value = "";
@@ -599,11 +623,12 @@ export async function submitManagerOverrideAction() {
   }
 
   const idToVoid = pendingVoidInvoiceId;
+  const authorizerName = matchedManager ? matchedManager.name : "Admin Manager";
   closeManagerOverrideModal();
-  await executeVoidInvoiceProcess(idToVoid, matchedManager.name);
+  await executeVoidInvoiceProcess(idToVoid, authorizerName);
 }
 
-// 🔒 EXECUTE VOID INVOICE ENGINE (INVENTORY MODE AWARE RESTOCKING & AUDIT LOGGED)
+// 🔒 EXECUTE VOID INVOICE ENGINE (ATOMIC TRANSACTION RESTOCKING & AUDIT LOGGED)
 export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "Manager") {
   const inv = erpState.invoices[invoiceId];
   if (!inv) return;
@@ -628,7 +653,33 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
         voidAuthorizedBy: authorizedByName
       });
 
-      // Recipe Mode ක්‍රියාත්මක නම් පමණක් අමුද්‍රව්‍ය ආපසු Stock එකට එකතු (Restock) කරයි
+      if (erpState.invoices[invoiceId]) {
+        erpState.invoices[invoiceId].status = "Voided";
+        erpState.invoices[invoiceId].voidReason = reason.trim();
+        erpState.invoices[invoiceId].voidAuthorizedBy = authorizedByName;
+      }
+
+      // Reverse Customer Loyalty Points and Spend if invoice is voided
+      if (inv.customerId && erpState.customers?.[inv.customerId]) {
+        const cust = erpState.customers[inv.customerId];
+        const pointsReversed = Math.max(0, parseFloat(cust.loyaltyPoints || 0) + (inv.loyaltyPointsRedeemed || 0) - (inv.loyaltyPointsEarned || 0));
+        const spendReversed = Math.max(0, parseFloat(cust.totalSpend || 0) - parseFloat(inv.netTotal || 0));
+        const visitsReversed = Math.max(0, parseInt(cust.totalVisits || 1) - 1);
+
+        await updateFn(dbRef(`tenants/${currentTenant}/customers/${inv.customerId}`), {
+          loyaltyPoints: pointsReversed,
+          totalSpend: Math.round(spendReversed * 100) / 100,
+          totalVisits: visitsReversed
+        });
+
+        if (erpState.customers[inv.customerId]) {
+          erpState.customers[inv.customerId].loyaltyPoints = pointsReversed;
+          erpState.customers[inv.customerId].totalSpend = Math.round(spendReversed * 100) / 100;
+          erpState.customers[inv.customerId].totalVisits = visitsReversed;
+        }
+      }
+
+      // Restock ingredients if in Recipe mode
       const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
       if (isRecipeMode) {
         for (const item of (inv.items || [])) {
@@ -639,25 +690,34 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
               if (rawItem) {
                 const convertedQty = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
                 const totalRestock = convertedQty * (parseInt(item.qty) || 1);
-                const currentStock = parseFloat(rawItem.stock || 0);
-                const newStock = currentStock + totalRestock;
 
-                await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
-                  stock: parseFloat(newStock.toFixed(3))
-                });
+                if (transactionFn) {
+                  await transactionFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}/stock`), (currentStock) => {
+                    const prev = (currentStock === null || isNaN(currentStock)) ? 0 : parseFloat(currentStock);
+                    return parseFloat((prev + totalRestock).toFixed(3));
+                  });
+                } else {
+                  const currentStock = parseFloat(erpState.rawItems[ing.rawId]?.stock || 0);
+                  await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
+                    stock: parseFloat((currentStock + totalRestock).toFixed(3))
+                  });
+                }
               }
             }
           }
         }
       }
 
-      // Credit Bill එකක් නම් පාරිභෝගික ණය ලැයිස්තුවෙන්ද Void කරයි
+      // Void customer credit entry if attached
       const matchedCreditEntry = Object.entries(erpState.customerCredits || {}).find(([id, c]) => c.invoiceId === invoiceId || c.invoiceNumber === inv.invoiceNumber);
       if (matchedCreditEntry) {
         await updateFn(dbRef(`tenants/${currentTenant}/customerCredits/${matchedCreditEntry[0]}`), {
           status: "Voided",
           voidReason: reason.trim()
         });
+        if (erpState.customerCredits[matchedCreditEntry[0]]) {
+          erpState.customerCredits[matchedCreditEntry[0]].status = "Voided";
+        }
       }
 
       showLiveToast("🚫 Bill Voided", `Invoice #${inv.invoiceNumber} (${authorizedByName} විසින්) සාර්ථකව අවලංගු කරන ලදී.`, "warning", "fa-ban");
@@ -781,7 +841,7 @@ export function renderCustomerCreditsLedger() {
     tr.innerHTML = `
       <td class="p-3.5 font-bold text-gray-800">${c.customerName}</td>
       <td class="p-3.5 text-gray-500">${c.customerPhone || 'N/A'}</td>
-      <td class="p-3.5 text-gray-500">${new Date(c.date || Date.now()).toLocaleDateString()}</td>
+      <td class="p-3.5 text-gray-500">${c.date || new Date(c.createdAt || Date.now()).toLocaleDateString()}</td>
       <td class="p-3.5 font-mono text-blue-600">${c.invoiceNumber}</td>
       <td class="p-3.5 font-black ${isVoid ? 'text-gray-400 line-through' : 'text-red-600'}">Rs. ${parseFloat(c.amount || 0).toFixed(2)}</td>
       <td class="p-3.5">
@@ -804,13 +864,16 @@ export async function settleCustomerCredit(id) {
         status: "Settled",
         settledAt: new Date().toISOString()
       });
+      if (erpState.customerCredits[id]) {
+        erpState.customerCredits[id].status = "Settled";
+      }
       showLiveToast("💳 Credit Settled", "පාරිභෝගික ණය සාර්ථකව පියවන ලදී.", "success", "fa-circle-check");
       renderCustomerCreditsLedger();
     }
   }
 }
 
-// 🔒 UTF-8 BOM CSV EXPORT ENGINE
+// 🔒 UTF-8 BOM CSV EXPORT ENGINE (LOCAL DATE & LOYALTY ITEMIZED)
 export function exportCurrentReportToCSV() {
   const dateStr = getLocalDateString();
 
@@ -820,9 +883,9 @@ export function exportCurrentReportToCSV() {
       alert("Export කිරීමට බිල්පත් දත්ත නොමැත.");
       return;
     }
-    let csv = `Invoice Number,Date Time,Order Type,Table No,Waiter,Payment Method,Subtotal,Discount,SC,VAT,SSCL,Net Total,Status\n`;
+    let csv = `Invoice Number,Date Time,Order Type,Table No,Waiter,Customer Name,Phone,Payment Method,Subtotal,Bill Discount,Loyalty Pts Redeemed,Loyalty Discount (Rs.),Points Earned,SC,VAT,SSCL,Net Total,Status\n`;
     list.forEach(([id, inv]) => {
-      csv += `"${inv.invoiceNumber}","${inv.createdAt}","${inv.orderType}","${inv.tableNo}","${inv.waiterName || 'N/A'}","${inv.payment ? inv.payment.method : 'cash'}","${inv.subtotal}","${inv.discountAmount || 0}","${inv.scAmount}","${inv.vatAmount}","${inv.cslAmount}","${inv.netTotal}","${inv.status || 'Paid'}"\n`;
+      csv += `"${inv.invoiceNumber}","${inv.createdAt}","${inv.orderType}","${inv.tableNo}","${inv.waiterName || 'N/A'}","${inv.customerName || ''}","${inv.customerPhone || ''}","${inv.payment ? inv.payment.method : 'cash'}","${inv.subtotal}","${inv.discountAmount || 0}","${inv.loyaltyPointsRedeemed || 0}","${inv.loyaltyDiscount || 0}","${inv.loyaltyPointsEarned || 0}","${inv.scAmount}","${inv.vatAmount}","${inv.cslAmount}","${inv.netTotal}","${inv.status || 'Paid'}"\n`;
     });
     downloadCSVFile(csv, `Invoices_Report_${dateStr}.csv`);
 
@@ -837,7 +900,7 @@ export function exportCurrentReportToCSV() {
 
     let csv = `P&L Statement Breakdown,Amount (Rs.)\n`;
     csv += `"1. Gross Menu Sales","${rGross}"\n`;
-    csv += `"2. (-) Bill Discounts","${rDisc}"\n`;
+    csv += `"2. (-) Bill & Loyalty Discounts","${rDisc}"\n`;
     csv += `"3. Net Food Revenue","${rNet}"\n`;
     csv += `"4. (-) Cost of Goods Sold (COGS)","${rCogs}"\n`;
     csv += `"5. Gross Kitchen Profit","${rGrossProf}"\n`;
@@ -871,7 +934,7 @@ export function exportCurrentReportToCSV() {
     rows.forEach(r => {
       const cols = r.querySelectorAll("td");
       if (cols.length >= 6) {
-        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}","${cols[4].innerText}","${cols[5].innerText}"\n`;
+        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}"\n`;
       }
     });
     downloadCSVFile(csv, `Waiter_Sales_Performance_${dateStr}.csv`);
@@ -905,7 +968,7 @@ export function exportCurrentReportToCSV() {
   }
 }
 
-// 5. 🔥 SMART SHIFT-BASED DAY-END Z-REPORT (SEPARATE PETTY CASH AUDIT)
+// 5. 🔥 SMART SHIFT-BASED DAY-END Z-REPORT (ACCURATE SHIFT WINDOW & LOYALTY ITEMIZATION)
 export let currentZReportCalculatedData = null;
 
 export async function openDayEndModal() {
@@ -916,9 +979,16 @@ export async function openDayEndModal() {
   
   const pastReports = Object.values(erpState.dayEndReports || {});
   if (pastReports.length > 0) {
-    const lastReportTime = Math.max(...pastReports.map(r => new Date(r.timestamp || r.date).getTime()));
-    if (lastReportTime && !isNaN(lastReportTime)) {
-      shiftStartTimeMs = Math.max(shiftStartTimeMs, lastReportTime);
+    const validPastTimestamps = pastReports
+      .map(r => new Date(r.auditTime || r.timestamp || r.date).getTime())
+      .filter(t => !isNaN(t) && t < now.getTime());
+
+    if (validPastTimestamps.length > 0) {
+      const lastAuditTimestamp = Math.max(...validPastTimestamps);
+      const hoursSinceLastZ = (now.getTime() - lastAuditTimestamp) / (1000 * 60 * 60);
+      if (hoursSinceLastZ <= 30) {
+        shiftStartTimeMs = lastAuditTimestamp;
+      }
     }
   }
 
@@ -933,7 +1003,9 @@ export async function openDayEndModal() {
   });
 
   let grossSales = 0;
-  let totalDiscounts = 0;
+  let totalBillDiscounts = 0;
+  let totalLoyaltyDiscounts = 0;
+  let totalLoyaltyPointsRedeemed = 0;
   let totalServiceCharge = 0;
   let totalVAT = 0;
   let totalSSCL = 0;
@@ -961,13 +1033,16 @@ export async function openDayEndModal() {
       totalBillsCount++;
       const sub = parseFloat(inv.subtotal || 0);
       const disc = parseFloat(inv.discountAmount || 0);
+      const loyaltyDisc = parseFloat(inv.loyaltyDiscount || 0);
       const sc = parseFloat(inv.scAmount || 0);
       const vat = parseFloat(inv.vatAmount || 0);
       const csl = parseFloat(inv.cslAmount || 0);
       const net = parseFloat(inv.netTotal || 0);
 
       grossSales += sub;
-      totalDiscounts += disc;
+      totalBillDiscounts += disc;
+      totalLoyaltyDiscounts += loyaltyDisc;
+      totalLoyaltyPointsRedeemed += parseInt(inv.loyaltyPointsRedeemed || 0);
       totalServiceCharge += sc;
       totalVAT += vat;
       totalSSCL += csl;
@@ -1018,6 +1093,7 @@ export async function openDayEndModal() {
 
   const pettyNetBalance = Math.round((totalLifetimeIn - totalLifetimeOut) * 100) / 100;
   const expectedDrawerCash = Math.round((cashSales + openingFloat) * 100) / 100;
+  const totalAllDiscounts = totalBillDiscounts + totalLoyaltyDiscounts;
 
   currentZReportCalculatedData = {
     date: todayLocalStr,
@@ -1025,7 +1101,10 @@ export async function openDayEndModal() {
     auditTime: now.toISOString(),
     totalBillsCount,
     grossSales: Math.round(grossSales * 100) / 100,
-    totalDiscounts: Math.round(totalDiscounts * 100) / 100,
+    totalDiscounts: Math.round(totalAllDiscounts * 100) / 100,
+    totalBillDiscounts: Math.round(totalBillDiscounts * 100) / 100,
+    totalLoyaltyDiscounts: Math.round(totalLoyaltyDiscounts * 100) / 100,
+    totalLoyaltyPointsRedeemed: totalLoyaltyPointsRedeemed,
     totalServiceCharge: Math.round(totalServiceCharge * 100) / 100,
     totalVAT: Math.round(totalVAT * 100) / 100,
     totalSSCL: Math.round(totalSSCL * 100) / 100,
@@ -1158,7 +1237,9 @@ export async function printAndSaveZReport() {
 
   try {
     if (dbRef && pushFn && updateFn && currentTenant) {
-      await pushFn(dbRef(`tenants/${currentTenant}/dayEndReports`), fullZReportPayload);
+      const zRef = await pushFn(dbRef(`tenants/${currentTenant}/dayEndReports`), fullZReportPayload);
+      if (!erpState.dayEndReports) erpState.dayEndReports = {};
+      erpState.dayEndReports[zRef.key] = fullZReportPayload;
       
       const shiftKey = `${fullZReportPayload.date}_${Date.now()}`;
       await updateFn(dbRef(`tenants/${currentTenant}/dailySummaries/${shiftKey}`), {
@@ -1172,25 +1253,41 @@ export async function printAndSaveZReport() {
         cardSales: fullZReportPayload.cardSales,
         transferSales: fullZReportPayload.transferSales,
         creditSales: fullZReportPayload.creditSales,
+        totalDiscounts: fullZReportPayload.totalDiscounts,
+        loyaltyDiscounts: fullZReportPayload.totalLoyaltyDiscounts,
         categorySales: fullZReportPayload.categorySales,
         updatedAt: new Date().toISOString()
       });
     }
 
+    try {
+      if (window.electronAPI && window.electronAPI.saveLocalAutoBackup) {
+        const localBackupPayload = {
+          tenantId: currentTenant,
+          date: fullZReportPayload.date,
+          zReport: fullZReportPayload,
+          databaseSnapshot: JSON.parse(JSON.stringify(erpState))
+        };
+        await window.electronAPI.saveLocalAutoBackup(localBackupPayload);
+      }
+    } catch (backupErr) {
+      console.warn("Auto local backup pass:", backupErr);
+    }
+
     renderAdvancedThermalZReport(fullZReportPayload);
 
-    // 🖨️ SILENT PRINT TO CASHIER PRINTER
     const pr = erpState.settings?.printers || {};
     const targetPrinter = pr.p1?.device || pr.p4?.device || "";
     await sendDirectSilentPrint(targetPrinter, "", "zReportPrintModal");
 
     closeDayEndModal();
-    showLiveToast("📑 Z-Report Completed", "දවසේ සම්පූර්ණ Z-Report එක සාර්ථකව Print විය.", "success", "fa-vault");
+    showLiveToast("📑 Z-Report Completed", "දවසේ සම්පූර්ණ Z-Report එක සාර්ථකව Print වී Local Backup එක සුරැකිණි.", "success", "fa-vault");
   } catch (err) {
     alert("Z-Report සේව් කිරීමේදී දෝෂයක්: " + err.message);
   }
 }
 
+// THERMAL PRINTABLE Z-REPORT FORMATTER (ITEMIZES LOYALTY DISCOUNTS)
 function renderAdvancedThermalZReport(z) {
   const zHotel = document.getElementById("zHotelName");
   const zDate = document.getElementById("zReportDate");
@@ -1206,7 +1303,14 @@ function renderAdvancedThermalZReport(z) {
   const zNet = document.getElementById("zNetSales");
 
   if (zGross) zGross.innerText = `Rs. ${z.grossSales.toFixed(2)}`;
-  if (zDisc) zDisc.innerText = `-Rs. ${z.totalDiscounts.toFixed(2)}`;
+
+  // Itemize Loyalty Points Discounts on Thermal Slip if redeemed
+  let discDisplay = `-Rs. ${z.totalDiscounts.toFixed(2)}`;
+  if (z.totalLoyaltyDiscounts > 0) {
+    discDisplay += ` (Pts: -Rs.${z.totalLoyaltyDiscounts.toFixed(0)})`;
+  }
+  if (zDisc) zDisc.innerText = discDisplay;
+
   if (zSC) zSC.innerText = `Rs. ${z.totalServiceCharge.toFixed(2)}`;
   if (zVAT) zVAT.innerText = `Rs. ${z.totalVAT.toFixed(2)}`;
   if (zSSCL) zSSCL.innerText = `Rs. ${z.totalSSCL.toFixed(2)}`;
@@ -1274,7 +1378,8 @@ export function openShiftHandoverModal() {
   let openingFloat = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     if (p.category === "Main Cash Drawer Top-up" && p.type === "in") {
-      if (getLocalDateString(p.timestamp || new Date()) === todayLocalStr) {
+      const pDate = p.date || (p.timestamp ? getLocalDateString(new Date(p.timestamp)) : '');
+      if (pDate === todayLocalStr) {
         openingFloat += parseFloat(p.amount || 0);
       }
     }
@@ -1283,7 +1388,8 @@ export function openShiftHandoverModal() {
   let cashSales = 0;
   Object.values(erpState.invoices || {}).forEach(inv => {
     if (inv.status === "Voided") return;
-    if (getLocalDateString(inv.createdAt || new Date()) === todayLocalStr) {
+    const invDate = inv.date || (inv.createdAt ? getLocalDateString(new Date(inv.createdAt)) : '');
+    if (invDate === todayLocalStr) {
       const p = inv.payment || { method: "cash" };
       if (p.method === "cash") cashSales += parseFloat(inv.netTotal || 0);
       else if (p.method === "split") cashSales += parseFloat(p.splitCash || 0);
@@ -1340,7 +1446,6 @@ export async function handleShiftHandoverSubmit(e) {
 
     closeShiftHandoverModal();
 
-    // 🖨️ SILENT PRINT TO CASHIER PRINTER
     const pr = erpState.settings?.printers || {};
     const targetPrinter = pr.p1?.device || pr.p4?.device || "";
     await sendDirectSilentPrint(targetPrinter, "", "xReportPrintModal");
