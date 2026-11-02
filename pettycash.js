@@ -3,11 +3,22 @@
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast, downloadCSVFile } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
 let removeFn = null;
+
+// Offline Petty Cash Dexie Instance
+let offlinePettyDb = null;
+if (typeof Dexie !== 'undefined') {
+  offlinePettyDb = new Dexie("RestaurantERP_OfflineDB");
+  offlinePettyDb.version(1).stores({
+    offlineInvoices: '++id, invoiceNumber, createdAt, synced',
+    offlinePettyCash: '++id, timestamp, synced',
+    offlineAttendance: '++id, date, synced'
+  });
+}
 
 export function initPettyCashContext(dbRefInstance, pushMethod, removeMethod) {
   dbRef = dbRefInstance;
@@ -96,23 +107,53 @@ export async function handlePettyCashSubmit(e) {
     amount: Math.round(amount * 100) / 100,
     description,
     handledBy,
+    date: getLocalDateString(),
     timestamp: new Date().toISOString()
   };
   
   try {
-    if (dbRef && pushFn && currentTenant) {
-      await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), transactionRecord);
-    }
-    closePettyCashModal();
-    if (entryType === "in") {
-      showLiveToast("💰 Cash In Recorded", `සුළු මුදල් පෙට්ටියට Rs. ${amount.toFixed(2)} ක් සාර්ථකව එකතු විය.`, "success", "fa-circle-plus");
-    } else {
-      showLiveToast("💸 Expense Recorded", `Rs. ${amount.toFixed(2)} (${category}) වියදම සාර්ථකව සටහන් විය.`, "warning", "fa-wallet");
+    if (navigator.onLine && dbRef && pushFn && currentTenant) {
+      const pRef = await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), transactionRecord);
+      if (!erpState.pettyCash) erpState.pettyCash = {};
+      erpState.pettyCash[pRef.key] = transactionRecord;
+      
+      closePettyCashModal();
+      if (entryType === "in") {
+        showLiveToast("💰 Cash In Recorded", `සුළු මුදල් පෙට්ටියට Rs. ${amount.toFixed(2)} ක් සාර්ථකව එකතු විය.`, "success", "fa-circle-plus");
+      } else {
+        showLiveToast("💸 Expense Recorded", `Rs. ${amount.toFixed(2)} (${category}) වියදම සාර්ථකව සටහන් විය.`, "warning", "fa-wallet");
+      }
+    } else if (offlinePettyDb) {
+      // 🛡️ OFFLINE DEXIE FALLBACK
+      const tempKey = "offline_petty_" + Date.now();
+      await offlinePettyDb.offlinePettyCash.add({ ...transactionRecord, synced: 0 });
+      if (!erpState.pettyCash) erpState.pettyCash = {};
+      erpState.pettyCash[tempKey] = transactionRecord;
+      
+      closePettyCashModal();
+      renderPettyCashTable();
+      showLiveToast("⚠️ Petty Cash Saved Offline", `Rs. ${amount.toFixed(2)} Offline සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
     }
   } catch (err) {
     alert("ගනුදෙනුව සේව් කිරීමේදී දෝෂයක්: " + err.message);
   }
 }
+
+// 🔄 SYNC OFFLINE PETTY CASH TO FIREBASE CLOUD
+export async function syncOfflinePettyCashToCloud() {
+  if (!navigator.onLine || !offlinePettyDb || !dbRef || !pushFn || !currentTenant) return;
+  try {
+    const unsynced = await offlinePettyDb.offlinePettyCash.where("synced").equals(0).toArray();
+    for (const rec of unsynced) {
+      const cleanRec = { ...rec };
+      delete cleanRec.id;
+      delete cleanRec.synced;
+      await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), cleanRec);
+      await offlinePettyDb.offlinePettyCash.delete(rec.id);
+    }
+  } catch (e) {}
+}
+window.addEventListener("online", syncOfflinePettyCashToCloud);
 
 export function setPettyPeriodPreset(preset) {
   const fromElem = document.getElementById("pettyFromDate");
@@ -286,12 +327,14 @@ export async function deletePettyCash(id) {
   if (confirm("මෙම සටහන මකා දැමීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/pettyCash/${id}`));
+      if (erpState.pettyCash) delete erpState.pettyCash[id];
       showLiveToast("🗑️ Record Deleted", "මුදල් පොතේ සටහන සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
+      renderPettyCashTable();
     }
   }
 }
 
-// 🔒 CSV EXPORT WITH ACCURATE OPENING B/F BALANCE
+// 🔒 CSV EXPORT WITH ACCURATE OPENING B/F BALANCE (LOCAL DATE SAFE)
 export function exportPettyCashToCSV() {
   const { filteredList, openingBalanceBF, hasFromFilter } = getFilteredPettyCashData();
   if (filteredList.length === 0 && !hasFromFilter) {
@@ -320,7 +363,7 @@ export function exportPettyCashToCSV() {
     csv += `"${item.timestamp}","${isIn ? 'CASH IN' : 'EXPENSE'}","${item.category}","${item.description}","${item.handledBy || 'Cashier'}","${inVal}","${outVal}","${running.toFixed(2)}"\n`;
   });
   
-  downloadCSVFile(csv, `Petty_Cash_Ledger_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSVFile(csv, `Petty_Cash_Ledger_${getLocalDateString()}.csv`);
 }
 
 // Global Window Exports
