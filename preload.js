@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printSilent: (options) => ipcRenderer.invoke('print-silent', options),
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   
+  // 💾 Local Automatic Hard-Disk Backup API
+  saveLocalAutoBackup: (backupData) => ipcRenderer.invoke('save-local-auto-backup', backupData),
+  
   // 📲 Direct WhatsApp Desktop Native Protocol
   openWhatsAppDirect: ({ phone, text }) => ipcRenderer.invoke('open-whatsapp-direct', { phone, text }),
   
