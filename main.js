@@ -7,7 +7,7 @@ let mainWindow = null;
 let customerWindow = null;
 let printWorkerWindow = null;
 
-// 🛡️ 1. GLOBAL CRASH-PROOF EXCEPTION HANDLERS (ඇප් එක කිසිවිටෙකත් Crash වී වැසෙන්නේ නැත)
+// 🛡️ 1. GLOBAL CRASH-PROOF EXCEPTION HANDLERS
 process.on('uncaughtException', (error) => {
   console.error("CRITICAL: Unhandled System Exception caught:", error);
 });
@@ -16,7 +16,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error("CRITICAL: Unhandled Promise Rejection at:", promise, "reason:", reason);
 });
 
-// 🔒 2. SINGLE INSTANCE LOCK (ඇප් එක එකවර දෙපාරක් Open වීම වළක්වයි)
+// 🔒 2. SINGLE INSTANCE LOCK
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -26,20 +26,22 @@ if (!gotTheLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.focus();
+      }
     }
   });
   
   app.whenReady().then(() => {
     createWindow();
     initPrintWorkerWindow();
-    // දෙවන තිරයක් තිබේ නම් Customer Display එක ස්වයංක්‍රීයව ආරම්භ කිරීම
     setTimeout(() => {
       createOrUpdateCustomerDisplay();
     }, 1500);
   });
 }
 
-// 🖨️ 3. REUSABLE HIGH-PERFORMANCE PRINT WORKER WINDOW (ELIMINATES MEMORY LEAKS)
+// 🖨️ 3. REUSABLE HIGH-PERFORMANCE PRINT WORKER WINDOW
 function initPrintWorkerWindow() {
   if (!printWorkerWindow || printWorkerWindow.isDestroyed()) {
     printWorkerWindow = new BrowserWindow({
@@ -57,11 +59,10 @@ function initPrintWorkerWindow() {
   return printWorkerWindow;
 }
 
-// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD) CONTROLLER
+// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD)
 function createOrUpdateCustomerDisplay() {
   try {
     const displays = screen.getAllDisplays();
-    // ප්‍රධාන Display (x:0, y:0) නොවන දෙවන Screen එක හඳුනාගැනීම
     const secondaryDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0);
 
     if (secondaryDisplay) {
@@ -101,7 +102,6 @@ function createOrUpdateCustomerDisplay() {
   }
 }
 
-// තිරයක් අලුතින් සම්බන්ධ කළ විට හෝ ඉවත් කළ විට ස්වයංක්‍රීයව හඳුනාගැනීම
 app.whenReady().then(() => {
   screen.on('display-added', () => createOrUpdateCustomerDisplay());
   screen.on('display-removed', () => {
@@ -119,26 +119,31 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: "Restaurant ERP - SME Enterprise Edition",
-    autoHideMenuBar: true, // Clean POS Screen (Menu bar සැඟවීම)
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
-      devTools: false // Production එකේදී DevTools අවහිර කිරීම
+      devTools: false
     }
   });
   
-  mainWindow.maximize(); // ඇප් එක Open වන විටම Fullscreen මැක්සිමයිස් වේ
+  mainWindow.maximize();
   mainWindow.loadFile('index.html');
+
+  // 🛡️ ZERO-FREEZE AUTO-FOCUS GUARD: Ensures textboxes and keyboard focus are never lost
+  mainWindow.on('focus', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.focus();
+    }
+  });
   
-  // 🔒 DEVTOOLS & ACCIDENTAL RELOAD BLOCK (F12 සහ Ctrl+R අවහිර කිරීම)
   mainWindow.webContents.on('devtools-opened', () => {
     mainWindow.webContents.closeDevTools();
   });
   
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    // F12, Ctrl+Shift+I (Inspect) සහ F5, Ctrl+R (Accidental Reload) අවහිර කිරීම
     if (
       input.key === 'F12' ||
       (input.control && input.shift && input.key.toLowerCase() === 'i') ||
@@ -161,7 +166,6 @@ function createWindow() {
     }
   });
   
-  // 🔄 App එක Open වූ විට පසුබිමෙන් Updates පරීක්ෂා කිරීම (Safe Packaged Check)
   mainWindow.once('ready-to-show', () => {
     if (app.isPackaged) {
       try {
@@ -174,7 +178,6 @@ function createWindow() {
   });
 }
 
-// 🔔 Auto-Updater Download Event (Cashier ගෙන් විමසීම)
 autoUpdater.on('update-downloaded', (info) => {
   if (!mainWindow) return;
   dialog.showMessageBox(mainWindow, {
@@ -192,7 +195,7 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 💾 5. LOCAL AUTOMATIC HARD-DISK BACKUP ENGINE (Documents/RestaurantERP_Backups)
+// 💾 5. LOCAL AUTOMATIC HARD-DISK BACKUP ENGINE
 ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   try {
     const backupDir = path.join(app.getPath('documents'), 'RestaurantERP_Backups');
@@ -211,19 +214,28 @@ ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   }
 });
 
-// 🖨️ 6. XPRINTER & 80MM DIRECT HARDWARE PRINT ENGINE (WITH REUSABLE WORKER & TIMEOUT GUARD)
+// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (WITH FULL-CONTENT HASH & KOT/BOT COMPLIANCE)
 let lastPrintTimestamp = 0;
 let lastPrintedContentHash = "";
+
+// 🛡️ Full-content 32-bit Hash Generator (KOT සහ BOT එකිනෙකට පැටලීම 100% වළක්වයි)
+function computeStringHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return String(hash);
+}
 
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
     let isFinished = false;
 
-    // තත්පර 6ක ආරක්ෂිත Timeout එක (Printer කේබල් ගැලවුණහොත් හෝ Spooler හිර වුවහොත් UI Release කරයි)
     const timeoutTimer = setTimeout(() => {
       if (!isFinished) {
         isFinished = true;
-        resolve({ success: false, error: "Printer Connection Timed Out (කරුණාකර Printer කේබලය හෝ Power පරීක්ෂා කරන්න)." });
+        resolve({ success: false, error: "Printer Connection Timed Out" });
       }
     }, 6000);
 
@@ -237,29 +249,32 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         return resolve({ success: false, error: "Print content is empty" });
       }
 
-      // තත්පර 1.2ක් ඇතුළත එකම Print Job එක දෙපාරක් වැටීමෙන් හිස් කඩදාසි කැපීම වළක්වයි (Anti-Duplicate Guard)
+      // 🛡️ සම්පූර්ණ අන්තර්ගතයම පදනම් කරගත් Anti-Duplicate Check (KOT සහ BOT Hash වෙනස් බැවින් BOT කවදාවත් Drop නොවේ)
       const nowMs = Date.now();
-      const simpleHash = htmlContent.substring(0, 80);
-      if (simpleHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1200) {
+      const contentHash = computeStringHash(htmlContent);
+      if (contentHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1200) {
         clearTimeout(timeoutTimer);
         return resolve({ success: true, duplicateIgnored: true });
       }
       lastPrintTimestamp = nowMs;
-      lastPrintedContentHash = simpleHash;
+      lastPrintedContentHash = contentHash;
       
       const printers = await mainWindow.webContents.getPrintersAsync();
       let targetDevice = "";
       
-      // 1. පරිගණකයේ ඇති Printers අතරින් නම ගැළපෙන Printer එක සෙවීම
+      // Smart Two-Way Match: පරිගණකයේ ඇති Printer නම සහ Settings වල නම ගැළපීම
       if (printerName && printerName.trim()) {
-        const cleanReqName = printerName.trim().toLowerCase();
-        const matched = printers.find(p => p.name.toLowerCase() === cleanReqName || p.name.toLowerCase().includes(cleanReqName));
+        const cleanReq = printerName.trim().toLowerCase();
+        const matched = printers.find(p => {
+          const pName = p.name.toLowerCase();
+          return pName === cleanReq || pName.includes(cleanReq) || cleanReq.includes(pName);
+        });
         if (matched) {
           targetDevice = matched.name;
         }
       }
       
-      // 2. Default Printer එක තෝරාගැනීම
+      // Settings වල නම නොගැලපුණහොත් Default Printer එක තෝරාගැනීම
       if (!targetDevice) {
         const def = printers.find(p => p.isDefault);
         targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
@@ -270,10 +285,8 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         return resolve({ success: false, error: "පරිගණකයට කිසිදු Printer එකක් සම්බන්ධ කර නොමැත." });
       }
       
-      // 3. Reusable Print Window එක භාවිත කිරීම (Continuous Memory Leak Protection)
       const pWin = initPrintWorkerWindow();
       
-      // දකුණු පසින් අකුරු කැපීම 100% වළක්වා (Safe 68mm Zone) තනි පිටුවක් ලෙස මුද්‍රණය කරන HTML සැකිල්ල
       const fullPrintHtml = `
         <!DOCTYPE html>
         <html lang="si">
@@ -352,32 +365,31 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         </html>
       `;
       
-      pWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
+      await pWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
       
-      pWin.webContents.once('did-finish-load', () => {
-        setTimeout(async () => {
-          try {
-            await pWin.webContents.print({
-              silent: true,
-              printBackground: true,
-              deviceName: targetDevice,
-              margins: { marginType: 'none' }
-            });
-            
-            if (!isFinished) {
-              isFinished = true;
-              clearTimeout(timeoutTimer);
-              resolve({ success: true, usedPrinter: targetDevice });
-            }
-          } catch (printErr) {
-            if (!isFinished) {
-              isFinished = true;
-              clearTimeout(timeoutTimer);
-              resolve({ success: false, error: printErr.message });
-            }
+      setTimeout(async () => {
+        try {
+          await pWin.webContents.print({
+            silent: true,
+            printBackground: true,
+            deviceName: targetDevice,
+            margins: { marginType: 'none' }
+          });
+          
+          if (!isFinished) {
+            isFinished = true;
+            clearTimeout(timeoutTimer);
+            resolve({ success: true, usedPrinter: targetDevice });
           }
-        }, 150);
-      });
+        } catch (printErr) {
+          if (!isFinished) {
+            isFinished = true;
+            clearTimeout(timeoutTimer);
+            resolve({ success: false, error: printErr.message });
+          }
+        }
+      }, 150);
+
     } catch (err) {
       if (!isFinished) {
         isFinished = true;
@@ -388,13 +400,11 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   });
 });
 
-// Windows පරිගණකයේ Printers ලැයිස්තුව ලබාගැනීම
 ipcMain.handle('get-printers', async () => {
   if (!mainWindow) return [];
   return await mainWindow.webContents.getPrintersAsync();
 });
 
-// 📲 7. DIRECT WHATSAPP DESKTOP NATIVE PROTOCOL ENGINE
 ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
   try {
     let cleanPhone = String(phone || '').replace(/\D/g, '');
@@ -418,7 +428,6 @@ ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
   }
 });
 
-// 🖥️ 8. CUSTOMER-FACING DISPLAY (CFD) IPC HANDLERS
 ipcMain.handle('open-customer-display', async () => {
   createOrUpdateCustomerDisplay();
   return { success: !!customerWindow };
@@ -437,7 +446,6 @@ ipcMain.handle('has-secondary-display', async () => {
   return displays.length > 1;
 });
 
-// POS Cart සහ Total දත්ත දෙවන තිරයට සජීවීව යැවීම
 ipcMain.on('sync-customer-display', (event, displayData) => {
   if (customerWindow && !customerWindow.isDestroyed()) {
     customerWindow.webContents.send('customer-display-update', displayData);
