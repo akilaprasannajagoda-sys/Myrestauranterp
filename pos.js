@@ -1,12 +1,12 @@
 // ==========================================================================
-// MODULE 11: POS ENGINE (ATOMIC STOCK, SPLIT BILL, LOYALTY CRM & DUAL SCREEN)
+// MODULE 11: POS ENGINE (ATOMIC STOCK, SPLIT BILL, KOT/BOT & DUAL SCREEN)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (AUTO-PRUNED OFFLINE SYNC)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
-import { showLiveToast, sendInvoiceViaWhatsApp, showCustomInputModal } from './utils.js';
-import { convertRecipeQtyToBaseUnit } from './menu.js';
-import { formatReceiptRawText, formatKOTRawText, sendDirectSilentPrint } from './printer.js';
+import { showLiveToast, sendInvoiceViaWhatsApp, showCustomInputModal, getLocalDateString } from './utils.js';
+import { convertRecipeQtyToBaseUnit, getDishStationTarget } from './menu.js';
+import { formatReceiptRawText, formatStationOrderTicket, sendDirectSilentPrint } from './printer.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -22,6 +22,9 @@ export let currentDiscountType = "fixed";
 // Dual-Screen Web BroadcastChannel Fallback
 const cfdBroadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel("restaurant_customer_display") : null;
 
+// Lock timer to keep settled payment details visible on CFD for 10 seconds
+let cfdSettledHoldUntil = 0;
+
 export function initPosContext(dbRefInstance, pushMethod, updateMethod, removeMethod, setMethod, localDB, runTransactionMethod = null) {
   dbRef = dbRefInstance;
   pushFn = pushMethod;
@@ -34,17 +37,28 @@ export function initPosContext(dbRefInstance, pushMethod, updateMethod, removeMe
 
 // 🖥️ DUAL SCREEN LIVE SYNC DISPATCHER (ELECTRON IPC + WEB BROADCAST)
 export function syncLiveCustomerDisplay(isSettled = false, paymentData = null) {
+  const nowMs = Date.now();
+
+  if (isSettled) {
+    cfdSettledHoldUntil = nowMs + 10000;
+  } else if (nowMs < cfdSettledHoldUntil) {
+    return;
+  }
+
   const currentBill = getActiveBillData();
   const discIn = document.getElementById("cartDiscountInput");
   const discVal = parseFloat(discIn ? discIn.value : (currentBill.discountVal || 0)) || 0;
   const oType = document.getElementById("orderType")?.value || currentBill.orderType || "Dine-in";
   
-  const totals = calculateOrderTotals(currentBill.cart || [], currentDiscountType, discVal, oType);
+  const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
+  const loyaltyRedeemed = parseFloat(redeemIn ? redeemIn.value : (currentBill.loyaltyPointsRedeemed || 0)) || 0;
+
+  const totals = calculateOrderTotals(currentBill.cart || [], currentDiscountType, discVal, oType, loyaltyRedeemed);
 
   const payload = {
     hotelName: currentTenantInfo?.hotelName || "Restaurant ERP",
     footerNote: currentTenantInfo?.footerNote || "*** Thank You! Please Visit Us Again ***",
-    cart: currentBill.cart || [],
+    cart: isSettled ? (paymentData?.items || currentBill.cart || []) : (currentBill.cart || []),
     subtotal: totals.subtotal,
     discountAmount: totals.discountAmount + (totals.loyaltyDiscount || 0),
     scAmount: totals.scAmount,
@@ -57,12 +71,10 @@ export function syncLiveCustomerDisplay(isSettled = false, paymentData = null) {
     change: paymentData ? paymentData.change : parseFloat(document.getElementById("cashChangeVal")?.innerText?.replace(/[^\d.]/g, '') || 0)
   };
 
-  // 1. Electron Desktop IPC Relay
   if (window.electronAPI && window.electronAPI.syncCustomerDisplay) {
     window.electronAPI.syncCustomerDisplay(payload);
   }
 
-  // 2. Browser BroadcastChannel Relay (multi-tab support)
   if (cfdBroadcastChannel) {
     cfdBroadcastChannel.postMessage(payload);
   }
@@ -70,13 +82,11 @@ export function syncLiveCustomerDisplay(isSettled = false, paymentData = null) {
 
 // 🔒 COLLISION-PROOF UNIQUE INVOICE & ESTIMATE NUMBER GENERATORS
 export function generateCollisionProofInvoiceNumber() {
+  const dStr = getLocalDateString().replace(/-/g, '').slice(2);
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
   const timePart = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0');
   const salt = String(Math.floor(10 + Math.random() * 90));
-  return `INV-${yy}${mm}${dd}-${timePart}${salt}`;
+  return `INV-${dStr}-${timePart}${salt}`;
 }
 
 export function generateCollisionProofEstimateNumber() {
@@ -123,15 +133,35 @@ export function getActiveBillData() {
 }
 
 export async function persistActiveBillToCloud(updatedObj) {
-  if (!currentTenant || !activeBillId || !dbRef || !updateFn) return;
-  await updateFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`), {
-    ...updatedObj,
+  if (!erpState.activeBills) erpState.activeBills = {};
+  if (!erpState.activeBills[activeBillId]) {
+    erpState.activeBills[activeBillId] = {
+      name: "Bill #1",
+      orderType: "Dine-in",
+      tableNo: "",
+      waiterName: "",
+      cart: [],
+      discountType: "fixed",
+      discountVal: 0,
+      selectedPayMethod: "cash"
+    };
+  }
+  Object.assign(erpState.activeBills[activeBillId], updatedObj, {
     updatedAt: new Date().toISOString()
   });
+
+  if (!currentTenant || !activeBillId || !dbRef || !updateFn) return;
+  try {
+    await updateFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`), {
+      ...updatedObj,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn("Active bill sync queued offline:", err.message);
+  }
 }
 
 export async function addNewBillTab() {
-  if (!dbRef || !setFn || !currentTenant) return;
   const keys = Object.keys(erpState.activeBills || {});
   const nextNum = keys.length + 1;
   const newKey = "bill_" + Date.now();
@@ -152,8 +182,17 @@ export async function addNewBillTab() {
     updatedAt: new Date().toISOString()
   };
 
-  await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newKey}`), newBillPayload);
+  if (!erpState.activeBills) erpState.activeBills = {};
+  erpState.activeBills[newKey] = newBillPayload;
   setActiveBillId(newKey);
+  renderBillTabsBar();
+  syncActiveBillToFormUI();
+
+  if (dbRef && setFn && currentTenant) {
+    try {
+      await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newKey}`), newBillPayload);
+    } catch (e) {}
+  }
 }
 
 export function switchBillTab(key) {
@@ -178,19 +217,30 @@ export async function closeBillTab(key, ev) {
   }
 
   if (b && b.tableNo && dbRef && updateFn && currentTenant) {
-    const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === b.tableNo);
-    if (matchedTable) {
-      await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+    const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+      ([k, bill]) => k !== key && bill.tableNo === b.tableNo && bill.cart && bill.cart.length > 0
+    );
+    if (!hasOtherBillsOnTable) {
+      const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === b.tableNo);
+      if (matchedTable) {
+        await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+      }
     }
   }
 
+  delete erpState.activeBills[key];
+
   if (dbRef && removeFn && currentTenant) {
-    await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${key}`));
+    try {
+      await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${key}`));
+    } catch (e) {}
   }
   if (activeBillId === key) {
-    const remain = Object.keys(erpState.activeBills).filter(k => k !== key);
+    const remain = Object.keys(erpState.activeBills);
     setActiveBillId(remain[0]);
   }
+  renderBillTabsBar();
+  syncActiveBillToFormUI();
 }
 
 export function renderBillTabsBar() {
@@ -263,7 +313,10 @@ export function syncActiveBillToFormUI() {
     if (pointsBadge) pointsBadge.innerText = `⭐ ${cust.loyaltyPoints || 0} Points Available`;
     if (badgeContainer) badgeContainer.classList.remove("hidden");
     if (redeemBox) redeemBox.classList.remove("hidden");
-    if (redeemInput) redeemInput.value = currentBill.loyaltyPointsRedeemed || "";
+    if (redeemInput) {
+      redeemInput.value = currentBill.loyaltyPointsRedeemed || "";
+      redeemInput.max = cust.loyaltyPoints || 0;
+    }
   } else {
     if (badgeContainer) badgeContainer.classList.add("hidden");
     if (redeemBox) redeemBox.classList.add("hidden");
@@ -301,6 +354,7 @@ export async function updateCurrentBillSettings() {
     }
   }
 
+  renderBillTabsBar();
   recalculateCartTotalsUI();
 }
 
@@ -380,9 +434,24 @@ export function renderPOSDishesGrid() {
   if (!container) return;
   container.innerHTML = "";
 
-  const dishesList = Object.entries(erpState.dishes || {}).filter(([id, dish]) => {
+  let dishesObj = erpState.dishes || {};
+  if (Object.keys(dishesObj).length === 0) {
+    try {
+      const cached = localStorage.getItem("cached_erp_dishes");
+      if (cached) {
+        dishesObj = JSON.parse(cached);
+        erpState.dishes = dishesObj;
+      }
+    } catch (e) {}
+  } else {
+    try {
+      localStorage.setItem("cached_erp_dishes", JSON.stringify(dishesObj));
+    } catch (e) {}
+  }
+
+  const dishesList = Object.entries(dishesObj).filter(([id, dish]) => {
     const matchesCategory = currentCategoryFilter === "ALL" || dish.category === currentCategoryFilter;
-    const matchesQuery = dish.name.toLowerCase().includes(searchQuery);
+    const matchesQuery = (dish.name || "").toLowerCase().includes(searchQuery);
     return matchesCategory && matchesQuery;
   });
 
@@ -395,6 +464,8 @@ export function renderPOSDishesGrid() {
     const stockInfo = checkDishStockAvailability(dish);
     const isOut = !stockInfo.isAvailable;
     const isLow = stockInfo.isAvailable && stockInfo.portionsLeft <= 3 && stockInfo.portionsLeft > 0;
+    const station = getDishStationTarget(dishId);
+    const isBar = station === "bar";
 
     const cardElem = document.createElement("div");
     cardElem.className = `p-3 rounded-2xl border transition select-none flex flex-col justify-between ${
@@ -414,7 +485,9 @@ export function renderPOSDishesGrid() {
     cardElem.innerHTML = `
       <div>
         <div class="flex justify-between items-start gap-1">
-          <span class="text-[9px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded-md uppercase">${dish.category || 'General'}</span>
+          <span class="text-[9px] ${isBar ? 'bg-purple-100 text-purple-800' : 'bg-blue-50 text-blue-700'} font-bold px-1.5 py-0.5 rounded-md uppercase">
+            ${isBar ? '🍹 Bar' : dish.category || 'Kitchen'}
+          </span>
           ${
             isOut 
               ? `<span class="text-[9px] bg-red-500 text-white font-black px-1.5 py-0.5 rounded-md uppercase animate-pulse">Out of Stock</span>`
@@ -436,6 +509,7 @@ export function renderPOSDishesGrid() {
   });
 }
 
+// ⚡ OPTIMISTIC IMMEDIATE IN-MEMORY CART MUTATIONS
 export async function addDishToActiveCart(dishId, dish) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -455,12 +529,17 @@ export async function addDishToActiveCart(dishId, dish) {
     });
   }
 
-  await persistActiveBillToCloud({ cart: cartList });
+  currentBill.cart = cartList;
+  renderCartItemsUI();
+  recalculateCartTotalsUI();
+  renderBillTabsBar();
+
+  persistActiveBillToCloud({ cart: cartList });
 
   if (currentBill.tableNo && dbRef && updateFn && currentTenant) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
     if (matchedTable) {
-      await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
+      updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" }).catch(() => {});
     }
   }
 
@@ -481,11 +560,16 @@ export async function changeCartQty(dishId, stepDelta) {
     targetItem.sentQty = Math.min(parseInt(targetItem.sentQty) || 0, calculatedQty);
   }
 
-  await persistActiveBillToCloud({ cart: cartList });
+  currentBill.cart = cartList;
+  renderCartItemsUI();
+  recalculateCartTotalsUI();
+  renderBillTabsBar();
+
+  persistActiveBillToCloud({ cart: cartList });
   syncLiveCustomerDisplay();
 }
 
-// 🔒 CRASH-PROOF KITCHEN NOTE EDITOR (ELECTRON SAFE)
+// 🔒 CRASH-PROOF KITCHEN NOTE EDITOR
 export async function updateCartItemNote(dishId) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -493,8 +577,8 @@ export async function updateCartItemNote(dishId) {
   if (!targetItem) return;
 
   const newNote = await showCustomInputModal(
-    `Kitchen Note: ${targetItem.name}`,
-    "උදා: Less Spicy, No Sugar, Extra Gravy",
+    `Order Note: ${targetItem.name}`,
+    "උදා: Less Spicy, No Ice, Extra Gravy",
     targetItem.note || ""
   );
 
@@ -508,6 +592,15 @@ export async function updateCartItemNote(dishId) {
 
 export async function clearCurrentCart() {
   if (confirm("Cart එක හිස් කිරීමට අවශ්‍යද?")) {
+    const currentBill = getActiveBillData();
+    currentBill.cart = [];
+    currentBill.discountVal = 0;
+    currentBill.loyaltyPointsRedeemed = 0;
+
+    renderCartItemsUI();
+    recalculateCartTotalsUI();
+    renderBillTabsBar();
+
     await persistActiveBillToCloud({ cart: [], discountVal: 0, loyaltyPointsRedeemed: 0 });
     const discIn = document.getElementById("cartDiscountInput");
     const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
@@ -546,6 +639,9 @@ export function renderCartItemsUI() {
 
       if (diff > 0) hasUnsentDelta = true;
 
+      const station = getDishStationTarget(item.dishId);
+      const isBar = station === "bar";
+
       const rowElem = document.createElement("div");
       rowElem.className = "p-2 rounded-xl bg-gray-50 border border-gray-100 space-y-1";
       rowElem.innerHTML = `
@@ -554,6 +650,7 @@ export function renderCartItemsUI() {
             <p class="font-bold text-gray-800 truncate">${item.name}</p>
             <div class="flex items-center gap-1 text-[10px]">
               <span class="text-gray-400">Rs. ${item.price.toFixed(2)}</span>
+              <span class="text-[8.5px] px-1 rounded font-extrabold ${isBar ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">${isBar ? 'BOT' : 'KOT'}</span>
               ${sent > 0 ? `<span class="text-green-700 bg-green-100 px-1 rounded font-bold">Sent: ${sent}</span>` : ''}
               ${diff > 0 ? `<span class="text-yellow-800 bg-yellow-100 px-1 rounded font-bold animate-pulse">New: +${diff}</span>` : ''}
             </div>
@@ -587,7 +684,8 @@ export function renderCartItemsUI() {
   recalculateCartTotalsUI();
 }
 
-export function calculateOrderTotals(cartList = [], discType = "fixed", discValue = 0, orderType = "Dine-in", loyaltyRedeemed = 0) {
+// ⭐ 100% ACCURATE ORDER TOTALS & LOYALTY POINT-TO-RUPEE CONVERSION ENGINE
+export function calculateOrderTotals(cartList = [], discType = "fixed", discValue = 0, orderType = "Dine-in", loyaltyPointsRedeemed = 0) {
   const subtotal = cartList.reduce((sum, i) => sum + (i.price * (parseInt(i.qty) || 0)), 0);
   
   let discountAmount = 0;
@@ -598,8 +696,12 @@ export function calculateOrderTotals(cartList = [], discType = "fixed", discValu
   }
   discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
 
-  // 1 Point = Rs. 1 Redemption
-  const loyaltyDiscount = Math.min(Math.max(0, subtotal - discountAmount), parseFloat(loyaltyRedeemed || 0));
+  // 💎 Owner Configurable Redemption: 1 Point = X Rupees
+  const pointRupeeValue = parseFloat(erpState.settings?.loyaltyPointValue || 1.0);
+  const requestedLoyaltyRupees = parseFloat(loyaltyPointsRedeemed || 0) * pointRupeeValue;
+
+  // Loyalty Discount cannot exceed remaining subtotal after bill discount
+  const loyaltyDiscount = Math.min(Math.max(0, subtotal - discountAmount), requestedLoyaltyRupees);
   const taxableAmount = Math.max(0, subtotal - discountAmount - loyaltyDiscount);
 
   let scAmount = 0;
@@ -617,7 +719,7 @@ export function calculateOrderTotals(cartList = [], discType = "fixed", discValu
   }
 
   const netTotal = taxableAmount + scAmount + vatAmount + cslAmount;
-  return { subtotal, discountAmount, loyaltyDiscount, scAmount, vatAmount, cslAmount, netTotal };
+  return { subtotal, discountAmount, loyaltyDiscount, pointRupeeValue, scAmount, vatAmount, cslAmount, netTotal };
 }
 
 export function recalculateCartTotalsUI() {
@@ -627,7 +729,17 @@ export function recalculateCartTotalsUI() {
   const oType = document.getElementById("orderType")?.value || currentBill.orderType || "Dine-in";
   
   const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
-  const loyaltyRedeemed = parseFloat(redeemIn ? redeemIn.value : (currentBill.loyaltyPointsRedeemed || 0)) || 0;
+  let loyaltyRedeemed = parseFloat(redeemIn ? redeemIn.value : (currentBill.loyaltyPointsRedeemed || 0)) || 0;
+
+  // Maximum redeemable check against customer's actual available balance
+  const attachedCustId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId;
+  if (attachedCustId && erpState.customers?.[attachedCustId]) {
+    const maxAvailable = parseFloat(erpState.customers[attachedCustId].loyaltyPoints || 0);
+    if (loyaltyRedeemed > maxAvailable) {
+      loyaltyRedeemed = maxAvailable;
+      if (redeemIn) redeemIn.value = maxAvailable > 0 ? maxAvailable : "";
+    }
+  }
 
   if (currentBill.discountVal !== discVal || currentBill.discountType !== currentDiscountType || currentBill.loyaltyPointsRedeemed !== loyaltyRedeemed) {
     persistActiveBillToCloud({
@@ -637,7 +749,7 @@ export function recalculateCartTotalsUI() {
     });
   }
 
-  const { subtotal, discountAmount, loyaltyDiscount, scAmount, vatAmount, cslAmount, netTotal } = calculateOrderTotals(
+  const { subtotal, discountAmount, loyaltyDiscount, pointRupeeValue, scAmount, vatAmount, cslAmount, netTotal } = calculateOrderTotals(
     currentBill.cart || [],
     currentDiscountType,
     discVal,
@@ -662,13 +774,13 @@ export function recalculateCartTotalsUI() {
     discRow.classList.add("hidden");
   }
 
-  // Loyalty Discount UI Row
+  // Loyalty Discount UI Row & Value label
   const loyaltyRow = document.getElementById("cartLoyaltyRow");
   const loyaltyTotVal = document.getElementById("cartLoyaltyTotalVal");
   const loyaltyDiscSpan = document.getElementById("cartLoyaltyDiscountVal");
   if (loyaltyDiscount > 0) {
     if (loyaltyRow) loyaltyRow.classList.remove("hidden");
-    if (loyaltyTotVal) loyaltyTotVal.innerText = `-Rs. ${loyaltyDiscount.toFixed(2)}`;
+    if (loyaltyTotVal) loyaltyTotVal.innerText = `-Rs. ${loyaltyDiscount.toFixed(2)} (${loyaltyRedeemed} Pts)`;
     if (loyaltyDiscSpan) loyaltyDiscSpan.innerText = `-Rs. ${loyaltyDiscount.toFixed(2)}`;
   } else {
     if (loyaltyRow) loyaltyRow.classList.add("hidden");
@@ -733,6 +845,19 @@ export function selectPayMethod(method, syncCloud = true) {
       else field.classList.add("hidden");
     }
   });
+
+  // Auto-fill customer details into credit fields if customer is already attached
+  if (method === "credit") {
+    const currentBill = getActiveBillData();
+    const custId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId;
+    if (custId && erpState.customers?.[custId]) {
+      const cust = erpState.customers[custId];
+      const nameIn = document.getElementById("creditCustomerName");
+      const phoneIn = document.getElementById("creditCustomerPhone");
+      if (nameIn && !nameIn.value) nameIn.value = cust.name;
+      if (phoneIn && !phoneIn.value) phoneIn.value = cust.phone;
+    }
+  }
 
   if (method === "split") {
     calculateSplitPaymentBalance();
@@ -799,30 +924,26 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
-// 🖨️ XPRINTER & 80MM CLEAN KOT DISPATCHER (100% PRO CHEF DESIGN - NO CLIPPING)
-export async function printPhysicalKOTSlip(kot) {
-  const pr = erpState.settings?.printers || {};
-  
-  // එකම Printer එකට දෙපාරක් Print Commands යෑම සම්පූර්ණයෙන්ම වළක්වයි
-  const p1Dev = (pr.p1?.device || "").trim();
-  const targetDev = p1Dev || "";
+// 🖨️ KOT & BOT DYNAMIC SLIP DISPATCHER
+async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
+  const modalContainer = document.getElementById("kotPrintModal");
+  if (!modalContainer) return;
 
   const tableEl = document.getElementById("kotPrintTable");
   const typeEl = document.getElementById("kotPrintType");
   const timeEl = document.getElementById("kotPrintTime");
   const itemsContainer = document.getElementById("kotPrintItems");
+  const titleHeader = document.getElementById("kotPrintModalHeaderTitle");
 
-  if (tableEl) tableEl.innerText = `TABLE: ${kot.tableNo || 'N/A'}`;
-  if (typeEl) typeEl.innerText = `TYPE: ${(kot.orderType || 'DINE-IN').toUpperCase()}`;
-  if (timeEl) timeEl.innerText = new Date(kot.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (titleHeader) {
+    titleHeader.innerText = ticketType === "BOT" ? "*** BAR ORDER TICKET (BOT) ***" : "*** KITCHEN ORDER TICKET (KOT) ***";
+  }
+  if (tableEl) tableEl.innerText = `TABLE: ${payload.tableNo || 'N/A'}`;
+  if (typeEl) typeEl.innerText = `TYPE: ${(payload.orderType || 'DINE-IN').toUpperCase()}`;
+  if (timeEl) timeEl.innerText = new Date(payload.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  // කෑම ලැයිස්තුව: Sent: 1 වී තිබුණද KOT බටන් එක එබූ විට කෑම අනිවාර්යයෙන්ම Print වේ
-  const currentCartList = getActiveBillData().cart || [];
-  const itemsToPrint = (kot.items && kot.items.length > 0) ? kot.items : currentCartList;
-
-  // දකුණු මායිමෙන් Quantity කැපී යාම (Right-edge clipping) සම්පූර්ණයෙන්ම වළක්වා [ x1 ] ආකෘතියෙන් පෙන්වයි
   if (itemsContainer) {
-    itemsContainer.innerHTML = itemsToPrint.map(i => `
+    itemsContainer.innerHTML = payload.items.map(i => `
       <div style="border-bottom: 1px dashed #000; padding: 4px 0; margin-bottom: 3px; width: 100%;">
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <span style="font-weight: 800; font-size: 13.5px; width: 72%; line-height: 1.25; color: #000; display: inline-block;">
@@ -837,10 +958,143 @@ export async function printPhysicalKOTSlip(kot) {
     `).join("");
   }
 
-  const rawText = formatKOTRawText(kot, "KOT");
-  await sendDirectSilentPrint(targetDev, rawText, "kotPrintModal");
+  const rawText = formatStationOrderTicket(payload, ticketType);
+  await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
+}
 
-  showLiveToast("🖨️ KOT Direct Printed", `KOT Table #${kot.tableNo || 'N/A'} සාර්ථකව Print විය.`, "kitchen", "fa-print");
+// 🖨️ STATION ORDER SENDER (DELTA SAFE)
+export async function sendOrderToKitchen(isPhysicalPrint = false) {
+  const currentBill = getActiveBillData();
+  const cartList = currentBill.cart ? [...currentBill.cart] : [];
+  if (cartList.length === 0) return;
+
+  const deltaKitchenItems = [];
+  const deltaBarItems = [];
+  const updatedCart = [];
+
+  cartList.forEach(item => {
+    const totalQty = parseInt(item.qty) || 0;
+    const sentQty = parseInt(item.sentQty) || 0;
+    const diff = totalQty - sentQty;
+
+    const station = getDishStationTarget(item.dishId);
+
+    if (diff > 0) {
+      const orderItemPayload = {
+        dishId: item.dishId,
+        name: item.name,
+        qty: diff,
+        note: item.note || "",
+        isAddOn: sentQty > 0,
+        station: station
+      };
+
+      if (station === "bar") {
+        deltaBarItems.push(orderItemPayload);
+      } else {
+        deltaKitchenItems.push(orderItemPayload);
+      }
+    }
+
+    updatedCart.push({
+      ...item,
+      qty: totalQty,
+      sentQty: totalQty
+    });
+  });
+
+  const totalDeltaCount = deltaKitchenItems.length + deltaBarItems.length;
+
+  if (totalDeltaCount === 0 && !isPhysicalPrint) {
+    showLiveToast("⚠️ Order Info", "කුස්සියට හෝ බාර් එකට යැවීමට අලුත් ඇණවුම් නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  const kitchenItemsToPrint = isPhysicalPrint 
+    ? cartList.filter(i => getDishStationTarget(i.dishId) === "kitchen")
+    : deltaKitchenItems;
+
+  const barItemsToPrint = isPhysicalPrint 
+    ? cartList.filter(i => getDishStationTarget(i.dishId) === "bar")
+    : deltaBarItems;
+
+  try {
+    if (totalDeltaCount > 0) {
+      const allNewItems = [...deltaKitchenItems, ...deltaBarItems];
+      const kotTicket = {
+        billKey: activeBillId,
+        orderType: currentBill.orderType || "Dine-in",
+        tableNo: currentBill.tableNo || "N/A",
+        waiterName: currentBill.waiterName || "",
+        items: allNewItems,
+        timestamp: new Date().toISOString(),
+        status: "Cooking"
+      };
+
+      if (dbRef && pushFn && currentTenant) {
+        await pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket);
+      }
+
+      if (currentBill.tableNo && updateFn && currentTenant) {
+        const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
+        if (matchedTable) {
+          await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
+        }
+      }
+
+      currentBill.cart = updatedCart;
+      renderCartItemsUI();
+      await persistActiveBillToCloud({ cart: updatedCart });
+    }
+
+    const pr = erpState.settings?.printers || {};
+    const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
+    const barPrinter = (pr.p3?.device || pr.p1?.device || "").trim();
+    const isSinglePrinterSetup = (!barPrinter || !kitchenPrinter || barPrinter.toLowerCase() === kitchenPrinter.toLowerCase());
+
+    let printedSummary = [];
+
+    if (kitchenItemsToPrint.length > 0) {
+      const kitchenPayload = {
+        tableNo: currentBill.tableNo || "N/A",
+        orderType: currentBill.orderType || "Dine-in",
+        waiterName: currentBill.waiterName || "",
+        items: kitchenItemsToPrint,
+        timestamp: new Date().toISOString()
+      };
+
+      await dispatchStationPrintSlip(kitchenPrinter, kitchenPayload, "KOT");
+      printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
+
+      if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+
+    if (barItemsToPrint.length > 0) {
+      const barPayload = {
+        tableNo: currentBill.tableNo || "N/A",
+        orderType: currentBill.orderType || "Dine-in",
+        waiterName: currentBill.waiterName || "",
+        items: barItemsToPrint,
+        timestamp: new Date().toISOString()
+      };
+
+      await dispatchStationPrintSlip(barPrinter, barPayload, "BOT");
+      printedSummary.push(`BOT (Bar: ${barItemsToPrint.length})`);
+    }
+
+    if (printedSummary.length > 0) {
+      showLiveToast("🖨️ Orders Printed", `${printedSummary.join(" & ")} සාර්ථකව මුද්‍රණය විය!`, "kitchen", "fa-print");
+    }
+
+  } catch (err) {
+    alert("KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message);
+  }
+}
+
+export async function printPhysicalKOTSlip(kot) {
+  await sendOrderToKitchen(true);
 }
 
 export async function printPreBillEstimate() {
@@ -877,79 +1131,7 @@ export async function printPreBillEstimate() {
   showLiveToast("📄 Pre-Bill Printed", `Table ${currentBill.tableNo || 'N/A'} සඳහා Estimate බිලක් Print කරන ලදී.`, "info", "fa-file-lines");
 }
 
-export async function sendOrderToKitchen(isPhysicalPrint = false) {
-  const currentBill = getActiveBillData();
-  const cartList = currentBill.cart ? [...currentBill.cart] : [];
-  if (cartList.length === 0 || !dbRef || !pushFn || !currentTenant) return;
-
-  const deltaItems = [];
-  const updatedCart = [];
-
-  cartList.forEach(item => {
-    const totalQty = parseInt(item.qty) || 0;
-    const sentQty = parseInt(item.sentQty) || 0;
-    const diff = totalQty - sentQty;
-
-    if (diff > 0) {
-      deltaItems.push({
-        dishId: item.dishId,
-        name: item.name,
-        qty: diff,
-        note: item.note || "",
-        isAddOn: sentQty > 0
-      });
-    }
-
-    updatedCart.push({
-      ...item,
-      qty: totalQty,
-      sentQty: totalQty
-    });
-  });
-
-  // සියලු කෑම වර්ග Sent: 1 වී තිබුණද KOT බොත්තම එබූ විට සම්පූර්ණ ලැයිස්තුවම කෝකියාට Print කරගත හැක
-  const itemsForKOT = deltaItems.length > 0 ? deltaItems : cartList;
-
-  if (deltaItems.length === 0 && !isPhysicalPrint) {
-    showLiveToast("⚠️ KOT Info", "කුස්සියට යැවීමට අලුත් කෑම වර්ග නොමැත.", "info", "fa-circle-info");
-    return;
-  }
-
-  const kotTicket = {
-    billKey: activeBillId,
-    orderType: currentBill.orderType || "Dine-in",
-    tableNo: currentBill.tableNo || "N/A",
-    waiterName: currentBill.waiterName || "",
-    items: itemsForKOT,
-    timestamp: new Date().toISOString(),
-    status: "Cooking"
-  };
-
-  try {
-    if (deltaItems.length > 0) {
-      await pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket);
-      
-      if (currentBill.tableNo && updateFn) {
-        const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-        if (matchedTable) {
-          await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
-        }
-      }
-
-      await persistActiveBillToCloud({ cart: updatedCart });
-    }
-
-    if (isPhysicalPrint) {
-      await printPhysicalKOTSlip(kotTicket);
-    } else {
-      showLiveToast("🔥 KOT Sent", `Table ${currentBill.tableNo || 'N/A'} සඳහා කෑම ඇණවුම කුස්සියට යවන ලදී.`, "kitchen", "fa-fire-burner");
-    }
-  } catch (err) {
-    alert("KOT යැවීමේදී දෝෂයක්: " + err.message);
-  }
-}
-
-// 🔒 CHECKOUT ENGINE (WITH CUSTOMER LOYALTY POINTS EARN & REDEEM + DUAL SCREEN SYNC)
+// 🔒 CHECKOUT ENGINE (WITH 100% LOYALTY PROFILE SYNC & MULTI-CURRENCY CONVERSION)
 export async function processOrder(sendWhatsApp = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart || [];
@@ -962,7 +1144,7 @@ export async function processOrder(sendWhatsApp = false) {
   const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
   const loyaltyRedeemed = parseFloat(redeemIn ? redeemIn.value : (currentBill.loyaltyPointsRedeemed || 0)) || 0;
 
-  const { subtotal, discountAmount, loyaltyDiscount, scAmount, vatAmount, cslAmount, netTotal } = calculateOrderTotals(
+  const { subtotal, discountAmount, loyaltyDiscount, pointRupeeValue, scAmount, vatAmount, cslAmount, netTotal } = calculateOrderTotals(
     cartList,
     currentDiscountType,
     discVal,
@@ -1007,8 +1189,8 @@ export async function processOrder(sendWhatsApp = false) {
     payDetails.splitCash = sCash;
     payDetails.splitCard = sCard;
   } else if (payMethod === "credit") {
-    const custName = document.getElementById("creditCustomerName")?.value.trim();
-    const custPhone = document.getElementById("creditCustomerPhone")?.value.trim();
+    const custName = document.getElementById("creditCustomerName")?.value.trim() || currentBill.customerName;
+    const custPhone = document.getElementById("creditCustomerPhone")?.value.trim() || currentBill.customerPhone;
     if (!custName) {
       alert("කරුණාකර පාරිභෝගිකයාගේ නම ඇතුළත් කරන්න.");
       return;
@@ -1027,61 +1209,78 @@ export async function processOrder(sendWhatsApp = false) {
     }
   }
 
-  // 👤 Calculate Customer Loyalty Earned Points
-  const loyaltyRate = parseFloat(erpState.settings?.loyaltyRate || 100); // Rs. 100 = 1 Point
-  const earnedLoyaltyPoints = Math.floor(netTotal / loyaltyRate);
+  // Calculate Customer Loyalty Earned Points from Net Total
+  const loyaltyEarnRate = parseFloat(erpState.settings?.loyaltyEarnRate || erpState.settings?.loyaltyRate || 100);
+  const earnedLoyaltyPoints = Math.floor(netTotal / loyaltyEarnRate);
+
+  const attachedCustomerId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId || "";
+  const attachedCustomerName = document.getElementById("posSelectedCustomerName")?.innerText?.split('(')[0]?.trim() || currentBill.customerName || (payDetails.customerName || "");
+  const attachedCustomerPhone = currentBill.customerPhone || (payDetails.customerPhone || "");
 
   const invoiceData = {
     invoiceNumber: invoiceNumber,
     orderType: oType,
     tableNo: currentBill.tableNo || "N/A",
     waiterName: assignedWaiter,
-    customerId: currentBill.customerId || "",
-    customerName: currentBill.customerName || (payDetails.customerName || ""),
-    customerPhone: currentBill.customerPhone || (payDetails.customerPhone || ""),
+    customerId: attachedCustomerId,
+    customerName: attachedCustomerName,
+    customerPhone: attachedCustomerPhone,
     items: cartList,
     subtotal: subtotal,
     discountAmount: discountAmount,
     loyaltyDiscount: loyaltyDiscount || 0,
     loyaltyPointsRedeemed: loyaltyRedeemed || 0,
+    loyaltyPointValue: pointRupeeValue || 1.0,
     loyaltyPointsEarned: earnedLoyaltyPoints || 0,
     scAmount: scAmount,
     vatAmount: vatAmount,
     cslAmount: cslAmount,
     netTotal: netTotal,
     payment: payDetails,
+    date: getLocalDateString(),
     createdAt: new Date().toISOString()
   };
   
   try {
+    payDetails.items = cartList;
+    syncLiveCustomerDisplay(true, payDetails);
+
     if (navigator.onLine && dbRef && pushFn && currentTenant) {
       const invoiceRef = await pushFn(dbRef(`tenants/${currentTenant}/invoices`), invoiceData);
       
-      // Update Customer Loyalty Profile in Firebase
-      if (currentBill.customerId && erpState.customers?.[currentBill.customerId] && updateFn) {
-        const cust = erpState.customers[currentBill.customerId];
+      // ⭐ 100% ACCURATE CUSTOMER PROFILE UPDATE (POINTS & TOTAL SPEND)
+      if (attachedCustomerId && erpState.customers?.[attachedCustomerId] && updateFn) {
+        const cust = erpState.customers[attachedCustomerId];
         const prevPoints = parseFloat(cust.loyaltyPoints || 0);
         const newPoints = Math.max(0, prevPoints - loyaltyRedeemed + earnedLoyaltyPoints);
         const newSpend = parseFloat(cust.totalSpend || 0) + netTotal;
         const newVisits = parseInt(cust.totalVisits || 0) + 1;
 
-        await updateFn(dbRef(`tenants/${currentTenant}/customers/${currentBill.customerId}`), {
+        const updatedCustData = {
           loyaltyPoints: newPoints,
           totalSpend: Math.round(newSpend * 100) / 100,
           totalVisits: newVisits,
           lastVisit: new Date().toISOString()
-        });
+        };
+
+        await updateFn(dbRef(`tenants/${currentTenant}/customers/${attachedCustomerId}`), updatedCustData);
+
+        // Immediate In-Memory state update
+        Object.assign(erpState.customers[attachedCustomerId], updatedCustData);
+        if (window.renderCustomersTable) window.renderCustomersTable();
       }
 
       if (payMethod === "credit") {
         await pushFn(dbRef(`tenants/${currentTenant}/customerCredits`), {
           invoiceId: invoiceRef.key,
           invoiceNumber: invoiceNumber,
+          customerId: attachedCustomerId,
           customerName: payDetails.customerName,
           customerPhone: payDetails.customerPhone,
           amount: netTotal,
           status: "Unpaid",
-          date: new Date().toISOString()
+          date: getLocalDateString(),
+          createdAt: new Date().toISOString()
         });
       }
       
@@ -1115,15 +1314,21 @@ export async function processOrder(sendWhatsApp = false) {
       }
       
       if (currentBill.tableNo && updateFn) {
-        const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-        if (matchedTable) {
-          await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+        const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+          ([k, b]) => k !== activeBillId && b.tableNo === currentBill.tableNo && b.cart && b.cart.length > 0
+        );
+        if (!hasOtherBillsOnTable) {
+          const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
+          if (matchedTable) {
+            await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+          }
         }
       }
       
       if (removeFn) {
         await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`));
       }
+      delete erpState.activeBills[activeBillId];
       showLiveToast("✅ Bill Settled", `Invoice #${invoiceNumber} (Rs. ${netTotal.toFixed(2)}) ගෙවා අවසන් විය.`, "success", "fa-circle-check");
       
     } else if (localDBInstance) {
@@ -1144,9 +1349,6 @@ export async function processOrder(sendWhatsApp = false) {
       showLiveToast("⚠️ Offline Bill Saved", `Invoice #${invoiceNumber} සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
     }
 
-    // 🖥️ Relay Settled Status to Dual Screen Customer Display
-    syncLiveCustomerDisplay(true, payDetails);
-    
     if (sendWhatsApp) {
       const hotelName = currentTenantInfo?.hotelName || "Restaurant ERP";
       await sendInvoiceViaWhatsApp(invoiceData, hotelName);
@@ -1176,7 +1378,9 @@ export async function processOrder(sendWhatsApp = false) {
     // Clear Linked Customer Badge
     const custBadge = document.getElementById("posSelectedCustomerBadge");
     const custIdIn = document.getElementById("posAttachedCustomerId");
+    const redeemBox = document.getElementById("posLoyaltyRedeemBox");
     if (custBadge) custBadge.classList.add("hidden");
+    if (redeemBox) redeemBox.classList.add("hidden");
     if (custIdIn) custIdIn.value = "";
     
   } catch (err) {
@@ -1184,11 +1388,9 @@ export async function processOrder(sendWhatsApp = false) {
   }
 }
 
-// 🖨️ XPRINTER & 80MM RECEIPT PRINT ENGINE (100% WORKING - ZERO DUPLICATES & ZERO RIGHT CLIPPING)
+// 🖨️ XPRINTER & 80MM RECEIPT PRINT ENGINE (ZERO RIGHT CLIPPING)
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
-  
-  // එකම Printer එකට දෙපාරක් Print Commands යෑම සම්පූර්ණයෙන්ම වළක්වයි
   const p1Dev = (pr.p1?.device || "").trim();
   const targetDev = p1Dev || "";
 
@@ -1245,7 +1447,11 @@ export async function printThermalReceipt(inv) {
     if (totalDiscounts > 0) {
       discRow.style.display = "flex";
       const discVal = document.getElementById("receiptDiscountVal");
-      if (discVal) discVal.innerText = `-Rs. ${totalDiscounts.toFixed(2)}`;
+      let discBreakdownText = `-Rs. ${totalDiscounts.toFixed(2)}`;
+      if (inv.loyaltyDiscount > 0) {
+        discBreakdownText += ` (Pts: -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)})`;
+      }
+      if (discVal) discVal.innerText = discBreakdownText;
     } else {
       discRow.style.display = "none";
     }
@@ -1306,8 +1512,15 @@ export async function printThermalReceipt(inv) {
       payText += `<div style="display: flex; justify-content: space-between;"><span>Customer:</span><span>${p.customerName || 'Customer'} (${p.customerPhone || 'N/A'})</span></div>`;
     }
 
-    if (inv.loyaltyPointsEarned > 0) {
-      payText += `<div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 9.5px; border-top: 1px dashed #000; padding-top: 2px; margin-top: 2px;"><span>☆ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
+    if (inv.loyaltyPointsEarned > 0 || inv.loyaltyPointsRedeemed > 0) {
+      payText += `<div style="border-top: 1px dashed #000; padding-top: 2px; margin-top: 2px;">`;
+      if (inv.loyaltyPointsRedeemed > 0) {
+        payText += `<div style="display: flex; justify-content: space-between; font-size: 9px; color: #333;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts (-Rs. ${inv.loyaltyDiscount})</span></div>`;
+      }
+      if (inv.loyaltyPointsEarned > 0) {
+        payText += `<div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 9.5px;"><span>⭐ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
+      }
+      payText += `</div>`;
     }
 
     payDiv.innerHTML = payText;
@@ -1430,7 +1643,7 @@ export async function executeItemSplitToNewBill() {
     const newSplitKey = "bill_" + Date.now();
     const newBillName = currentBill.tableNo ? `Table ${currentBill.tableNo} (Split)` : `${currentBill.name} (Split)`;
 
-    await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newSplitKey}`), {
+    const newBillPayload = {
       name: newBillName,
       orderType: currentBill.orderType || "Dine-in",
       tableNo: currentBill.tableNo || "",
@@ -1444,8 +1657,14 @@ export async function executeItemSplitToNewBill() {
       loyaltyPointsRedeemed: 0,
       selectedPayMethod: "cash",
       updatedAt: new Date().toISOString()
-    });
+    };
 
+    if (dbRef && setFn && currentTenant) {
+      await setFn(dbRef(`tenants/${currentTenant}/activeBills/${newSplitKey}`), newBillPayload);
+    }
+    erpState.activeBills[newSplitKey] = newBillPayload;
+
+    currentBill.cart = remainingCart;
     await persistActiveBillToCloud({
       cart: remainingCart
     });
@@ -1490,6 +1709,7 @@ export async function handleShiftFloatSubmit(e) {
     amount: amount,
     description: `🌅 Morning Shift Opening Drawer Float (${cashierName})`,
     handledBy: cashierName,
+    date: getLocalDateString(),
     timestamp: new Date().toISOString()
   };
 
@@ -1542,26 +1762,51 @@ export async function syncOfflineInvoicesToCloud() {
           discountAmount: inv.discountAmount || 0,
           loyaltyDiscount: inv.loyaltyDiscount || 0,
           loyaltyPointsRedeemed: inv.loyaltyPointsRedeemed || 0,
+          loyaltyPointValue: inv.loyaltyPointValue || 1.0,
           loyaltyPointsEarned: inv.loyaltyPointsEarned || 0,
           scAmount: inv.scAmount,
           vatAmount: inv.vatAmount,
           cslAmount: inv.cslAmount,
           netTotal: inv.netTotal,
           payment: inv.payment,
+          date: inv.date || getLocalDateString(new Date(inv.createdAt)),
           createdAt: inv.createdAt
         };
 
         const invoiceRef = await pushFn(dbRef(`tenants/${currentTenant}/invoices`), invoiceData);
 
+        if (inv.customerId && erpState.customers?.[inv.customerId] && updateFn) {
+          const cust = erpState.customers[inv.customerId];
+          const prevPoints = parseFloat(cust.loyaltyPoints || 0);
+          const newPoints = Math.max(0, prevPoints - (inv.loyaltyPointsRedeemed || 0) + (inv.loyaltyPointsEarned || 0));
+          const newSpend = parseFloat(cust.totalSpend || 0) + inv.netTotal;
+          const newVisits = parseInt(cust.totalVisits || 0) + 1;
+
+          await updateFn(dbRef(`tenants/${currentTenant}/customers/${inv.customerId}`), {
+            loyaltyPoints: newPoints,
+            totalSpend: Math.round(newSpend * 100) / 100,
+            totalVisits: newVisits,
+            lastVisit: new Date().toISOString()
+          });
+
+          if (erpState.customers[inv.customerId]) {
+            erpState.customers[inv.customerId].loyaltyPoints = newPoints;
+            erpState.customers[inv.customerId].totalSpend = Math.round(newSpend * 100) / 100;
+            erpState.customers[inv.customerId].totalVisits = newVisits;
+          }
+        }
+
         if (inv.payment && inv.payment.method === "credit") {
           await pushFn(dbRef(`tenants/${currentTenant}/customerCredits`), {
             invoiceId: invoiceRef.key,
             invoiceNumber: inv.invoiceNumber,
+            customerId: inv.customerId || "",
             customerName: inv.payment.customerName,
             customerPhone: inv.payment.customerPhone,
             amount: inv.netTotal,
             status: "Unpaid",
-            date: inv.createdAt
+            date: inv.date || getLocalDateString(new Date(inv.createdAt)),
+            createdAt: inv.createdAt
           });
         }
 
@@ -1607,9 +1852,10 @@ export async function syncOfflineInvoicesToCloud() {
   }
 }
 
-// Global Window Exports
-window.setDiscountType = setDiscountType;
+// 🛡️ CRITICAL GLOBAL WINDOW EXPORTS (MAKES CUSTOMERS CRM FULLY CONNECTED)
+window.persistActiveBillToCloud = persistActiveBillToCloud;
 window.recalculateCartTotalsUI = recalculateCartTotalsUI;
+window.setDiscountType = setDiscountType;
 window.printPhysicalKOTSlip = printPhysicalKOTSlip;
 window.printPreBillEstimate = printPreBillEstimate;
 window.updateCartItemNote = updateCartItemNote;
