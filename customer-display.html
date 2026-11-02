@@ -6,9 +6,9 @@
   <title>Customer Facing Display - Restaurant ERP</title>
   
   <!-- Offline Local Tailwind CSS -->
-<link href="./vendor/tailwind.min.css" rel="stylesheet">
-<!-- Offline Local FontAwesome Icons -->
-<link rel="stylesheet" href="./vendor/font-awesome.min.css">
+  <link href="./vendor/tailwind.min.css" rel="stylesheet">
+  <!-- Offline Local FontAwesome Icons -->
+  <link rel="stylesheet" href="./vendor/font-awesome.min.css">
   <style>
     .hidden { display: none !important; }
     body { 
@@ -172,6 +172,8 @@
       });
     }
 
+    let cfdAutoResetTimer = null;
+
     // 4. Render Engine
     function renderCustomerDisplay(payload) {
       const idleScreen = document.getElementById("cfdIdleScreen");
@@ -255,7 +257,15 @@
         
         document.getElementById("cfdStatusText").innerText = "Payment Completed";
         document.getElementById("cfdStatusBadge").className = "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-2";
+
+        // 🛡️ Auto-reset back to Idle Screen after 10 seconds of showing payment summary
+        if (cfdAutoResetTimer) clearTimeout(cfdAutoResetTimer);
+        cfdAutoResetTimer = setTimeout(() => {
+          renderCustomerDisplay({ cart: [], isSettled: false, hotelName: payload.hotelName, footerNote: payload.footerNote });
+        }, 10000);
+
       } else {
+        if (cfdAutoResetTimer) clearTimeout(cfdAutoResetTimer);
         settlementBox.classList.add("hidden");
         document.getElementById("cfdStatusText").innerText = "Billing in Progress";
         document.getElementById("cfdStatusBadge").className = "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-2";
