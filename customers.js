@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 13: CUSTOMER DIRECTORY, CRM & LOYALTY POINTS ENGINE
+// MODULE 13: CUSTOMER DIRECTORY, CRM & LOYALTY POINTS ENGINE (UNFREEZE READY)
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
@@ -54,6 +54,7 @@ export function openCustomerModal(mode = 'add', customerId = null) {
   }
 
   modal?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("custNameInput")?.focus(), 50);
 }
 
 export function closeCustomerModal() {
@@ -61,28 +62,37 @@ export function closeCustomerModal() {
   isSubmittingCustomer = false;
 }
 
-// 2. SUBMIT / SAVE CUSTOMER RECORD (WITH DUPLICATE GUARD)
+// 2. SUBMIT / SAVE CUSTOMER RECORD (WITH AUTO-FOCUS & ZERO FREEZE)
 export async function handleCustomerSubmit(e) {
   if (e) e.preventDefault();
   
-  // 🛡️ Guard against rapid double-clicks or dual event listener triggers
   if (isSubmittingCustomer) return;
   isSubmittingCustomer = true;
 
   const editId = document.getElementById("editCustomerId")?.value;
-  const name = document.getElementById("custNameInput")?.value.trim() || "";
-  const phone = document.getElementById("custPhoneInput")?.value.trim() || "";
-  const email = document.getElementById("custEmailInput")?.value.trim() || "";
-  const address = document.getElementById("custAddressInput")?.value.trim() || "";
-  const notes = document.getElementById("custNotesInput")?.value.trim() || "";
+  const nameIn = document.getElementById("custNameInput");
+  const phoneIn = document.getElementById("custPhoneInput");
+  const emailIn = document.getElementById("custEmailInput");
+  const addrIn = document.getElementById("custAddressInput");
+  const noteIn = document.getElementById("custNotesInput");
+
+  const name = nameIn?.value.trim() || "";
+  const phone = phoneIn?.value.trim() || "";
+  const email = emailIn?.value.trim() || "";
+  const address = addrIn?.value.trim() || "";
+  const notes = noteIn?.value.trim() || "";
 
   if (!name || !phone) {
-    alert("කරුණාකර පාරිභෝගිකයාගේ නම සහ දුරකථන අංකය ඇතුළත් කරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර පාරිභෝගිකයාගේ නම සහ දුරකථන අංකය ඇතුළත් කරන්න.", "warning", "fa-user-tag");
+    if (!name && nameIn) {
+      nameIn.focus();
+    } else if (!phone && phoneIn) {
+      phoneIn.focus();
+    }
     isSubmittingCustomer = false;
     return;
   }
 
-  // Clean phone number format
   let cleanPhone = phone.replace(/\D/g, "");
 
   const customerData = {
@@ -103,7 +113,6 @@ export async function handleCustomerSubmit(e) {
         }
         showLiveToast("👤 Customer Updated", `${name} ගේ විස්තර සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-user-check");
       } else if (pushFn) {
-        // Initial metrics for new customer
         const newRecord = {
           ...customerData,
           loyaltyPoints: 0,
@@ -115,7 +124,6 @@ export async function handleCustomerSubmit(e) {
         if (!erpState.customers) erpState.customers = {};
         erpState.customers[newRef.key] = newRecord;
 
-        // Auto select in POS if called from billing screen
         const posCustInput = document.getElementById("posCustomerSearchInput");
         if (posCustInput) {
           selectCustomerForCurrentBill(newRef.key);
@@ -127,7 +135,7 @@ export async function handleCustomerSubmit(e) {
     closeCustomerModal();
     renderCustomersTable();
   } catch (err) {
-    alert("පාරිභෝගික විස්තර සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "පාරිභෝගික විස්තර සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   } finally {
     isSubmittingCustomer = false;
   }
@@ -167,7 +175,6 @@ export function renderCustomersTable() {
   }
 
   tbody.innerHTML = "";
-  // Sort by highest loyalty points or total spend
   list.sort((a, b) => (parseFloat(b[1].loyaltyPoints || 0)) - (parseFloat(a[1].loyaltyPoints || 0)));
 
   list.forEach(([id, c]) => {
@@ -217,7 +224,7 @@ export async function deleteCustomer(id) {
   }
 }
 
-// 5. LOYALTY MANUAL ADJUSTMENT MODAL
+// 5. LOYALTY MANUAL ADJUSTMENT MODAL (AUTO-FOCUS SAFE)
 let currentAdjustCustomerId = null;
 
 export function openLoyaltyAdjustModal(customerId) {
@@ -236,6 +243,7 @@ export function openLoyaltyAdjustModal(customerId) {
   if (reasonIn) reasonIn.value = "";
 
   document.getElementById("loyaltyAdjustModal")?.classList.remove("hidden");
+  setTimeout(() => ptsIn?.focus(), 50);
 }
 
 export function closeLoyaltyAdjustModal() {
@@ -247,11 +255,17 @@ export async function submitLoyaltyAdjustment(e) {
   if (e) e.preventDefault();
   if (!currentAdjustCustomerId) return;
 
-  const pointsDelta = parseFloat(document.getElementById("loyaltyAdjustPtsInput")?.value || 0);
-  const reason = document.getElementById("loyaltyAdjustReasonInput")?.value.trim() || "Manual Adjustment";
+  const ptsIn = document.getElementById("loyaltyAdjustPtsInput");
+  const reasonIn = document.getElementById("loyaltyAdjustReasonInput");
+  const pointsDelta = parseFloat(ptsIn?.value || 0);
+  const reason = reasonIn?.value.trim() || "Manual Adjustment";
 
-  if (pointsDelta === 0) {
-    alert("කරුණාකර වෙනස් කරන Points අගය ඇතුළත් කරන්න.");
+  if (pointsDelta === 0 || isNaN(pointsDelta)) {
+    showLiveToast("⚠️ Points අගය", "කරුණාකර වෙනස් කරන Points අගය ඇතුළත් කරන්න.", "warning", "fa-star");
+    if (ptsIn) {
+      ptsIn.focus();
+      ptsIn.select();
+    }
     return;
   }
 
@@ -280,11 +294,11 @@ export async function submitLoyaltyAdjustment(e) {
     closeLoyaltyAdjustModal();
     renderCustomersTable();
   } catch (err) {
-    alert("Points යාවත්කාලීන කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Points යාවත්කාලීන කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
-// 6. POS CUSTOMER SELECTION & ATTACHMENT (100% LINKED TO ACTIVE BILL)
+// 6. POS CUSTOMER SELECTION & ATTACHMENT
 export function onPosCustomerSearch(input) {
   const query = (input?.value || "").toLowerCase().trim();
   const dropdown = document.getElementById("posCustomerSearchResults");
@@ -351,7 +365,6 @@ export function selectCustomerForCurrentBill(customerId) {
     redeemInput.max = cust.loyaltyPoints || 0;
   }
 
-  // 🛡️ Ensure direct attachment to the Active Bill state in POS
   const customerLinkData = {
     customerId: customerId,
     customerName: cust.name,
@@ -403,7 +416,7 @@ export function removeCustomerFromCurrentBill() {
 export function exportCustomersToCSV() {
   const list = Object.values(erpState.customers || {});
   if (list.length === 0) {
-    alert("Export කිරීමට පාරිභෝගික දත්ත නොමැත.");
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට පාරිභෝගික දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
 
