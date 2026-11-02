@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 12: UNIVERSAL SILENT DIRECT HARDWARE PRINTER DRIVER (.EXE / ESC-POS)
+// MODULE 12: UNIVERSAL SILENT DIRECT HARDWARE PRINTER DRIVER (KOT & BOT COMPLIANT)
 // ==========================================================================
 
 import { erpState, currentTenantInfo } from './state.js';
@@ -81,7 +81,6 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   }
   
   text += CMD_CENTER + "\n" + footer + "\n";
-  // 🚀 systems.lk BRANDING
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_DRAWER; // Pop open cash drawer
   text += CMD_CUT; // Cut paper cleanly
@@ -89,33 +88,45 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   return text;
 }
 
-// 2. FORMAT RAW TEXT KOT TICKET WITH COOKING NOTES
-export function formatKOTRawText(kot, stationLabel = "") {
+// 2. DYNAMIC KOT & BOT STATION ORDER TICKET FORMATTER (ESC/POS)
+export function formatStationOrderTicket(ticket, stationType = "KOT") {
+  const isBar = (stationType || "").toUpperCase() === "BOT";
+  const title = isBar ? "*** BAR ORDER TICKET (BOT) ***" : "*** KITCHEN ORDER TICKET (KOT) ***";
+  const tagline = isBar ? "SERVE CHILLED & FRESH\n" : "PREPARE FRESH & QUICK\n";
+  
   let text = CMD_INIT;
-  text += CMD_CENTER + CMD_BOLD_ON + `*** KITCHEN ORDER TICKET (KOT) ***\n` + CMD_BOLD_OFF;
-  if (stationLabel) text += `[STATION: ${stationLabel}]\n`;
-  text += CMD_BOLD_ON + `TABLE: ${kot.tableNo}\n` + CMD_BOLD_OFF;
-  text += `Type: ${(kot.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(kot.timestamp || Date.now()).toLocaleTimeString()}\n`;
+  text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
+  text += CMD_BOLD_ON + `TABLE: ${ticket.tableNo || 'N/A'}\n` + CMD_BOLD_OFF;
+  text += `Type: ${(ticket.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString()}\n`;
+  if (ticket.waiterName) {
+    text += `Waiter: ${ticket.waiterName}\n`;
+  }
   text += CMD_LEFT + "================================================\n";
   text += CMD_BOLD_ON + "ITEM NAME                                    QTY\n" + CMD_BOLD_OFF;
   text += "================================================\n";
   
-  (kot.items || []).forEach(i => {
+  (ticket.items || []).forEach(i => {
     const tag = i.isAddOn ? " (➕ ADD-ON)" : "";
     const nameStr = (i.name + tag).padEnd(38, " ").substring(0, 38);
     const qtyStr = ("x" + i.qty).padStart(8, " ");
     text += CMD_BOLD_ON + `${nameStr} ${qtyStr}\n` + CMD_BOLD_OFF;
     if (i.note) {
-      text += `  >> SPECIAL NOTE: ${i.note}\n`;
+      text += `  >> NOTE: ${i.note}\n`;
     }
   });
   
   text += "================================================\n";
-  text += CMD_CENTER + "PREPARE FRESH & QUICK\n";
-  text += "systems.lk | Tel: 0760672029\n\n\n";
+  text += CMD_CENTER + tagline;
+  text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
   
   return text;
+}
+
+// Backward compatibility alias for formatKOTRawText
+export function formatKOTRawText(kot, stationLabel = "") {
+  const stationType = stationLabel === "BOT" ? "BOT" : "KOT";
+  return formatStationOrderTicket(kot, stationType);
 }
 
 // 3. 80MM DEDICATED THERMAL PAYSLIP FORMATTER
@@ -143,14 +154,13 @@ export function formatPayslipRawText(p) {
   text += CMD_CENTER;
   text += `....................        ....................\n`;
   text += ` Employer Signature          Employee Signature\n\n`;
-  // 🚀 systems.lk BRANDING
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
   
   return text;
 }
 
-// 4. SILENT DIRECT PRINT DISPATCHER (ZERO BLANK FEED + ATOMIC ELECTRON DISPATCH)
+// 4. SILENT DIRECT PRINT DISPATCHER (ZERO BLANK FEED + ELECTRON DISPATCH)
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
   const contentToPrint = el ? el.innerHTML : rawContent;
@@ -166,7 +176,7 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
         return true;
       } else {
         console.error("Print Error from Driver:", res?.error || "Unknown error");
-        showLiveToast("⚠️ Printer Warning", res?.error || "Printer එක සම්බන්ධ කර නැත හෝ Offline ඇත.", "warning", "fa-print");
+        showLiveToast("⚠️ Printer Notice", res?.error || "Printer එක සම්බන්ධ කර නැත හෝ Offline ඇත.", "warning", "fa-print");
         return false;
       }
     } catch (e) {
@@ -231,7 +241,7 @@ export async function printThermalPayslip(payslipData) {
   showLiveToast("🖨️ Payslip Printed", `${payslipData.empName} ගේ Payslip එක සාර්ථකව Print විය.`, "success", "fa-receipt");
 }
 
-// 6. TEST PRINT HARDWARE PRINTER (WITH SAMPLE BILL DATA)
+// 6. TEST PRINT HARDWARE PRINTER (WITH SAMPLE DATA PER STATION)
 export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
   const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "";
@@ -249,7 +259,7 @@ export async function testDirectPrinter(slotKey) {
   if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   if (rOrderId) rOrderId.innerText = `HARDWARE TEST PRINT`;
   if (rDate) rDate.innerText = `Date: ${new Date().toLocaleString()}`;
-  if (rType) rType.innerText = `Station: ${labelName} (${devName || 'Default'})`;
+  if (rType) rType.innerText = `Station: [${slotKey.toUpperCase()}] ${labelName} (${devName || 'Default'})`;
   if (rItems) {
     rItems.innerHTML = `
       <div class="flex justify-between py-1 border-b border-black">
@@ -276,7 +286,11 @@ export async function testDirectPrinter(slotKey) {
   }
 }
 
-// Window global exports
+// Window Global Exports
 window.testDirectPrinter = testDirectPrinter;
 window.printThermalPayslip = printThermalPayslip;
 window.sendDirectSilentPrint = sendDirectSilentPrint;
+window.formatStationOrderTicket = formatStationOrderTicket;
+window.formatKOTRawText = formatKOTRawText;
+window.formatReceiptRawText = formatReceiptRawText;
+window.formatPayslipRawText = formatPayslipRawText;
