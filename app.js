@@ -255,7 +255,7 @@ document.getElementById("mergeTableForm")?.addEventListener("submit", (e) => { e
 document.getElementById("shiftFloatForm")?.addEventListener("submit", (e) => { e.preventDefault(); POS.handleShiftFloatSubmit(e); });
 document.getElementById("shiftHandoverForm")?.addEventListener("submit", (e) => { e.preventDefault(); Reports.handleShiftHandoverSubmit(e); });
 
-// HOTEL PROFILE
+// HOTEL PROFILE (NON-BLOCKING TOAST SAFE)
 document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -276,11 +276,11 @@ document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e
     updateDeviceTerminalBadgeUI();
     showLiveToast("🏢 Profile Updated", "හෝටලයේ විස්තර සාර්ථකව යාවත්කාලීන විය.", "success", "fa-hotel");
   } catch (err) {
-    alert("Profile Error: " + err.message);
+    showLiveToast("⚠️ Profile Error", "Profile යාවත්කාලීන කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 });
 
-// PRINTER ROUTING
+// PRINTER ROUTING (NON-BLOCKING TOAST SAFE)
 document.getElementById("printerRoutingForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -300,11 +300,11 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
     erpState.settings.printers = printersData;
     showLiveToast("🖨️ Printers Updated", "Printers සාර්ථකව යාවත්කාලීන විය.", "success", "fa-print");
   } catch (err) {
-    alert("Printers Error: " + err.message);
+    showLiveToast("⚠️ Printers Error", "Printers සැකසීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 });
 
-// TAX & INVENTORY SETTINGS (WITH OWNER-CONFIGURABLE LOYALTY POINT RUPEE VALUE)
+// TAX & INVENTORY SETTINGS (NON-BLOCKING TOAST SAFE)
 document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -330,11 +330,11 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
     POS.recalculateCartTotalsUI();
     showLiveToast("⚙️ Settings Saved", `Settings සාර්ථකව ස්ථිරව යාවත්කාලීන විය. (1 Point = Rs. ${settingsData.loyaltyPointValue.toFixed(2)})`, "success", "fa-sliders");
   } catch (err) {
-    alert("Settings Error: " + err.message);
+    showLiveToast("⚠️ Settings Error", "Settings සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 });
 
-// 100% COMPLETE DATABASE BACKUP (LOCAL DATE SAFE)
+// 100% COMPLETE DATABASE BACKUP (NON-BLOCKING TOAST SAFE)
 export async function downloadFullDatabaseBackup() {
   if (!dbRef || !currentTenant) return;
 
@@ -377,12 +377,12 @@ export async function downloadFullDatabaseBackup() {
 
     showLiveToast("✅ Backup Downloaded", "100% ක් සම්පූර්ණ Backup ගොනුව සාර්ථකව Download විය.", "success", "fa-cloud-arrow-down");
   } catch (err) {
-    alert("Backup Error: " + err.message);
+    showLiveToast("⚠️ Backup Error", "Backup සකස් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 window.downloadFullDatabaseBackup = downloadFullDatabaseBackup;
 
-// 1-CLICK COMPLETE DATABASE RESTORE ENGINE
+// 1-CLICK COMPLETE DATABASE RESTORE ENGINE (NON-BLOCKING TOAST SAFE)
 export async function handleRestoreBackupFile(event) {
   const file = event.target.files[0];
   if (!file || !dbRef || !currentTenant) return;
@@ -414,12 +414,12 @@ export async function handleRestoreBackupFile(event) {
         showLiveToast("🎉 Restore Completed", "දත්ත සාර්ථකව පද්ධතියට Restore විය. පිටුව Refresh වේ.", "success", "fa-circle-check");
         setTimeout(() => window.location.reload(), 1500);
       } catch (parseErr) {
-        alert("Restore දෝෂයකි: " + parseErr.message);
+        showLiveToast("⚠️ Restore Error", "Restore දෝෂයකි: " + parseErr.message, "warning", "fa-triangle-exclamation");
       }
     };
     reader.readAsText(file);
   } catch (err) {
-    alert("Restore Error: " + err.message);
+    showLiveToast("⚠️ Restore Error", "Restore Error: " + err.message, "warning", "fa-triangle-exclamation");
   } finally {
     event.target.value = "";
   }
@@ -441,7 +441,10 @@ function resetInactivityTimer() {
 
       document.getElementById("inactivityLockScreen")?.classList.remove("hidden");
       const pinIn = document.getElementById("unlockScreenPinInput");
-      if (pinIn) pinIn.value = "";
+      if (pinIn) {
+        pinIn.value = "";
+        setTimeout(() => pinIn.focus(), 60);
+      }
     }
   }, 240000);
 }
@@ -450,8 +453,10 @@ function resetInactivityTimer() {
   window.addEventListener(evt, resetInactivityTimer, { passive: true });
 });
 
+// 🔒 STRICT COUNTER PIN UNLOCK (WITH AUTO-FOCUS ON FAILURE - ZERO FREEZE)
 window.submitCounterUnlock = function() {
-  const pin = document.getElementById("unlockScreenPinInput")?.value.trim();
+  const pinIn = document.getElementById("unlockScreenPinInput");
+  const pin = pinIn?.value.trim();
   if (!pin) return;
 
   const employeesList = Object.values(erpState.employees || {});
@@ -463,9 +468,11 @@ window.submitCounterUnlock = function() {
     resetInactivityTimer();
     showLiveToast("🔓 Terminal Unlocked", "කවුන්ටරය සාර්ථකව Unlock කරන ලදී.", "success", "fa-unlock");
   } else {
-    alert("❌ වැරදි PIN අංකයකි! නැවත උත්සාහ කරන්න.");
-    const pinIn = document.getElementById("unlockScreenPinInput");
-    if (pinIn) pinIn.value = "";
+    showLiveToast("⚠️ අගුළු ඇරීමේ දෝෂයක්", "❌ වැරදි PIN අංකයකි! නැවත උත්සාහ කරන්න.", "warning", "fa-lock");
+    if (pinIn) {
+      pinIn.value = "";
+      pinIn.focus();
+    }
   }
 };
 
@@ -494,7 +501,6 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
     settings: document.getElementById("nav-settings")
   };
 
-  // Initially display all according to SaaS package features
   Object.values(navMap).forEach(btn => btn?.classList.remove("hidden"));
 
   const feats = erpState.subscription?.features || {};
@@ -504,14 +510,12 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
     }
   });
 
-  // Owner / SuperAdmin has 100% full unrestricted access to everything
   if (role === "owner" || role === "superAdmin" || role === "superadmin") {
     if (roleBadge) roleBadge.innerText = "Owner Admin";
     return;
   }
 
   // 🛡️ GRANULAR CUSTOM PERMISSIONS CHECK:
-  // If specific permissions object exists for this staff login, apply exactly what owner selected!
   if (permissions && typeof permissions === "object" && Object.keys(permissions).length > 0) {
     let firstAllowedView = null;
 
@@ -533,7 +537,7 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
     return;
   }
 
-  // Fallback to legacy default presets if permissions object is not yet configured
+  // Fallback to legacy presets if permissions object is not yet configured
   if (role === "cashier") {
     if (roleBadge) roleBadge.innerText = "Cashier";
     navMap.menu?.classList.add("hidden");
@@ -633,7 +637,6 @@ onAuthStateChanged(authInstance, async (activeUser) => {
 
       setCurrentTenant(uData.tenantId);
 
-      // Check if employee record has updated permissions in tenant database
       if (userRole !== "owner" && !userPermissions) {
         try {
           const empSnap = await get(ref(dbInstance, `tenants/${uData.tenantId}/employees`));
@@ -921,7 +924,6 @@ function initializeRealtimeDataStreams(tenantId) {
       Reports.renderWaiterSalesReport();
     }
 
-    // 🛡️ Live Update: If currently logged in user is a staff member, reflect updated permissions dynamically!
     if (authInstance.currentUser && currentUserRole !== "owner") {
       const currentStaffEmp = Object.values(erpState.employees).find(e => e.authUid === authInstance.currentUser.uid || e.loginEmail === authInstance.currentUser.email);
       if (currentStaffEmp && currentStaffEmp.permissions) {
@@ -1064,7 +1066,7 @@ export function switchView(viewName) {
     viewName = "pos";
   }
 
-  // 🛡️ Staff Permissions Guard: Prevent accessing disallowed modules
+  // Staff Permissions Guard
   if (currentUserRole !== "owner" && currentStaffPermissions && typeof currentStaffPermissions === "object") {
     if (currentStaffPermissions[viewName] === false) {
       showLiveToast("🚫 Access Denied", "මෙම අංශයට පිවිසීමට ඔබට Owner විසින් අවසර ලබා දී නොමැත.", "warning", "fa-lock");
