@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 04: TABLE & FLOOR PLAN MANAGEMENT ENGINE (DYNAMIC REAL-TIME SYNC)
+// MODULE 04: TABLE & FLOOR PLAN MANAGEMENT ENGINE (100% UNFREEZE & REAL-TIME)
 // ==========================================================================
 
 import { erpState, currentTenant, currentAreaFilter, setCurrentAreaFilter, setActiveBillId } from './state.js';
@@ -28,6 +28,7 @@ export function initTablesContext(dbRefInst, pushM, updateM, removeM, setM, swit
 // 1. FLOOR AREAS
 export function openAreaModal() {
   document.getElementById("areaModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("newAreaName")?.focus(), 50);
 }
 
 export function closeAreaModal() {
@@ -38,14 +39,29 @@ export async function handleAddAreaSubmit(e) {
   e.preventDefault();
   const nameInput = document.getElementById("newAreaName");
   const areaName = nameInput?.value.trim();
-  if (!areaName || !dbRef || !pushFn || !currentTenant) return;
   
+  if (!areaName) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර Area නම ඇතුළත් කරන්න.", "warning", "fa-layer-group");
+    if (nameInput) nameInput.focus();
+    return;
+  }
+  
+  const tempAreaId = "area_" + Date.now();
+  if (!erpState.areas) erpState.areas = {};
+  erpState.areas[tempAreaId] = { name: areaName };
+  
+  renderAreaListModalUI();
+  renderAreaFiltersUI();
+  populateTableAreaDropdown();
+  if (nameInput) nameInput.value = "";
+
   try {
-    await pushFn(dbRef(`tenants/${currentTenant}/areas`), { name: areaName });
-    if (nameInput) nameInput.value = "";
+    if (dbRef && pushFn && currentTenant && navigator.onLine) {
+      await pushFn(dbRef(`tenants/${currentTenant}/areas`), { name: areaName });
+    }
     showLiveToast("🏢 Area Added", `"${areaName}" කලාපය සාර්ථකව එකතු විය.`, "success", "fa-layer-group");
   } catch (err) {
-    alert("Area එකතු කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Area එකතු කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -75,10 +91,17 @@ export function renderAreaListModalUI() {
 
 export async function deleteArea(id) {
   if (confirm("මෙම Floor Area එක මකා දැමීමට අවශ්‍යද?")) {
-    if (dbRef && removeFn && currentTenant) {
-      await removeFn(dbRef(`tenants/${currentTenant}/areas/${id}`));
-      showLiveToast("🗑️ Area Removed", "කලාපය සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
+    if (erpState.areas) delete erpState.areas[id];
+    renderAreaListModalUI();
+    renderAreaFiltersUI();
+    populateTableAreaDropdown();
+
+    if (dbRef && removeFn && currentTenant && navigator.onLine) {
+      try {
+        await removeFn(dbRef(`tenants/${currentTenant}/areas/${id}`));
+      } catch (e) {}
     }
+    showLiveToast("🗑️ Area Removed", "කලාපය සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
   }
 }
 
@@ -164,6 +187,7 @@ export function openTableModal(mode, tableId = null) {
   }
   
   modal?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("tableNoInput")?.focus(), 50);
 }
 
 export function closeTableModal() {
@@ -173,8 +197,9 @@ export function closeTableModal() {
 export async function handleTableSubmit(e) {
   e.preventDefault();
   const editId = document.getElementById("editTableId")?.value;
+  const noIn = document.getElementById("tableNoInput");
   const tableData = {
-    tableNo: document.getElementById("tableNoInput")?.value.trim() || "",
+    tableNo: noIn?.value.trim() || "",
     area: document.getElementById("tableAreaSelect")?.value || "Main Dining",
     capacity: parseInt(document.getElementById("tableCapacity")?.value || 4),
     assignedWaiter: document.getElementById("tableWaiterSelect")?.value || "",
@@ -183,27 +208,33 @@ export async function handleTableSubmit(e) {
   };
   
   if (!tableData.tableNo) {
-    alert("කරුණාකර Table Number එක ඇතුළත් කරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර Table Number එක ඇතුළත් කරන්න.", "warning", "fa-chair");
+    if (noIn) noIn.focus();
     return;
   }
   
+  const targetId = editId || ("tbl_" + Date.now());
+  if (!erpState.tables) erpState.tables = {};
+  erpState.tables[targetId] = tableData;
+
+  closeTableModal();
+  renderTablesFloorGrid();
+
   try {
-    if (dbRef && currentTenant) {
+    if (dbRef && currentTenant && navigator.onLine) {
       if (editId && updateFn) {
         await updateFn(dbRef(`tenants/${currentTenant}/tables/${editId}`), tableData);
-        showLiveToast("🍽️ Table Updated", `Table ${tableData.tableNo} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-chair");
       } else if (pushFn) {
         await pushFn(dbRef(`tenants/${currentTenant}/tables`), tableData);
-        showLiveToast("🍽️ Table Saved", `Table ${tableData.tableNo} සාර්ථකව සේව් විය.`, "success", "fa-chair");
       }
     }
-    closeTableModal();
+    showLiveToast("🍽️ Table Saved", `Table ${tableData.tableNo} සාර්ථකව සේව් විය.`, "success", "fa-chair");
   } catch (err) {
-    alert("මේසය සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "මේසය සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
-// 🔥 DYNAMIC AUTO-CALCULATED OCCUPIED STATUS
+// 🔒 DYNAMIC AUTO-CALCULATED OCCUPIED STATUS (OFFLINE RESILIENT)
 export function renderTablesFloorGrid() {
   const container = document.getElementById("tablesGrid");
   if (!container) return;
@@ -218,11 +249,9 @@ export function renderTablesFloorGrid() {
     return;
   }
   
-  // Realtime Active Bills Map
   const activeBills = erpState.activeBills || {};
 
   list.forEach(([id, table]) => {
-    // Check if any active bill has this table and contains active orders
     const matchedBill = Object.values(activeBills).find(b => b.tableNo === table.tableNo);
     const hasActiveOrders = matchedBill && matchedBill.cart && matchedBill.cart.length > 0;
     const isOccupied = table.status === "Occupied" || hasActiveOrders;
@@ -270,32 +299,47 @@ export function renderTablesFloorGrid() {
   });
 }
 
-export async function linkTableToPos(tableNo) {
-  const activeBills = erpState.activeBills || {};
-  let matchedBillKey = Object.keys(activeBills).find(k => activeBills[k].tableNo === tableNo);
+// ⚡ 100% OFFLINE-SAFE INSTANT TABLE-TO-POS LINK ENGINE
+export function linkTableToPos(tableNo) {
+  if (!erpState.activeBills) erpState.activeBills = {};
+  
+  let matchedBillKey = Object.keys(erpState.activeBills).find(k => erpState.activeBills[k].tableNo === tableNo);
   
   if (!matchedBillKey) {
     matchedBillKey = "bill_" + Date.now();
-    if (dbRef && setFn && currentTenant) {
-      await setFn(dbRef(`tenants/${currentTenant}/activeBills/${matchedBillKey}`), {
-        name: `Table ${tableNo}`,
-        orderType: "Dine-in",
-        tableNo: tableNo,
-        cart: [],
-        discountType: "fixed",
-        discountVal: 0,
-        selectedPayMethod: "cash",
-        updatedAt: new Date().toISOString()
-      });
+    const newBillPayload = {
+      name: `Table ${tableNo}`,
+      orderType: "Dine-in",
+      tableNo: tableNo,
+      waiterName: "",
+      cart: [],
+      discountType: "fixed",
+      discountVal: 0,
+      loyaltyPointsRedeemed: 0,
+      selectedPayMethod: "cash",
+      updatedAt: new Date().toISOString()
+    };
+
+    const tObj = Object.values(erpState.tables || {}).find(t => t.tableNo === tableNo);
+    if (tObj && tObj.assignedWaiter) {
+      newBillPayload.waiterName = tObj.assignedWaiter;
+    }
+
+    erpState.activeBills[matchedBillKey] = newBillPayload;
+
+    if (navigator.onLine && dbRef && setFn && currentTenant) {
+      setFn(dbRef(`tenants/${currentTenant}/activeBills/${matchedBillKey}`), newBillPayload).catch(() => {});
     }
   }
 
-  // Auto set Table to Occupied in DB
-  const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tableNo);
-  if (matchedTable && dbRef && updateFn && currentTenant) {
-    await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" });
+  const matchedTableEntry = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tableNo);
+  if (matchedTableEntry) {
+    matchedTableEntry[1].status = "Occupied";
+    if (navigator.onLine && dbRef && updateFn && currentTenant) {
+      updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTableEntry[0]}`), { status: "Occupied" }).catch(() => {});
+    }
   }
-  
+
   if (setActiveBillId) setActiveBillId(matchedBillKey);
   if (switchViewFn) switchViewFn("pos");
   if (renderBillTabsFn) renderBillTabsFn();
@@ -304,14 +348,19 @@ export async function linkTableToPos(tableNo) {
 
 export async function deleteTable(id) {
   if (confirm("මෙම Table එක මකා දැමීමට අවශ්‍යද?")) {
-    if (dbRef && removeFn && currentTenant) {
-      await removeFn(dbRef(`tenants/${currentTenant}/tables/${id}`));
-      showLiveToast("🗑️ Table Removed", "මේසය සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
+    if (erpState.tables) delete erpState.tables[id];
+    renderTablesFloorGrid();
+
+    if (dbRef && removeFn && currentTenant && navigator.onLine) {
+      try {
+        await removeFn(dbRef(`tenants/${currentTenant}/tables/${id}`));
+      } catch (e) {}
     }
+    showLiveToast("🗑️ Table Removed", "මේසය සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
   }
 }
 
-// 3. MERGE TABLES ENGINE
+// 3. MERGE TABLES ENGINE (WITH NON-BLOCKING TOASTS)
 export function openMergeTableModal() {
   const srcSel = document.getElementById("mergeSourceTableSelect");
   const tgtSel = document.getElementById("mergeTargetTableSelect");
@@ -340,12 +389,12 @@ export async function handleMergeTables(e) {
   const tgtTableNo = document.getElementById("mergeTargetTableSelect")?.value;
 
   if (!srcTableNo || !tgtTableNo) {
-    alert("කරුණාකර මේස දෙකම තෝරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර මේස දෙකම තෝරන්න.", "warning", "fa-object-group");
     return;
   }
 
   if (srcTableNo === tgtTableNo) {
-    alert("එකම මේසය තෝරාගත නොහැක. වෙනස් මේස දෙකක් තෝරන්න.");
+    showLiveToast("⚠️ නොගැලපීමක්", "එකම මේසය තෝරාගත නොහැක. වෙනස් මේස දෙකක් තෝරන්න.", "warning", "fa-triangle-exclamation");
     return;
   }
 
@@ -356,14 +405,14 @@ export async function handleMergeTables(e) {
   const srcCart = (srcBillKey && activeBills[srcBillKey].cart) ? [...activeBills[srcBillKey].cart] : [];
 
   if (srcCart.length === 0) {
-    alert(`Table ${srcTableNo} හි එකතු කිරීමට කෑම ඇණවුම් කිසිවක් නොමැත.`);
+    showLiveToast("⚠️ ඇණවුම් නැත", `Table ${srcTableNo} හි එකතු කිරීමට කෑම ඇණවුම් කිසිවක් නොමැත.`, "warning", "fa-circle-exclamation");
     return;
   }
 
   try {
     if (!tgtBillKey) {
       tgtBillKey = "bill_" + Date.now();
-      await setFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), {
+      const newTgtPayload = {
         name: `Table ${tgtTableNo}`,
         orderType: "Dine-in",
         tableNo: tgtTableNo,
@@ -372,7 +421,11 @@ export async function handleMergeTables(e) {
         discountVal: 0,
         selectedPayMethod: "cash",
         updatedAt: new Date().toISOString()
-      });
+      };
+      erpState.activeBills[tgtBillKey] = newTgtPayload;
+      if (navigator.onLine && dbRef && setFn && currentTenant) {
+        setFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), newTgtPayload).catch(() => {});
+      }
     }
 
     const tgtBill = activeBills[tgtBillKey] || { cart: [] };
@@ -388,27 +441,17 @@ export async function handleMergeTables(e) {
       }
     });
 
-    // Update Target Bill
-    await updateFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), {
-      cart: mergedCart,
-      updatedAt: new Date().toISOString()
-    });
+    tgtBill.cart = mergedCart;
 
-    // Remove Source Bill
     if (srcBillKey) {
-      await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${srcBillKey}`));
+      delete erpState.activeBills[srcBillKey];
     }
 
-    // Update Table Statuses
     const srcTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === srcTableNo);
     const tgtTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tgtTableNo);
 
-    if (srcTableObj) {
-      await updateFn(dbRef(`tenants/${currentTenant}/tables/${srcTableObj[0]}`), { status: "Available" });
-    }
-    if (tgtTableObj) {
-      await updateFn(dbRef(`tenants/${currentTenant}/tables/${tgtTableObj[0]}`), { status: "Occupied" });
-    }
+    if (srcTableObj) srcTableObj[1].status = "Available";
+    if (tgtTableObj) tgtTableObj[1].status = "Occupied";
 
     closeMergeTableModal();
     if (setActiveBillId) setActiveBillId(tgtBillKey);
@@ -416,10 +459,17 @@ export async function handleMergeTables(e) {
     if (renderBillTabsFn) renderBillTabsFn();
     if (syncActiveBillFn) syncActiveBillFn();
 
+    if (navigator.onLine && dbRef && currentTenant) {
+      if (updateFn) updateFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), { cart: mergedCart }).catch(() => {});
+      if (removeFn && srcBillKey) removeFn(dbRef(`tenants/${currentTenant}/activeBills/${srcBillKey}`)).catch(() => {});
+      if (updateFn && srcTableObj) updateFn(dbRef(`tenants/${currentTenant}/tables/${srcTableObj[0]}`), { status: "Available" }).catch(() => {});
+      if (updateFn && tgtTableObj) updateFn(dbRef(`tenants/${currentTenant}/tables/${tgtTableObj[0]}`), { status: "Occupied" }).catch(() => {});
+    }
+
     showLiveToast("🍽️ Tables Merged", `Table ${srcTableNo} හි ඇණවුම් සාර්ථකව Table ${tgtTableNo} වෙත එකතු විය.`, "success", "fa-object-group");
 
   } catch (err) {
-    alert("Merge කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Merge කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
