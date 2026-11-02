@@ -2,6 +2,8 @@
 // MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP & HELPERS)
 // ==========================================================================
 
+import { erpState } from './state.js';
+
 export let alertHistory = [];
 
 // 1. DYNAMIC AUDIO CHIME GENERATOR (NO EXTERNAL MP3 NEEDED)
@@ -197,7 +199,7 @@ export function debounce(func, wait = 250) {
   };
 }
 
-// 6. DATE FORMATTING UTILITIES
+// 6. DATE FORMATTING UTILITIES (SRI LANKA LOCAL TIME SAFE)
 export function getLocalDateString(d = new Date()) {
   const dateObj = typeof d === "string" ? new Date(d) : d;
   if (isNaN(dateObj.getTime())) return new Date().toISOString().split("T")[0];
@@ -266,7 +268,7 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
   });
 }
 
-// 📲 8. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE (BYPASSES BROWSER LANDING PAGE)
+// 📲 8. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE (WITH 100% TRANSPARENT LOYALTY BREAKDOWN)
 export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
   let rawPhone = inputPhone;
   
@@ -312,10 +314,14 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   message += `------------------------------------\n`;
   message += `Subtotal: Rs. ${parseFloat(invoiceData.subtotal || 0).toFixed(2)}\n`;
   
-  const totalDiscounts = (parseFloat(invoiceData.discountAmount || 0) + parseFloat(invoiceData.loyaltyDiscount || 0));
-  if (totalDiscounts > 0) {
-    message += `Discount: -Rs. ${totalDiscounts.toFixed(2)}\n`;
+  // Specific Itemized Discounts
+  if (parseFloat(invoiceData.discountAmount || 0) > 0) {
+    message += `Bill Discount: -Rs. ${parseFloat(invoiceData.discountAmount).toFixed(2)}\n`;
   }
+  if (parseFloat(invoiceData.loyaltyDiscount || 0) > 0) {
+    message += `Loyalty Redeemed (${invoiceData.loyaltyPointsRedeemed || 0} Pts): -Rs. ${parseFloat(invoiceData.loyaltyDiscount).toFixed(2)}\n`;
+  }
+
   if (parseFloat(invoiceData.scAmount || 0) > 0) {
     message += `Service Charge: Rs. ${parseFloat(invoiceData.scAmount).toFixed(2)}\n`;
   }
@@ -335,20 +341,29 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
     message += `💳 Payment: ${p.method.toUpperCase()}\n`;
   }
 
-  // ⭐ Loyalty Points Summary in WhatsApp Receipt
-  if (invoiceData.loyaltyPointsEarned > 0) {
-    message += `⭐ *Loyalty Points Earned:* +${invoiceData.loyaltyPointsEarned} Pts\n`;
-  }
-  if (invoiceData.loyaltyPointsRedeemed > 0) {
-    message += `🎁 *Points Redeemed:* -${invoiceData.loyaltyPointsRedeemed} Pts (-Rs. ${invoiceData.loyaltyDiscount})\n`;
+  // ⭐ LOYALTY REWARDS & BALANCE BREAKDOWN IN WHATSAPP RECEIPT
+  if (invoiceData.loyaltyPointsRedeemed > 0 || invoiceData.loyaltyPointsEarned > 0 || invoiceData.customerId) {
+    message += `------------------------------------\n`;
+    message += `⭐ *LOYALTY REWARDS SUMMARY*\n`;
+    if (invoiceData.loyaltyPointsRedeemed > 0) {
+      message += `▪️ Points Redeemed: -${invoiceData.loyaltyPointsRedeemed} Pts (-Rs. ${parseFloat(invoiceData.loyaltyDiscount || 0).toFixed(2)})\n`;
+    }
+    if (invoiceData.loyaltyPointsEarned > 0) {
+      message += `▪️ Points Earned Today: +${invoiceData.loyaltyPointsEarned} Pts\n`;
+    }
+    
+    // Display remaining balance live from customer profile
+    if (invoiceData.customerId && erpState.customers?.[invoiceData.customerId]) {
+      const remainingBalance = erpState.customers[invoiceData.customerId].loyaltyPoints || 0;
+      message += `▪️ *Your Available Balance:* ${remainingBalance} Points\n`;
+    }
   }
   
   message += `------------------------------------\n`;
   message += `🙏 *Thank you for dining with us! Come again.*\n\n`;
-  // 🚀 systems.lk BRANDING
   message += `_Software by systems.lk | Tel: 0760672029_`;
   
-  // 🚀 DIRECT DESKTOP APP PROTOCOL (Electron Windows App)
+  // DIRECT DESKTOP APP PROTOCOL (Electron Windows App)
   if (window.electronAPI && window.electronAPI.openWhatsAppDirect) {
     try {
       const res = await window.electronAPI.openWhatsAppDirect({ phone: cleanPhone, text: message });
