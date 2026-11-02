@@ -1,12 +1,13 @@
 {
   "name": "restaurant-erp-pos",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Professional Restaurant ERP & POS System",
   "main": "main.js",
   "author": "Restaurant ERP Enterprise",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win",
+    "dist": "electron-builder --win --x64"
   },
   "dependencies": {
     "electron-updater": "^6.1.7"
@@ -34,11 +35,15 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Restaurant ERP"
+      "shortcutName": "Restaurant ERP",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
     },
     "files": [
       "**/*",
-      "!.github/**/*"
+      "!.github/**/*",
+      "!.git/**/*",
+      "!*.md"
     ]
   }
 }
