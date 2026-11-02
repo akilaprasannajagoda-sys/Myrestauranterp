@@ -1,11 +1,22 @@
 const { app, BrowserWindow, ipcMain, dialog, screen, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow = null;
 let customerWindow = null;
+let printWorkerWindow = null;
 
-// 🔒 1. SINGLE INSTANCE LOCK (ඇප් එක එකවර දෙපාරක් Open වීම වළක්වයි)
+// 🛡️ 1. GLOBAL CRASH-PROOF EXCEPTION HANDLERS (ඇප් එක කිසිවිටෙකත් Crash වී වැසෙන්නේ නැත)
+process.on('uncaughtException', (error) => {
+  console.error("CRITICAL: Unhandled System Exception caught:", error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error("CRITICAL: Unhandled Promise Rejection at:", promise, "reason:", reason);
+});
+
+// 🔒 2. SINGLE INSTANCE LOCK (ඇප් එක එකවර දෙපාරක් Open වීම වළක්වයි)
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -20,6 +31,7 @@ if (!gotTheLock) {
   
   app.whenReady().then(() => {
     createWindow();
+    initPrintWorkerWindow();
     // දෙවන තිරයක් තිබේ නම් Customer Display එක ස්වයංක්‍රීයව ආරම්භ කිරීම
     setTimeout(() => {
       createOrUpdateCustomerDisplay();
@@ -27,7 +39,25 @@ if (!gotTheLock) {
   });
 }
 
-// 🖥️ 2. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD) CONTROLLER
+// 🖨️ 3. REUSABLE HIGH-PERFORMANCE PRINT WORKER WINDOW (ELIMINATES MEMORY LEAKS)
+function initPrintWorkerWindow() {
+  if (!printWorkerWindow || printWorkerWindow.isDestroyed()) {
+    printWorkerWindow = new BrowserWindow({
+      width: 260,
+      height: 600,
+      show: false,
+      frame: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        backgroundThrottling: false
+      }
+    });
+  }
+  return printWorkerWindow;
+}
+
+// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD) CONTROLLER
 function createOrUpdateCustomerDisplay() {
   try {
     const displays = screen.getAllDisplays();
@@ -125,14 +155,22 @@ function createWindow() {
       customerWindow.close();
       customerWindow = null;
     }
+    if (printWorkerWindow && !printWorkerWindow.isDestroyed()) {
+      printWorkerWindow.destroy();
+      printWorkerWindow = null;
+    }
   });
   
-  // 🔄 App එක Open වූ විට පසුබිමෙන් GitHub Updates පරීක්ෂා කිරීම
+  // 🔄 App එක Open වූ විට පසුබිමෙන් Updates පරීක්ෂා කිරීම (Safe Packaged Check)
   mainWindow.once('ready-to-show', () => {
-    autoUpdater.autoDownload = true;
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-      console.log("Update check error:", err);
-    });
+    if (app.isPackaged) {
+      try {
+        autoUpdater.autoDownload = true;
+        autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+          console.log("Update check info:", err.message);
+        });
+      } catch (e) {}
+    }
   });
 }
 
@@ -154,23 +192,56 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// 🖨️ XPRINTER & 80MM CONTINUOUS DIRECT HARDWARE PRINT ENGINE (100% ZERO OFFSET & ZERO BLANK CUTS)
+// 💾 5. LOCAL AUTOMATIC HARD-DISK BACKUP ENGINE (Documents/RestaurantERP_Backups)
+ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
+  try {
+    const backupDir = path.join(app.getPath('documents'), 'RestaurantERP_Backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const dateStr = new Date().toISOString().split('T')[0];
+    const timeStr = new Date().toTimeString().split(' ')[0].replace(/:/g, '-');
+    const filePath = path.join(backupDir, `Backup_${dateStr}_${timeStr}.json`);
+    
+    fs.writeFileSync(filePath, JSON.stringify(backupData, null, 2), 'utf8');
+    return { success: true, path: filePath };
+  } catch (err) {
+    console.error("Local backup write failed:", err);
+    return { success: false, error: err.message };
+  }
+});
+
+// 🖨️ 6. XPRINTER & 80MM DIRECT HARDWARE PRINT ENGINE (WITH REUSABLE WORKER & TIMEOUT GUARD)
 let lastPrintTimestamp = 0;
 let lastPrintedContentHash = "";
 
 ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
   return new Promise(async (resolve) => {
-    let printWin = null;
+    let isFinished = false;
+
+    // තත්පර 6ක ආරක්ෂිත Timeout එක (Printer කේබල් ගැලවුණහොත් හෝ Spooler හිර වුවහොත් UI Release කරයි)
+    const timeoutTimer = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        resolve({ success: false, error: "Printer Connection Timed Out (කරුණාකර Printer කේබලය හෝ Power පරීක්ෂා කරන්න)." });
+      }
+    }, 6000);
+
     try {
-      if (!mainWindow) return resolve({ success: false, error: "Main window not found" });
+      if (!mainWindow) {
+        clearTimeout(timeoutTimer);
+        return resolve({ success: false, error: "Main window not found" });
+      }
       if (!htmlContent || !htmlContent.trim()) {
+        clearTimeout(timeoutTimer);
         return resolve({ success: false, error: "Print content is empty" });
       }
 
-      // තත්පර 1ක් ඇතුළත එකම Print Job එක දෙපාරක් වැටීමෙන් හිස් කඩදාසි කැපීම වළක්වයි (Anti-Duplicate Guard)
+      // තත්පර 1.2ක් ඇතුළත එකම Print Job එක දෙපාරක් වැටීමෙන් හිස් කඩදාසි කැපීම වළක්වයි (Anti-Duplicate Guard)
       const nowMs = Date.now();
       const simpleHash = htmlContent.substring(0, 80);
       if (simpleHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1200) {
+        clearTimeout(timeoutTimer);
         return resolve({ success: true, duplicateIgnored: true });
       }
       lastPrintTimestamp = nowMs;
@@ -195,21 +266,12 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       }
       
       if (!targetDevice) {
+        clearTimeout(timeoutTimer);
         return resolve({ success: false, error: "පරිගණකයට කිසිදු Printer එකක් සම්බන්ධ කර නොමැත." });
       }
       
-      // 3. 80mm Thermal පත්‍රයේ සැබෑ මුද්‍රණ පළල වන 68mm (260px) පළලින් යුත් කවුළුවක් සෑදීම
-      printWin = new BrowserWindow({
-        width: 260,
-        height: 600,
-        show: false,
-        frame: false,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          backgroundThrottling: false
-        }
-      });
+      // 3. Reusable Print Window එක භාවිත කිරීම (Continuous Memory Leak Protection)
+      const pWin = initPrintWorkerWindow();
       
       // දකුණු පසින් අකුරු කැපීම 100% වළක්වා (Safe 68mm Zone) තනි පිටුවක් ලෙස මුද්‍රණය කරන HTML සැකිල්ල
       const fullPrintHtml = `
@@ -290,41 +352,38 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         </html>
       `;
       
-      printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
+      pWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
       
-      printWin.webContents.on('did-finish-load', () => {
+      pWin.webContents.once('did-finish-load', () => {
         setTimeout(async () => {
           try {
-            await printWin.webContents.print({
+            await pWin.webContents.print({
               silent: true,
               printBackground: true,
               deviceName: targetDevice,
               margins: { marginType: 'none' }
             });
             
-            setTimeout(() => {
-              if (printWin) {
-                printWin.destroy();
-                printWin = null;
-              }
-            }, 600);
-            
-            resolve({ success: true, usedPrinter: targetDevice });
-          } catch (printErr) {
-            if (printWin) {
-              printWin.destroy();
-              printWin = null;
+            if (!isFinished) {
+              isFinished = true;
+              clearTimeout(timeoutTimer);
+              resolve({ success: true, usedPrinter: targetDevice });
             }
-            resolve({ success: false, error: printErr.message });
+          } catch (printErr) {
+            if (!isFinished) {
+              isFinished = true;
+              clearTimeout(timeoutTimer);
+              resolve({ success: false, error: printErr.message });
+            }
           }
-        }, 300);
+        }, 150);
       });
     } catch (err) {
-      if (printWin) {
-        printWin.destroy();
-        printWin = null;
+      if (!isFinished) {
+        isFinished = true;
+        clearTimeout(timeoutTimer);
+        resolve({ success: false, error: err.message });
       }
-      resolve({ success: false, error: err.message });
     }
   });
 });
@@ -335,7 +394,7 @@ ipcMain.handle('get-printers', async () => {
   return await mainWindow.webContents.getPrintersAsync();
 });
 
-// 📲 3. DIRECT WHATSAPP DESKTOP NATIVE PROTOCOL ENGINE
+// 📲 7. DIRECT WHATSAPP DESKTOP NATIVE PROTOCOL ENGINE
 ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
   try {
     let cleanPhone = String(phone || '').replace(/\D/g, '');
@@ -359,7 +418,7 @@ ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
   }
 });
 
-// 🖥️ 4. CUSTOMER-FACING DISPLAY (CFD) IPC HANDLERS
+// 🖥️ 8. CUSTOMER-FACING DISPLAY (CFD) IPC HANDLERS
 ipcMain.handle('open-customer-display', async () => {
   createOrUpdateCustomerDisplay();
   return { success: !!customerWindow };
