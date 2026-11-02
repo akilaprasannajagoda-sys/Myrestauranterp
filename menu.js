@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 06: MENU, DISHES, PORTIONS & BOM RECIPES ENGINE (COMPATIBLE UNITS SAFE)
+// MODULE 06: MENU, DISHES, PORTIONS & BOM RECIPES ENGINE (KOT / BOT STATION SAFE)
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
@@ -47,7 +47,36 @@ export function convertRecipeQtyToBaseUnit(rawItemUnit, recipeQty, recipeUnit) {
   return rQty;
 }
 
-// 2. DISH CATEGORIES
+// 🍹 DISH එක KITCHEN (KOT) ද BAR (BOT) ද යන්න 100% ක් නිවැරදිව හඳුනාගැනීමේ එන්ජිම
+export function getDishStationTarget(dishId) {
+  const dish = erpState.dishes?.[dishId];
+  if (!dish) return "kitchen";
+
+  const catName = (dish.category || "").toLowerCase().trim();
+
+  // 1. Category Object එකේ station එක පරීක්ෂා කිරීම (Explicit Configuration)
+  const matchedCat = Object.values(erpState.dishCategories || {}).find(
+    c => (c.name || "").toLowerCase().trim() === catName
+  );
+
+  if (matchedCat && matchedCat.station) {
+    return matchedCat.station.toLowerCase().trim() === "bar" ? "bar" : "kitchen";
+  }
+
+  // 2. Smart Auto-Fallback: නමේ Bar / Drink / Liquor වචන තිබේදැයි ස්වයංක්‍රීයව බැලීම
+  const barKeywords = [
+    "bar", "beverage", "beverages", "liquor", "beer", "beers", 
+    "wine", "wines", "juice", "juices", "drink", "drinks", 
+    "cocktail", "cocktails", "mocktail", "mocktails", "soft drink", 
+    "soft drinks", "shots", "whiskey", "vodka", "gin", "rum", 
+    "arrack", "brandy", "cider", "alcohol"
+  ];
+  const isBarItem = barKeywords.some(kw => catName.includes(kw) || (dish.name || "").toLowerCase().includes(kw));
+
+  return isBarItem ? "bar" : "kitchen";
+}
+
+// 2. DISH CATEGORIES (WITH KITCHEN / BAR STATION SELECTION)
 export function openCategoryModal() {
   document.getElementById("categoryModal")?.classList.remove("hidden");
 }
@@ -59,22 +88,36 @@ export function closeCategoryModal() {
 export async function handleAddCategorySubmit(e) {
   e.preventDefault();
   const name = document.getElementById("newCategoryName")?.value.trim();
+  const station = document.getElementById("newCategoryStation")?.value || "kitchen";
+  
   if (!name || !dbRef || !pushFn || !currentTenant) return;
-  await pushFn(dbRef(`tenants/${currentTenant}/dishCategories`), { name });
+  
+  await pushFn(dbRef(`tenants/${currentTenant}/dishCategories`), { 
+    name, 
+    station // 'kitchen' හෝ 'bar' ලෙස සුරැකේ
+  });
+  
   const input = document.getElementById("newCategoryName");
   if (input) input.value = "";
-  showLiveToast("🍽️ Category Added", `"${name}" කාණ්ඩය සාර්ථකව එකතු විය.`, "success", "fa-tags");
+  showLiveToast("🍽️ Category Added", `"${name}" (${station === 'bar' ? 'Bar BOT' : 'Kitchen KOT'}) කාණ්ඩය සාර්ථකව එකතු විය.`, "success", "fa-tags");
 }
 
 export function renderDishCategoryListUI() {
   const container = document.getElementById("categoryListContainer");
   if (!container) return;
   container.innerHTML = "";
+  
   Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
+    const isBar = (cat.station || "").toLowerCase() === "bar";
     const row = document.createElement("div");
     row.className = "flex justify-between items-center p-2 rounded-xl bg-gray-50 border border-gray-200 text-xs";
     row.innerHTML = `
-      <span class="font-bold text-gray-800">${cat.name}</span>
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-gray-800">${cat.name}</span>
+        <span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${isBar ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-yellow-100 text-yellow-800 border border-yellow-200'}">
+          ${isBar ? '🍹 Bar (BOT)' : '👨‍🍳 Kitchen (KOT)'}
+        </span>
+      </div>
       <button onclick="deleteDishCategory('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
     `;
     container.appendChild(row);
@@ -300,11 +343,18 @@ export function renderMenuDishesTable() {
     const cost = parseFloat(dish.foodCost || 0);
     const price = parseFloat(dish.price || 0);
     const margin = price > 0 ? (((price - cost) / price) * 100).toFixed(1) : 0;
+    const station = getDishStationTarget(id);
+    const isBar = station === "bar";
     
     const tr = document.createElement("tr");
     tr.className = "hover:bg-gray-50 border-b border-gray-100";
     tr.innerHTML = `
-      <td class="p-3.5 font-bold text-gray-800">${dish.name}</td>
+      <td class="p-3.5">
+        <span class="font-bold text-gray-800 block">${dish.name}</span>
+        <span class="text-[9px] font-extrabold ${isBar ? 'text-purple-700' : 'text-yellow-700'} uppercase">
+          ${isBar ? '🍹 Bar Ticket (BOT)' : '👨‍🍳 Kitchen Ticket (KOT)'}
+        </span>
+      </td>
       <td class="p-3.5"><span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md text-[10px] font-bold">${dish.category || 'General'}</span></td>
       <td class="p-3.5 font-bold text-blue-600">Rs. ${price.toFixed(2)}</td>
       <td class="p-3.5 font-semibold text-gray-600">Rs. ${cost.toFixed(2)}</td>
@@ -328,7 +378,8 @@ export async function deleteDish(id) {
   }
 }
 
-// Window Global Exports
+// Global Window Exports
+window.getDishStationTarget = getDishStationTarget;
 window.openCategoryModal = openCategoryModal;
 window.closeCategoryModal = closeCategoryModal;
 window.handleAddCategorySubmit = handleAddCategorySubmit;
