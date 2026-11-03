@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 11: POS ENGINE (100% FREEZE-PROOF & AUTO-FOCUS TOASTS ENABLED)
+// MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & OFFLINE RESILIENT)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (AUTO-PRUNED OFFLINE SYNC)
 // ==========================================================================
 
@@ -24,6 +24,35 @@ const cfdBroadcastChannel = typeof BroadcastChannel !== 'undefined' ? new Broadc
 
 // Lock timer to keep settled payment details visible on CFD for 10 seconds
 let cfdSettledHoldUntil = 0;
+
+// 🛡️ BACKGROUND FIFO PRINT QUEUE (ZERO UI FREEZE & ZERO SPOOLER COLLISION)
+let printJobQueue = [];
+let isProcessingPrintQueue = false;
+
+async function processPrintJobQueue() {
+  if (isProcessingPrintQueue || printJobQueue.length === 0) return;
+  isProcessingPrintQueue = true;
+
+  while (printJobQueue.length > 0) {
+    const currentJob = printJobQueue.shift();
+    try {
+      if (typeof currentJob === "function") {
+        await currentJob();
+      }
+    } catch (err) {
+      console.error("Print queue job execution error:", err);
+    }
+    // Safe buffer between distinct order print jobs
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+
+  isProcessingPrintQueue = false;
+}
+
+export function enqueuePrintJob(jobFn) {
+  printJobQueue.push(jobFn);
+  processPrintJobQueue();
+}
 
 export function initPosContext(dbRefInstance, pushMethod, updateMethod, removeMethod, setMethod, localDB, runTransactionMethod = null) {
   dbRef = dbRefInstance;
@@ -450,10 +479,6 @@ export function renderPOSDishesGrid() {
         dishesObj = JSON.parse(cached);
         erpState.dishes = dishesObj;
       }
-    } catch (e) {}
-  } else {
-    try {
-      localStorage.setItem("cached_erp_dishes", JSON.stringify(dishesObj));
     } catch (e) {}
   }
 
@@ -965,7 +990,7 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ 100% OFFLINE-SAFE STATION ORDER SENDER (INSTANT USB/LAN PRINTING GUARANTEED)
+// 🖨️ 100% OFFLINE-SAFE STATION ORDER SENDER (DEVICE-AWARE & AUTO-QUEUE COMPLIANT)
 export async function sendOrderToKitchen(isPhysicalPrint = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -1022,6 +1047,9 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
     ? cartList.filter(i => getDishStationTarget(i.dishId) === "bar")
     : deltaBarItems;
 
+  // Check if this device is the Desktop PC running Electron (with physical printers attached)
+  const isDesktopPrinterHost = !!(window.electronAPI && window.electronAPI.printSilent);
+
   try {
     if (totalDeltaCount > 0) {
       const allNewItems = [...deltaKitchenItems, ...deltaBarItems];
@@ -1032,7 +1060,9 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
         waiterName: currentBill.waiterName || "",
         items: allNewItems,
         timestamp: new Date().toISOString(),
-        status: "Cooking"
+        status: "Cooking",
+        // If ordered directly on Main PC, mark printed: true so listener won't duplicate print!
+        isPrinted: isDesktopPrinterHost ? true : false
       };
 
       currentBill.cart = updatedCart;
@@ -1056,6 +1086,82 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
       }
     }
 
+    // 📱 If ordered from Waiter's Tablet / Mobile Phone (Non-desktop device):
+    // The order is already pushed to Firebase with isPrinted: false. Main PC will auto-print it!
+    if (!isDesktopPrinterHost && !isPhysicalPrint) {
+      showLiveToast("🔥 Order Sent", "ඇණවුම සාර්ථකව කුස්සියට සහ බාර් එකට යවන ලදී (Main PC එකෙන් Auto-Print වේ).", "kitchen", "fa-fire-burner");
+      return;
+    }
+
+    // 🖨️ If running on Main Desktop PC: Enqueue to FIFO Print Queue (Zero UI Freeze!)
+    enqueuePrintJob(async () => {
+      const pr = erpState.settings?.printers || {};
+      const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
+      const barPrinter = (pr.p3?.device || pr.p1?.device || "").trim();
+      const isSinglePrinterSetup = (!barPrinter || !kitchenPrinter || barPrinter.toLowerCase() === kitchenPrinter.toLowerCase());
+
+      let printedSummary = [];
+
+      // 👨‍🍳 KOT Slip (Kitchen)
+      if (kitchenItemsToPrint.length > 0) {
+        const kitchenPayload = {
+          tableNo: currentBill.tableNo || "N/A",
+          orderType: currentBill.orderType || "Dine-in",
+          waiterName: currentBill.waiterName || "",
+          items: kitchenItemsToPrint,
+          timestamp: new Date().toISOString()
+        };
+
+        await dispatchStationPrintSlip(kitchenPrinter, kitchenPayload, "KOT");
+        printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
+
+        if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, 800));
+        }
+      }
+
+      // 🍹 BOT Slip (Bar)
+      if (barItemsToPrint.length > 0) {
+        const barPayload = {
+          tableNo: currentBill.tableNo || "N/A",
+          orderType: currentBill.orderType || "Dine-in",
+          waiterName: currentBill.waiterName || "",
+          items: barItemsToPrint,
+          timestamp: new Date().toISOString()
+        };
+
+        await dispatchStationPrintSlip(barPrinter, barPayload, "BOT");
+        printedSummary.push(`BOT (Bar: ${barItemsToPrint.length})`);
+      }
+
+      if (printedSummary.length > 0) {
+        showLiveToast("🖨️ Orders Printed", `${printedSummary.join(" & ")} සාර්ථකව මුද්‍රණය විය!`, "kitchen", "fa-print");
+      }
+    });
+
+  } catch (err) {
+    showLiveToast("⚠️ මුද්‍රණ දෝෂයකි", "KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-print");
+  }
+}
+
+// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS (CALLED BY CLOUD LISTENER ON MAIN PC)
+export function handleIncomingCloudPrint(orderId, orderData) {
+  // Only execute if this PC is the desktop printer host
+  if (!window.electronAPI || !window.electronAPI.printSilent) return;
+  if (!orderData || !orderData.items || orderData.status !== "Cooking" || orderData.isPrinted === true) return;
+
+  // Immediately mark printed in memory & update Cloud to prevent duplicate triggers
+  orderData.isPrinted = true;
+  if (dbRef && updateFn && currentTenant) {
+    updateFn(dbRef(`tenants/${currentTenant}/kitchenOrders/${orderId}`), { isPrinted: true }).catch(() => {});
+  }
+
+  // Filter items by destination station
+  const kitchenItems = (orderData.items || []).filter(i => getDishStationTarget(i.dishId) === "kitchen");
+  const barItems = (orderData.items || []).filter(i => getDishStationTarget(i.dishId) === "bar");
+
+  // Push to FIFO Background Print Queue
+  enqueuePrintJob(async () => {
     const pr = erpState.settings?.printers || {};
     const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
     const barPrinter = (pr.p3?.device || pr.p1?.device || "").trim();
@@ -1063,43 +1169,38 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
 
     let printedSummary = [];
 
-    if (kitchenItemsToPrint.length > 0) {
+    if (kitchenItems.length > 0) {
       const kitchenPayload = {
-        tableNo: currentBill.tableNo || "N/A",
-        orderType: currentBill.orderType || "Dine-in",
-        waiterName: currentBill.waiterName || "",
-        items: kitchenItemsToPrint,
-        timestamp: new Date().toISOString()
+        tableNo: orderData.tableNo || "N/A",
+        orderType: orderData.orderType || "Dine-in",
+        waiterName: orderData.waiterName || "",
+        items: kitchenItems,
+        timestamp: orderData.timestamp || new Date().toISOString()
       };
-
       await dispatchStationPrintSlip(kitchenPrinter, kitchenPayload, "KOT");
-      printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
+      printedSummary.push(`KOT (Kitchen: ${kitchenItems.length})`);
 
-      if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
+      if (isSinglePrinterSetup && barItems.length > 0) {
         await new Promise(resolve => setTimeout(resolve, 800));
       }
     }
 
-    if (barItemsToPrint.length > 0) {
+    if (barItems.length > 0) {
       const barPayload = {
-        tableNo: currentBill.tableNo || "N/A",
-        orderType: currentBill.orderType || "Dine-in",
-        waiterName: currentBill.waiterName || "",
-        items: barItemsToPrint,
-        timestamp: new Date().toISOString()
+        tableNo: orderData.tableNo || "N/A",
+        orderType: orderData.orderType || "Dine-in",
+        waiterName: orderData.waiterName || "",
+        items: barItems,
+        timestamp: orderData.timestamp || new Date().toISOString()
       };
-
       await dispatchStationPrintSlip(barPrinter, barPayload, "BOT");
-      printedSummary.push(`BOT (Bar: ${barItemsToPrint.length})`);
+      printedSummary.push(`BOT (Bar: ${barItems.length})`);
     }
 
     if (printedSummary.length > 0) {
-      showLiveToast("🖨️ Orders Printed", `${printedSummary.join(" & ")} සාර්ථකව මුද්‍රණය විය!`, "kitchen", "fa-print");
+      showLiveToast("🖨️ Tablet Order Printed", `Table #${orderData.tableNo || 'N/A'} [${printedSummary.join(" & ")}] Auto-Print විය.`, "kitchen", "fa-print");
     }
-
-  } catch (err) {
-    showLiveToast("⚠️ මුද්‍රණ දෝෂයකි", "KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-print");
-  }
+  });
 }
 
 export async function printPhysicalKOTSlip(kot) {
@@ -1164,7 +1265,6 @@ export async function processOrder(sendWhatsApp = false) {
   const payMethod = currentBill.selectedPayMethod || "cash";
   let payDetails = { method: payMethod };
   
-  // 🛡️ Auto-Focus Validation: Freeze නොවී Textbox එකට Cursor එක Focus වීම
   if (payMethod === "cash") {
     const cashIn = document.getElementById("cashTendered");
     const tendered = parseFloat(cashIn?.value || netTotal);
@@ -1876,6 +1976,8 @@ export async function syncOfflineInvoicesToCloud() {
 }
 
 // 🛡️ CRITICAL GLOBAL WINDOW EXPORTS
+window.enqueuePrintJob = enqueuePrintJob;
+window.handleIncomingCloudPrint = handleIncomingCloudPrint;
 window.persistActiveBillToCloud = persistActiveBillToCloud;
 window.recalculateCartTotalsUI = recalculateCartTotalsUI;
 window.setDiscountType = setDiscountType;
