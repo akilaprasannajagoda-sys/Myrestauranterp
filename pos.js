@@ -1033,8 +1033,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
 
   const totalDeltaCount = deltaKitchenItems.length + deltaBarItems.length;
 
-  // 🛡️ REPRINT DUPLICATE GUARD:
-  // If forceReprintAll is false, we strictly print ONLY the new items (Delta)!
   let kitchenItemsToPrint = [];
   let barItemsToPrint = [];
 
@@ -1046,7 +1044,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       showLiveToast("⚠️ Order Info", "කුස්සියට හෝ බාර් එකට යැවීමට අලුත් ඇණවුම් නොමැත.", "info", "fa-circle-info");
       return;
     }
-    // ONLY the unsent items will be printed!
     kitchenItemsToPrint = deltaKitchenItems;
     barItemsToPrint = deltaBarItems;
   }
@@ -1093,7 +1090,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       return;
     }
 
-    // 🖨️ Enqueue to FIFO Print Queue (Prints ONLY stations that have new items!)
     enqueuePrintJob(async () => {
       const pr = erpState.settings?.printers || {};
       const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
@@ -1102,7 +1098,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
 
       let printedSummary = [];
 
-      // 👨‍🍳 1. KOT Slip (Kitchen) - ONLY PRINTS IF THERE ARE NEW KITCHEN ITEMS!
       if (kitchenItemsToPrint.length > 0) {
         const kitchenPayload = {
           tableNo: currentBill.tableNo || "N/A",
@@ -1120,7 +1115,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
         }
       }
 
-      // 🍹 2. BOT Slip (Bar) - ONLY PRINTS IF THERE ARE NEW BAR ITEMS!
       if (barItemsToPrint.length > 0) {
         const barPayload = {
           tableNo: currentBill.tableNo || "N/A",
@@ -1200,7 +1194,6 @@ export function handleIncomingCloudPrint(orderId, orderData) {
 }
 
 export async function printPhysicalKOTSlip(kot) {
-  // If user calls printPhysicalKOTSlip directly, it only sends the unsent items
   await sendOrderToKitchen(false);
 }
 
@@ -1472,7 +1465,6 @@ export async function processOrder(sendWhatsApp = false) {
       await printThermalReceipt(invoiceData);
     }
     
-    // Clear Input Fields
     const cashIn = document.getElementById("cashTendered");
     const cardIn = document.getElementById("cardLast4");
     const transIn = document.getElementById("transferRef");
@@ -1577,7 +1569,7 @@ export async function printThermalReceipt(inv) {
     if (parseFloat(inv.scAmount || 0) > 0) {
       scRow.style.display = "flex";
       const scVal = document.getElementById("receiptScVal");
-      if (scVal) scVal.innerText = `Rs. ${parseFloat(inv.scAmount).toFixed(2)}`;
+      if (scVal) scVal.innerText = `Rs. ${parseFloat(inv.scAmount || 0).toFixed(2)}`;
     } else {
       scRow.style.display = "none";
     }
@@ -1599,7 +1591,7 @@ export async function printThermalReceipt(inv) {
     if (parseFloat(inv.cslAmount || 0) > 0) {
       cslRow.style.display = "flex";
       const cslVal = document.getElementById("receiptCslVal");
-      if (cslVal) cslVal.innerText = `Rs. ${parseFloat(inv.cslAmount).toFixed(2)}`;
+      if (cslVal) cslVal.innerText = `Rs. ${parseFloat(inv.cslAmount || 0).toFixed(2)}`;
     } else {
       cslRow.style.display = "none";
     }
