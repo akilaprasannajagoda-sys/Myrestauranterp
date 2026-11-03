@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & OFFLINE RESILIENT)
+// MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & SMART DELTA SAFE)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (AUTO-PRUNED OFFLINE SYNC)
 // ==========================================================================
 
@@ -42,7 +42,6 @@ async function processPrintJobQueue() {
     } catch (err) {
       console.error("Print queue job execution error:", err);
     }
-    // Safe buffer between distinct order print jobs
     await new Promise(resolve => setTimeout(resolve, 400));
   }
 
@@ -990,8 +989,8 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ 100% OFFLINE-SAFE STATION ORDER SENDER (DEVICE-AWARE & AUTO-QUEUE COMPLIANT)
-export async function sendOrderToKitchen(isPhysicalPrint = false) {
+// 🖨️ 100% SMART DELTA & OFFLINE-SAFE STATION ORDER SENDER (REPRINT DUPLICATE PROOF)
+export async function sendOrderToKitchen(forceReprintAll = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
   if (cartList.length === 0) return;
@@ -1000,7 +999,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
   const deltaBarItems = [];
   const updatedCart = [];
 
-  // 1. Items Kitchen ද Bar ද යන්න වෙන් කිරීම
+  // 1. Calculate ONLY unsent items (Delta)
   cartList.forEach(item => {
     const totalQty = parseInt(item.qty) || 0;
     const sentQty = parseInt(item.sentQty) || 0;
@@ -1034,20 +1033,24 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
 
   const totalDeltaCount = deltaKitchenItems.length + deltaBarItems.length;
 
-  if (totalDeltaCount === 0 && !isPhysicalPrint) {
-    showLiveToast("⚠️ Order Info", "කුස්සියට හෝ බාර් එකට යැවීමට අලුත් ඇණවුම් නොමැත.", "info", "fa-circle-info");
-    return;
+  // 🛡️ REPRINT DUPLICATE GUARD:
+  // If forceReprintAll is false, we strictly print ONLY the new items (Delta)!
+  let kitchenItemsToPrint = [];
+  let barItemsToPrint = [];
+
+  if (forceReprintAll === true) {
+    kitchenItemsToPrint = cartList.filter(i => getDishStationTarget(i.dishId) === "kitchen");
+    barItemsToPrint = cartList.filter(i => getDishStationTarget(i.dishId) === "bar");
+  } else {
+    if (totalDeltaCount === 0) {
+      showLiveToast("⚠️ Order Info", "කුස්සියට හෝ බාර් එකට යැවීමට අලුත් ඇණවුම් නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+    // ONLY the unsent items will be printed!
+    kitchenItemsToPrint = deltaKitchenItems;
+    barItemsToPrint = deltaBarItems;
   }
 
-  const kitchenItemsToPrint = isPhysicalPrint 
-    ? cartList.filter(i => getDishStationTarget(i.dishId) === "kitchen")
-    : deltaKitchenItems;
-
-  const barItemsToPrint = isPhysicalPrint 
-    ? cartList.filter(i => getDishStationTarget(i.dishId) === "bar")
-    : deltaBarItems;
-
-  // Check if this device is the Desktop PC running Electron (with physical printers attached)
   const isDesktopPrinterHost = !!(window.electronAPI && window.electronAPI.printSilent);
 
   try {
@@ -1061,7 +1064,6 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
         items: allNewItems,
         timestamp: new Date().toISOString(),
         status: "Cooking",
-        // If ordered directly on Main PC, mark printed: true so listener won't duplicate print!
         isPrinted: isDesktopPrinterHost ? true : false
       };
 
@@ -1086,14 +1088,12 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
       }
     }
 
-    // 📱 If ordered from Waiter's Tablet / Mobile Phone (Non-desktop device):
-    // The order is already pushed to Firebase with isPrinted: false. Main PC will auto-print it!
-    if (!isDesktopPrinterHost && !isPhysicalPrint) {
+    if (!isDesktopPrinterHost && !forceReprintAll) {
       showLiveToast("🔥 Order Sent", "ඇණවුම සාර්ථකව කුස්සියට සහ බාර් එකට යවන ලදී (Main PC එකෙන් Auto-Print වේ).", "kitchen", "fa-fire-burner");
       return;
     }
 
-    // 🖨️ If running on Main Desktop PC: Enqueue to FIFO Print Queue (Zero UI Freeze!)
+    // 🖨️ Enqueue to FIFO Print Queue (Prints ONLY stations that have new items!)
     enqueuePrintJob(async () => {
       const pr = erpState.settings?.printers || {};
       const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
@@ -1102,7 +1102,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
 
       let printedSummary = [];
 
-      // 👨‍🍳 KOT Slip (Kitchen)
+      // 👨‍🍳 1. KOT Slip (Kitchen) - ONLY PRINTS IF THERE ARE NEW KITCHEN ITEMS!
       if (kitchenItemsToPrint.length > 0) {
         const kitchenPayload = {
           tableNo: currentBill.tableNo || "N/A",
@@ -1120,7 +1120,7 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
         }
       }
 
-      // 🍹 BOT Slip (Bar)
+      // 🍹 2. BOT Slip (Bar) - ONLY PRINTS IF THERE ARE NEW BAR ITEMS!
       if (barItemsToPrint.length > 0) {
         const barPayload = {
           tableNo: currentBill.tableNo || "N/A",
@@ -1146,21 +1146,17 @@ export async function sendOrderToKitchen(isPhysicalPrint = false) {
 
 // ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS (CALLED BY CLOUD LISTENER ON MAIN PC)
 export function handleIncomingCloudPrint(orderId, orderData) {
-  // Only execute if this PC is the desktop printer host
   if (!window.electronAPI || !window.electronAPI.printSilent) return;
   if (!orderData || !orderData.items || orderData.status !== "Cooking" || orderData.isPrinted === true) return;
 
-  // Immediately mark printed in memory & update Cloud to prevent duplicate triggers
   orderData.isPrinted = true;
   if (dbRef && updateFn && currentTenant) {
     updateFn(dbRef(`tenants/${currentTenant}/kitchenOrders/${orderId}`), { isPrinted: true }).catch(() => {});
   }
 
-  // Filter items by destination station
   const kitchenItems = (orderData.items || []).filter(i => getDishStationTarget(i.dishId) === "kitchen");
   const barItems = (orderData.items || []).filter(i => getDishStationTarget(i.dishId) === "bar");
 
-  // Push to FIFO Background Print Queue
   enqueuePrintJob(async () => {
     const pr = erpState.settings?.printers || {};
     const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
@@ -1204,7 +1200,8 @@ export function handleIncomingCloudPrint(orderId, orderData) {
 }
 
 export async function printPhysicalKOTSlip(kot) {
-  await sendOrderToKitchen(true);
+  // If user calls printPhysicalKOTSlip directly, it only sends the unsent items
+  await sendOrderToKitchen(false);
 }
 
 export async function printPreBillEstimate() {
