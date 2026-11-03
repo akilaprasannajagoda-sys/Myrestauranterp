@@ -703,7 +703,7 @@ window.logout = function() {
   }
 };
 
-// 🔒 5-YEAR ZERO-LAG BOUNDED REALTIME DATA LISTENERS
+// 🔒 5-YEAR ZERO-LAG BOUNDED REALTIME DATA LISTENERS (WITH CENTRAL CLOUD PRINT HUB TRIGGER)
 function initializeRealtimeDataStreams(tenantId) {
   clearAllFirebaseStreams();
   const basePath = `tenants/${tenantId}`;
@@ -815,7 +815,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubTables);
 
-  // 9. Kitchen Orders
+  // 9. Kitchen Orders (WITH CENTRAL CLOUD PRINT HUB TRIGGER FOR TABLETS & MOBILES)
   const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(100));
   const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
     const prevOrders = erpState.kitchenOrders || {};
@@ -826,6 +826,15 @@ function initializeRealtimeDataStreams(tenantId) {
     
     if (Object.keys(currentOrders).length > Object.keys(prevOrders).length) {
       triggerAudioAlert("newOrder");
+    }
+
+    // 🖨️ CENTRAL AUTO-PRINT HUB: Detect incoming orders placed from Waiter Tablets/Mobiles & Auto-Print!
+    if (window.electronAPI && window.electronAPI.printSilent) {
+      Object.entries(currentOrders).forEach(([orderId, orderData]) => {
+        if (orderData && orderData.status === "Cooking" && orderData.isPrinted === false) {
+          POS.handleIncomingCloudPrint(orderId, orderData);
+        }
+      });
     }
 
     Object.keys(currentOrders).forEach(k => {
