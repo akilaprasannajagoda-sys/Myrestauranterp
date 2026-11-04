@@ -1,9 +1,10 @@
 // ==========================================================================
 // MODULE 09: STAFF, ATTENDANCE KIOSK, USER MANAGEMENT & PAYROLL ENGINE
+// 5-YEAR ZERO-FREEZE HARDENED ARCHITECTURE (100% ALERT-FREE & TOAST-SAFE)
 // ==========================================================================
 
 import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans } from './state.js';
-import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString, hashPin, verifyPin } from './utils.js';
 import { printThermalPayslip } from './printer.js';
 
 let dbRef = null;
@@ -35,7 +36,7 @@ export function initPayrollContext(dbRefInstance, pushMethod, updateMethod, remo
   createAuthUserFn = authUserMethod;
 }
 
-// 1. SCREEN WAKE LOCK ENGINE (PREVENTS KIOSK SCREEN FROM SLEEPING)
+// 1. SCREEN WAKE LOCK ENGINE
 export async function requestKioskWakeLock() {
   try {
     if ('wakeLock' in navigator) {
@@ -56,7 +57,7 @@ export function releaseKioskWakeLock() {
   }
 }
 
-// 2. SMART ATTENDANCE KIOSK (CAMERA AUTO-RETRY & PIN)
+// 2. SMART ATTENDANCE KIOSK
 export async function startKioskCameraStream() {
   requestKioskWakeLock();
   const videoEl = document.getElementById("kioskCameraVideo");
@@ -112,7 +113,7 @@ export function kioskKeypadBackspace() {
   if (input) input.value = input.value.slice(0, -1);
 }
 
-// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE (~700 Bytes - Zero Database Quota Bloat)
+// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE
 export function captureInstantCameraSnapshot() {
   const videoEl = document.getElementById("kioskCameraVideo");
   const canvasEl = document.getElementById("kioskSnapshotCanvas");
@@ -129,23 +130,34 @@ export function captureInstantCameraSnapshot() {
   }
 }
 
-// 🔒 ROBUST ATTENDANCE ENGINE (OFFLINE DEXIE SUPPORT + OVERNIGHT SHIFTS SAFE)
+// 🔒 ROBUST ATTENDANCE ENGINE (NON-BLOCKING ZERO-FREEZE)
 export async function submitKioskAttendance(mode) {
   const pinInput = document.getElementById("kioskPinInput");
   const enteredPin = (pinInput?.value || "").trim();
 
   if (!enteredPin) {
-    alert("කරුණාකර ඔබගේ PIN අංකය ඇතුළත් කරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර ඔබගේ PIN අංකය ඇතුළත් කරන්න.", "warning", "fa-key");
+    pinInput?.focus();
     return;
   }
 
-  const matchedEmpEntry = Object.entries(erpState.employees || {}).find(([id, emp]) => {
-    return String(emp.password || "").trim() === enteredPin;
-  });
+  // SHA-256 HASH COMPLIANT PIN MATCHING
+  let matchedEmpEntry = null;
+  for (const entry of Object.entries(erpState.employees || {})) {
+    const [id, emp] = entry;
+    const isMatch = await verifyPin(enteredPin, emp.password);
+    if (isMatch) {
+      matchedEmpEntry = entry;
+      break;
+    }
+  }
 
   if (!matchedEmpEntry) {
-    alert("❌ වැරදි PIN අංකයකි. කරුණාකර නැවත උත්සාහ කරන්න.");
-    if (pinInput) pinInput.value = "";
+    showLiveToast("❌ වැරදි PIN අංකයක්", "PIN අංකය වැරදිය. කරුණාකර නැවත උත්සාහ කරන්න.", "warning", "fa-lock");
+    if (pinInput) {
+      pinInput.value = "";
+      pinInput.focus();
+    }
     return;
   }
 
@@ -171,7 +183,7 @@ export async function submitKioskAttendance(mode) {
   try {
     if (mode === "in") {
       if (activeOpenRecord) {
-        alert(`⚠️ ${emp.name} දැනටමත් Check-In වී ඇත (${activeOpenRecord[1].date} දින ${activeOpenRecord[1].inTime}). පළමුව Check-Out වන්න.`);
+        showLiveToast("⚠️ දැනටමත් Check-In වී ඇත", `${emp.name} දැනටමත් Check-In වී ඇත (${activeOpenRecord[1].date} දින ${activeOpenRecord[1].inTime}). පළමුව Check-Out වන්න.`, "warning", "fa-circle-exclamation");
         if (pinInput) pinInput.value = "";
         return;
       }
@@ -208,7 +220,7 @@ export async function submitKioskAttendance(mode) {
 
     } else {
       if (!activeOpenRecord) {
-        alert(`⚠️ ${emp.name} සක්‍රීය Check-In එකක් හමු නොවීය. කරුණාකර පළමුව Check-In වන්න.`);
+        showLiveToast("⚠️ සක්‍රීය Check-In එකක් නැත", `${emp.name} සක්‍රීය Check-In එකක් හමු නොවීය. කරුණාකර පළමුව Check-In වන්න.`, "warning", "fa-circle-exclamation");
         if (pinInput) pinInput.value = "";
         return;
       }
@@ -264,7 +276,7 @@ export async function submitKioskAttendance(mode) {
     renderTodayLiveScansTable();
     if (pinInput) pinInput.value = "";
   } catch (err) {
-    alert("Attendance සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ Attendance දෝෂයක්", err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -350,6 +362,8 @@ export function openEmployeeModal(mode, empId = null) {
   const editId = document.getElementById("editEmployeeId");
   if (editId) editId.value = "";
 
+  const passIn = document.getElementById("empPasswordInput");
+
   if (mode === "edit" && empId && erpState.employees[empId]) {
     const e = erpState.employees[empId];
     const title = document.getElementById("employeeModalTitle");
@@ -360,7 +374,6 @@ export function openEmployeeModal(mode, empId = null) {
     const roleSel = document.getElementById("empRoleSelect");
     const nameIn = document.getElementById("empNameInput");
     const phoneIn = document.getElementById("empPhoneInput");
-    const passIn = document.getElementById("empPasswordInput");
     const salIn = document.getElementById("empSalaryInput");
     const otIn = document.getElementById("empOtRateInput");
     const addrIn = document.getElementById("empAddressInput");
@@ -369,39 +382,68 @@ export function openEmployeeModal(mode, empId = null) {
     if (roleSel) roleSel.value = e.role || "Waiter";
     if (nameIn) nameIn.value = e.name || "";
     if (phoneIn) phoneIn.value = e.phone || "";
-    if (passIn) passIn.value = e.password || "";
     if (salIn) salIn.value = e.salary || "";
     if (otIn) otIn.value = e.otRate || "";
     if (addrIn) addrIn.value = e.address || "";
+
+    if (passIn) {
+      passIn.value = "";
+      passIn.placeholder = "•••• (Enter new to change)";
+      passIn.required = false;
+    }
   } else {
     const title = document.getElementById("employeeModalTitle");
     if (title) title.innerText = "Add New Employee";
     const nextEmpNo = Object.keys(erpState.employees || {}).length + 1;
     const empIdIn = document.getElementById("empIdInput");
     if (empIdIn) empIdIn.value = `EMP-${String(nextEmpNo).padStart(2, '0')}`;
+
+    if (passIn) {
+      passIn.value = "";
+      passIn.placeholder = "1234";
+      passIn.required = true;
+    }
   }
 
   modal?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("empNameInput")?.focus(), 50);
 }
 
 export function closeEmployeeModal() {
   document.getElementById("employeeModal")?.classList.add("hidden");
 }
 
+// 🔒 SAVE EMPLOYEE (NON-BLOCKING ERROR SAFE)
 export async function handleEmployeeSubmit(e) {
   e.preventDefault();
   const editId = document.getElementById("editEmployeeId")?.value;
+  const rawPin = document.getElementById("empPasswordInput")?.value.trim() || "";
+  const nameIn = document.getElementById("empNameInput");
+
+  let finalHashedPin = rawPin;
+  if (rawPin) {
+    if (!/^[a-f0-9]{64}$/i.test(rawPin)) {
+      finalHashedPin = await hashPin(rawPin);
+    }
+  } else if (editId && erpState.employees[editId]) {
+    finalHashedPin = erpState.employees[editId].password || "";
+  }
+
   const empData = {
     empId: document.getElementById("empIdInput")?.value.trim() || "",
     role: document.getElementById("empRoleSelect")?.value || "Waiter",
-    name: document.getElementById("empNameInput")?.value.trim() || "",
+    name: nameIn?.value.trim() || "",
     phone: document.getElementById("empPhoneInput")?.value.trim() || "",
-    password: document.getElementById("empPasswordInput")?.value.trim() || "",
+    password: finalHashedPin,
     salary: parseFloat(document.getElementById("empSalaryInput")?.value || 0),
     otRate: parseFloat(document.getElementById("empOtRateInput")?.value || 0),
     address: document.getElementById("empAddressInput")?.value.trim() || "",
-    createdAt: new Date().toISOString()
+    updatedAt: new Date().toISOString()
   };
+
+  if (!editId) {
+    empData.createdAt = new Date().toISOString();
+  }
 
   try {
     if (dbRef && currentTenant) {
@@ -415,20 +457,29 @@ export async function handleEmployeeSubmit(e) {
         if (!erpState.employees) erpState.employees = {};
         erpState.employees[newEmpRef.key] = empData;
       }
+
+      try {
+        localStorage.setItem("cached_erp_employees", JSON.stringify(erpState.employees));
+      } catch (e) {}
     }
     closeEmployeeModal();
     renderEmployeesTable();
     showLiveToast("👤 Employee Saved", `${empData.name} (${empData.role}) සාර්ථකව සේව් විය.`, "success", "fa-user-check");
   } catch (err) {
-    alert("සේවක විස්තර සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    let errTitle = "⚠️ සේව් කිරීම අසාර්ථකයි";
+    let errMsg = err.message || "දෝෂයක් මතු විය";
+
+    if (err.message && (err.message.includes("Permission denied") || err.message.includes("permission_denied"))) {
+      errTitle = "🚫 අවසර නොමැත";
+      errMsg = "සේවක විස්තර හෝ PIN වෙනස් කිරීමට අවසර ඇත්තේ Owner හට පමණි.";
+    }
+
+    showLiveToast(errTitle, errMsg, "warning", "fa-lock");
+    if (nameIn) nameIn.focus();
   }
 }
 
-// ==========================================================================
-// 4. ⭐ ADVANCED USER MANAGEMENT & GRANULAR PERMISSIONS ENGINE (FREEZE-PROOF)
-// ==========================================================================
-
-// All available access modules in the Restaurant ERP system
+// 4. ADVANCED USER MANAGEMENT & ACCESS PERMISSIONS
 export const systemModulesList = [
   { id: "pos", name: "POS & Billing", icon: "fa-cash-register" },
   { id: "tables", name: "Floor Plan & Tables", icon: "fa-chair" },
@@ -452,7 +503,6 @@ export function applyStaffRolePreset(preset) {
     roleSelect.value = preset;
   }
 
-  // Clear all checkboxes first
   systemModulesList.forEach(m => {
     const cb = document.getElementById(`perm_${m.id}`);
     if (cb) cb.checked = false;
@@ -510,7 +560,6 @@ export function openStaffLoginModal(empId) {
   if (roleSelect) roleSelect.value = emp.systemRole || defRole;
   if (emailInput) {
     emailInput.value = emp.loginEmail || "";
-    // If login already exists, email is preserved
     emailInput.disabled = hasLogin;
   }
   if (passInput) passInput.value = "";
@@ -521,7 +570,6 @@ export function openStaffLoginModal(empId) {
       : "අවම වශයෙන් ඉලක්කම් 6ක මුරපදයක් (Password) ඇතුළත් කරන්න.";
   }
 
-  // Load existing granular permissions or apply default preset
   if (emp.permissions && typeof emp.permissions === "object") {
     systemModulesList.forEach(m => {
       const cb = document.getElementById(`perm_${m.id}`);
@@ -532,6 +580,7 @@ export function openStaffLoginModal(empId) {
   }
 
   document.getElementById("staffLoginModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("staffLoginEmail")?.focus(), 50);
 }
 
 export function closeStaffLoginModal() {
@@ -553,21 +602,19 @@ export async function handleStaffLoginSubmit(e) {
   const hasLogin = !!emp.hasSystemLogin;
 
   if (!hasLogin && (!email || !password || password.length < 6)) {
-    alert("කරුණාකර වලංගු Email ලිපිනයක් සහ අවම වශයෙන් ඉලක්කම් 6 ක Password එකක් ඇතුළත් කරන්න.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර වලංගු Email ලිපිනයක් සහ අවම වශයෙන් ඉලක්කම් 6 ක Password එකක් ඇතුළත් කරන්න.", "warning", "fa-key");
     return;
   }
 
-  // Collect Granular Module Permissions
   const permissions = {};
   systemModulesList.forEach(m => {
     const cb = document.getElementById(`perm_${m.id}`);
     permissions[m.id] = cb ? cb.checked : false;
   });
 
-  // Ensure at least one module is selected
   const hasAnyPermission = Object.values(permissions).some(v => v === true);
   if (!hasAnyPermission) {
-    alert("කරුණාකර මෙම සේවකයාට අවම වශයෙන් එක් Module එකක්වත් තෝරා දෙන්න (Check කරන්න).");
+    showLiveToast("⚠️ අවසර තෝරන්න", "කරුණාකර මෙම සේවකයාට අවම වශයෙන් එක් Module එකක්වත් තෝරා දෙන්න (Check කරන්න).", "warning", "fa-list-check");
     return;
   }
 
@@ -579,13 +626,11 @@ export async function handleStaffLoginSubmit(e) {
 
     let authUid = emp.authUid || null;
 
-    // 1. If Brand New Login Account: Create Firebase Auth User
     if (!hasLogin) {
       if (createAuthUserFn) {
         authUid = await createAuthUserFn(email, password, sysRole, emp.name, currentTenant, permissions);
       }
     } else {
-      // 2. If Updating Existing Account: Update Permissions & Role directly in DB
       if (authUid && dbRef && updateFn) {
         await updateFn(dbRef(`users/${authUid}`), {
           role: sysRole,
@@ -595,7 +640,6 @@ export async function handleStaffLoginSubmit(e) {
       }
     }
 
-    // 3. Update Employee Profile in Tenant Database
     if (dbRef && updateFn && currentTenant) {
       const updateData = {
         loginEmail: email || emp.loginEmail,
@@ -619,9 +663,11 @@ export async function handleStaffLoginSubmit(e) {
   } catch (err) {
     let msg = err.message || "Failed to update login";
     if (err.code === "auth/email-already-in-use") {
-      msg = "මෙම Email ලිපිනය දැනටමත් වෙනත් සේවකයෙකු සඳහා ලියාපදිංචි කර ඇත. කරුණාකර වෙනත් Email එකක් යොදන්න.";
+      msg = "මෙම Email ලිපිනය දැනටමත් වෙනත් සේවකයෙකු සඳහා ලියාපදිංචි කර ඇත.";
+    } else if (msg.includes("Permission denied")) {
+      msg = "සේවක Access වෙනස් කිරීමට අවසර ඇත්තේ Owner හට පමණි.";
     }
-    alert("දෝෂයක්: " + msg);
+    showLiveToast("⚠️ දෝෂයකි", msg, "warning", "fa-triangle-exclamation");
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -685,7 +731,7 @@ export function renderEmployeesTable() {
       <td class="p-3.5 text-gray-500">${emp.phone}</td>
       <td class="p-3.5 font-mono">
         <span class="tracking-widest font-black text-xs text-pink-700 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100 select-none">••••</span>
-        <span class="text-[9px] text-gray-400 block font-normal mt-0.5">Protected PIN</span>
+        <span class="text-[9px] text-emerald-600 block font-bold mt-0.5"><i class="fa-solid fa-shield-halved text-[8px]"></i> SHA-256 Hashed</span>
       </td>
       <td class="p-3.5 font-bold text-emerald-600">Rs. ${parseFloat(emp.salary || 0).toFixed(2)}</td>
       <td class="p-3.5 font-bold text-blue-600">Rs. ${parseFloat(emp.otRate || 0).toFixed(2)}</td>
@@ -706,6 +752,9 @@ export async function deleteEmployee(id) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/employees/${id}`));
       if (erpState.employees) delete erpState.employees[id];
+      try {
+        localStorage.setItem("cached_erp_employees", JSON.stringify(erpState.employees));
+      } catch (e) {}
       showLiveToast("🗑️ Employee Removed", "සේවකයා සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
       renderEmployeesTable();
     }
@@ -835,7 +884,7 @@ export async function deleteAttendanceRecord(id) {
 export function exportAttendanceToCSV() {
   const rows = document.querySelectorAll("#attendanceLogsTableBody tr");
   if (rows.length === 0) {
-    alert("Export කිරීමට Attendance දත්ත නොමැත.");
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Attendance දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
 
@@ -857,6 +906,7 @@ export function openSalaryAdvanceModal() {
   if (dIn) dIn.value = getLocalDateString();
   populateSalaryAdvanceEmployeeDropdown();
   document.getElementById("salaryAdvanceModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("advAmount")?.focus(), 50);
 }
 
 export function closeSalaryAdvanceModal() {
@@ -876,10 +926,15 @@ export async function handleSalaryAdvanceSubmit(e) {
   e.preventDefault();
   const empId = document.getElementById("advEmployeeSelect")?.value;
   const date = document.getElementById("advDate")?.value;
-  const amount = parseFloat(document.getElementById("advAmount")?.value || 0);
+  const amtIn = document.getElementById("advAmount");
+  const amount = parseFloat(amtIn?.value || 0);
   const reason = document.getElementById("advReason")?.value.trim() || "";
 
-  if (!empId || amount <= 0) return;
+  if (!empId || amount <= 0) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර සේවකයෙකු සහ වලංගු මුදලක් ඇතුළත් කරන්න.", "warning", "fa-hand-holding-dollar");
+    if (amtIn) amtIn.focus();
+    return;
+  }
 
   const advRecord = {
     employeeId: empId,
@@ -899,7 +954,11 @@ export async function handleSalaryAdvanceSubmit(e) {
     closeSalaryAdvanceModal();
     showLiveToast("💸 Advance Recorded", `Rs. ${amount.toFixed(2)} ක වැටුප් අත්තිකාරම් මුදල සාර්ථකව සටහන් විය.`, "success", "fa-hand-holding-dollar");
   } catch (err) {
-    alert("දෝෂයක්: " + err.message);
+    let errMsg = err.message || "දෝෂයක් මතු විය";
+    if (errMsg.includes("Permission denied")) {
+      errMsg = "අත්තිකාරම් සටහන් කිරීමට අවසර ඇත්තේ Owner හට පමණි.";
+    }
+    showLiveToast("⚠️ අසාර්ථකයි", errMsg, "warning", "fa-lock");
   }
 }
 
@@ -987,7 +1046,7 @@ export function renderMonthlyPayrollSheet() {
   if (netEl) netEl.innerText = `Rs. ${grandNet.toFixed(2)}`;
 }
 
-// 7. PAYSLIP MODAL PREVIEW & DEDICATED 80MM THERMAL PRINT DISPATCHER
+// 7. PAYSLIP MODAL PREVIEW & DEDICATED 80MM THERMAL PRINT
 export function printEmployeePayslip(empId, monthStr, daysWorked, basic, otHours, otRate, otAmount, advances, netSalary) {
   const emp = erpState.employees[empId];
   if (!emp) return;
@@ -1049,7 +1108,7 @@ export function exportPayrollToCSV() {
   const rows = document.querySelectorAll("#payrollTableBody tr");
 
   if (rows.length === 0) {
-    alert("Export කිරීමට Payroll දත්ත නොමැත.");
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Payroll දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
 
