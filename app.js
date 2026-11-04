@@ -1,17 +1,17 @@
 // ==========================================================================
-// RESTAURANT ERP - ENTERPRISE 10/10 ZERO-LAG HIGH-SPEED RESTAURANT PLATFORM
-// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HOT/COLD DATA BOUNDED & AUTO-PRUNED)
+// RESTAURANT ERP - ENTERPRISE ZERO-LAG HIGH-SPEED RESTAURANT PLATFORM
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (OFFLINE-FIRST HYBRID BOOT)
 // ==========================================================================
 
-import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+// 🛡️ 1. OFFLINE STANDALONE FIREBASE BUNDLE IMPORT (NO CDN DEPENDENCY)
 import { 
+  initializeApp, 
+  deleteApp,
   getAuth, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   onAuthStateChanged, 
-  signOut 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { 
+  signOut,
   getDatabase, 
   ref, 
   set, 
@@ -27,7 +27,7 @@ import {
   limitToLast,
   equalTo,
   runTransaction
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+} from './vendor/firebase.bundle.js';
 
 // --- IMPORT CUSTOM ERP MODULES ---
 import { 
@@ -36,7 +36,7 @@ import {
 } from './state.js';
 
 import { 
-  showLiveToast, toggleNotificationPanel, clearAllNotifications, manualPurgeSystemMemory, sendInvoiceViaWhatsApp, triggerAudioAlert, getLocalDateString 
+  showLiveToast, toggleNotificationPanel, clearAllNotifications, manualPurgeSystemMemory, sendInvoiceViaWhatsApp, triggerAudioAlert, getLocalDateString, verifyPin 
 } from './utils.js';
 
 import * as PettyCash from './pettycash.js';
@@ -51,7 +51,7 @@ import * as Reports from './reports.js';
 import * as POS from './pos.js';
 import * as PrinterDriver from './printer.js';
 
-// --- 1. FIREBASE INITIALIZATION ---
+// --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyDIXe44rRz2FdUkJovTGi7HBOQiOZW4KYo",
   authDomain: "class-50456.firebaseapp.com",
@@ -81,12 +81,17 @@ export function clearAllFirebaseStreams() {
 }
 window.clearAllFirebaseStreams = clearAllFirebaseStreams;
 
-// 🛡️ PRE-LOAD LOCAL CACHED MENU ON APPLICATION STARTUP (TRUE OFFLINE BOOT)
+// 🛡️ PRE-LOAD LOCAL CACHED DATA ON APPLICATION STARTUP (TRUE OFFLINE BOOT)
 try {
   const cachedDishes = localStorage.getItem("cached_erp_dishes");
   const cachedCats = localStorage.getItem("cached_erp_dishCategories");
+  const cachedEmps = localStorage.getItem("cached_erp_employees");
+  const cachedSettings = localStorage.getItem("cached_erp_settings");
+
   if (cachedDishes) erpState.dishes = JSON.parse(cachedDishes);
   if (cachedCats) erpState.dishCategories = JSON.parse(cachedCats);
+  if (cachedEmps) erpState.employees = JSON.parse(cachedEmps);
+  if (cachedSettings) erpState.settings = JSON.parse(cachedSettings);
 } catch (e) {}
 
 // Store logged in staff member's specific permissions
@@ -199,6 +204,108 @@ function renderAuthAlert(msgText, isError = true) {
   box.classList.remove("hidden");
 }
 
+// 🛡️ SWITCH BETWEEN ONLINE LOGIN & OFFLINE PIN MODE
+export function switchAuthMode(mode) {
+  const cloudTab = document.getElementById("authTabOnlineBtn");
+  const offlineTab = document.getElementById("authTabOfflineBtn");
+  const cloudForm = document.getElementById("loginForm");
+  const offlineForm = document.getElementById("offlinePinForm");
+
+  if (mode === "offline") {
+    cloudTab?.classList.remove("bg-blue-600", "text-white", "shadow-sm");
+    cloudTab?.classList.add("text-gray-600");
+    offlineTab?.classList.add("bg-amber-500", "text-white", "shadow-sm");
+    offlineTab?.classList.remove("text-gray-600");
+
+    cloudForm?.classList.add("hidden");
+    offlineForm?.classList.remove("hidden");
+    setTimeout(() => document.getElementById("offlinePinInput")?.focus(), 50);
+  } else {
+    offlineTab?.classList.remove("bg-amber-500", "text-white", "shadow-sm");
+    offlineTab?.classList.add("text-gray-600");
+    cloudTab?.classList.add("bg-blue-600", "text-white", "shadow-sm");
+    cloudTab?.classList.remove("text-gray-600");
+
+    offlineForm?.classList.add("hidden");
+    cloudForm?.classList.remove("hidden");
+    setTimeout(() => document.getElementById("loginEmail")?.focus(), 50);
+  }
+}
+window.switchAuthMode = switchAuthMode;
+
+// ⚡ OFFLINE PIN LOGIN HANDLER (WITH SHA-256 VERIFY)
+export async function handleOfflinePinSubmit(ev) {
+  if (ev) ev.preventDefault();
+  const pinIn = document.getElementById("offlinePinInput");
+  const pin = pinIn?.value.trim() || "";
+  
+  if (!pin) {
+    renderAuthAlert("කරුණාකර ඔබගේ 4-Digit PIN අංකය ඇතුළත් කරන්න.", true);
+    pinIn?.focus();
+    return;
+  }
+
+  const pairedTenant = localStorage.getItem("pairedHotelTenantId");
+  const pairedHotelName = localStorage.getItem("pairedHotelName") || "Restaurant ERP";
+
+  if (!pairedTenant) {
+    renderAuthAlert("මෙම පරිගණකය හෝටලයක් සමඟ Pair කර නොමැත. කරුණාකර පළමුව Internet ඇතිව Cloud Login එකෙන් Owner ලෙස ලොග් වන්න.", true);
+    return;
+  }
+
+  let employeesList = Object.values(erpState.employees || {});
+  if (employeesList.length === 0) {
+    try {
+      const cached = localStorage.getItem("cached_erp_employees");
+      if (cached) employeesList = Object.values(JSON.parse(cached));
+    } catch (e) {}
+  }
+
+  // 🔒 SHA-256 HASH VERIFICATION
+  let matchedEmp = null;
+  for (const e of employeesList) {
+    if (await verifyPin(pin, e.password)) {
+      matchedEmp = e;
+      break;
+    }
+  }
+
+  const isInitialSetupUnlock = employeesList.length === 0 && pin === "1234";
+
+  if (matchedEmp || isInitialSetupUnlock) {
+    const role = matchedEmp ? (matchedEmp.systemRole || matchedEmp.role?.toLowerCase() || "cashier") : "owner";
+    const perms = matchedEmp ? matchedEmp.permissions : null;
+    const staffName = matchedEmp ? matchedEmp.name : "Admin";
+
+    setCurrentTenant(pairedTenant);
+    setCurrentUserRole(role);
+
+    document.getElementById("authScreen")?.classList.add("hidden");
+    document.getElementById("mainApp")?.classList.remove("hidden");
+
+    const sideUser = document.getElementById("sideUserName");
+    const sideTen = document.getElementById("sideTenantId");
+    const sideHotel = document.getElementById("sideHotelName");
+    if (sideUser) sideUser.innerText = `${staffName} (⚡ Offline)`;
+    if (sideTen) sideTen.innerText = pairedTenant;
+    if (sideHotel) sideHotel.innerText = pairedHotelName;
+
+    applyRoleBasedUI(role, perms);
+    startLiveClockWidget();
+    resetInactivityTimer();
+    loadInstalledPrintersToUI();
+
+    showLiveToast("⚡ Offline Counter Ready", `${staffName} ලෙස Offline කවුන්ටරය සාර්ථකව විවෘත විය.`, "success", "fa-bolt");
+  } else {
+    renderAuthAlert("❌ වැරදි PIN අංකයකි! නැවත උත්සාහ කරන්න.", true);
+    if (pinIn) {
+      pinIn.value = "";
+      pinIn.focus();
+    }
+  }
+}
+window.handleOfflinePinSubmit = handleOfflinePinSubmit;
+
 // 🛡️ FREEZE-PROOF SECURE LOGIN SUBMIT HANDLER
 export async function handleLoginSubmit(ev) {
   if (ev) ev.preventDefault();
@@ -221,6 +328,9 @@ export async function handleLoginSubmit(ev) {
     let errDesc = "Login දෝෂයකි: Email හෝ Password වැරදිය.";
     if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
       errDesc = "Email ලිපිනය හෝ Password අංකය වැරදිය. කරුණාකර නැවත පරීක්ෂා කරන්න.";
+    } else if (err.code === "auth/network-request-failed" || !navigator.onLine) {
+      errDesc = "Internet සම්බන්ධතාවය නොමැත! කරුණාකර 'Offline PIN' Tab එක භාවිත කරන්න.";
+      switchAuthMode("offline");
     } else if (err.message) {
       errDesc = "Login දෝෂයකි: " + err.message;
     }
@@ -231,10 +341,10 @@ export async function handleLoginSubmit(ev) {
     }
   }
 }
-
 window.handleLoginSubmit = handleLoginSubmit;
 
 document.getElementById("loginForm")?.addEventListener("submit", handleLoginSubmit);
+document.getElementById("offlinePinForm")?.addEventListener("submit", handleOfflinePinSubmit);
 document.getElementById("pettyCashForm")?.addEventListener("submit", (e) => { e.preventDefault(); PettyCash.handlePettyCashSubmit(e); });
 document.getElementById("addAreaForm")?.addEventListener("submit", (e) => { e.preventDefault(); Tables.handleAddAreaSubmit(e); });
 document.getElementById("tableForm")?.addEventListener("submit", (e) => { e.preventDefault(); Tables.handleTableSubmit(e); });
@@ -255,7 +365,7 @@ document.getElementById("mergeTableForm")?.addEventListener("submit", (e) => { e
 document.getElementById("shiftFloatForm")?.addEventListener("submit", (e) => { e.preventDefault(); POS.handleShiftFloatSubmit(e); });
 document.getElementById("shiftHandoverForm")?.addEventListener("submit", (e) => { e.preventDefault(); Reports.handleShiftHandoverSubmit(e); });
 
-// HOTEL PROFILE (NON-BLOCKING TOAST SAFE)
+// HOTEL PROFILE
 document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -280,7 +390,7 @@ document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e
   }
 });
 
-// PRINTER ROUTING (NON-BLOCKING TOAST SAFE)
+// PRINTER ROUTING
 document.getElementById("printerRoutingForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -304,7 +414,7 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
   }
 });
 
-// TAX & INVENTORY SETTINGS (NON-BLOCKING TOAST SAFE)
+// TAX & INVENTORY SETTINGS
 document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -327,14 +437,17 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
   try {
     await update(ref(dbInstance, `tenants/${currentTenant}/settings`), settingsData);
     erpState.settings = Object.assign(erpState.settings || {}, settingsData);
+    try {
+      localStorage.setItem("cached_erp_settings", JSON.stringify(erpState.settings));
+    } catch(e) {}
     POS.recalculateCartTotalsUI();
-    showLiveToast("⚙️ Settings Saved", `Settings සාර්ථකව ස්ථිරව යාවත්කාලීන විය. (1 Point = Rs. ${settingsData.loyaltyPointValue.toFixed(2)})`, "success", "fa-sliders");
+    showLiveToast("⚙️ Settings Saved", `Settings සාර්ථකව ස්ථිරව යාවත්කාලීන විය.`, "success", "fa-sliders");
   } catch (err) {
     showLiveToast("⚠️ Settings Error", "Settings සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 });
 
-// 100% COMPLETE DATABASE BACKUP (NON-BLOCKING TOAST SAFE)
+// 100% COMPLETE DATABASE BACKUP
 export async function downloadFullDatabaseBackup() {
   if (!dbRef || !currentTenant) return;
 
@@ -382,7 +495,7 @@ export async function downloadFullDatabaseBackup() {
 }
 window.downloadFullDatabaseBackup = downloadFullDatabaseBackup;
 
-// 1-CLICK COMPLETE DATABASE RESTORE ENGINE (NON-BLOCKING TOAST SAFE)
+// 1-CLICK COMPLETE DATABASE RESTORE ENGINE
 export async function handleRestoreBackupFile(event) {
   const file = event.target.files[0];
   if (!file || !dbRef || !currentTenant) return;
@@ -426,14 +539,14 @@ export async function handleRestoreBackupFile(event) {
 }
 window.handleRestoreBackupFile = handleRestoreBackupFile;
 
-// INACTIVITY AUTO PIN-LOCK ENGINE (OWNER-SAFE)
+// INACTIVITY AUTO PIN-LOCK ENGINE
 let inactivityTimer = null;
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   if (currentUserRole === 'cook') return;
 
   inactivityTimer = setTimeout(() => {
-    if (authInstance.currentUser && currentTenant) {
+    if ((authInstance.currentUser || currentTenant) && currentTenant) {
       const isKitchenActive = document.getElementById("viewKitchen") && !document.getElementById("viewKitchen").classList.contains("hidden");
       const isFaceScanActive = document.getElementById("viewFaceScan") && !document.getElementById("viewFaceScan").classList.contains("hidden");
 
@@ -453,14 +566,29 @@ function resetInactivityTimer() {
   window.addEventListener(evt, resetInactivityTimer, { passive: true });
 });
 
-// 🔒 STRICT COUNTER PIN UNLOCK (WITH AUTO-FOCUS ON FAILURE - ZERO FREEZE)
-window.submitCounterUnlock = function() {
+// 🔒 STRICT COUNTER PIN UNLOCK (WITH SHA-256 VERIFY)
+window.submitCounterUnlock = async function() {
   const pinIn = document.getElementById("unlockScreenPinInput");
   const pin = pinIn?.value.trim();
   if (!pin) return;
 
-  const employeesList = Object.values(erpState.employees || {});
-  const isMatchedEmployee = employeesList.some(e => String(e.password || "").trim() === pin);
+  let employeesList = Object.values(erpState.employees || {});
+  if (employeesList.length === 0) {
+    try {
+      const cached = localStorage.getItem("cached_erp_employees");
+      if (cached) employeesList = Object.values(JSON.parse(cached));
+    } catch(e) {}
+  }
+
+  // 🔒 SHA-256 HASH VERIFICATION
+  let isMatchedEmployee = false;
+  for (const e of employeesList) {
+    if (await verifyPin(pin, e.password)) {
+      isMatchedEmployee = true;
+      break;
+    }
+  }
+
   const isInitialSetupUnlock = employeesList.length === 0 && pin === "1234";
 
   if (isMatchedEmployee || isInitialSetupUnlock) {
@@ -477,7 +605,7 @@ window.submitCounterUnlock = function() {
 };
 
 // ==========================================================================
-// ⭐ 2. GRANULAR ROLE & ACCESS PERMISSIONS ENFORCEMENT ENGINE
+// 2. ROLE & ACCESS PERMISSIONS ENFORCEMENT ENGINE
 // ==========================================================================
 export function applyRoleBasedUI(role = "owner", permissions = null) {
   setCurrentUserRole(role);
@@ -515,7 +643,6 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
     return;
   }
 
-  // 🛡️ GRANULAR CUSTOM PERMISSIONS CHECK:
   if (permissions && typeof permissions === "object" && Object.keys(permissions).length > 0) {
     let firstAllowedView = null;
 
@@ -537,7 +664,7 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
     return;
   }
 
-  // Fallback to legacy presets if permissions object is not yet configured
+  // Fallback Presets
   if (role === "cashier") {
     if (roleBadge) roleBadge.innerText = "Cashier";
     navMap.menu?.classList.add("hidden");
@@ -581,7 +708,7 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
   }
 }
 
-// 🛡️ AUTH STATE LISTENER (WITH AUTOMATIC PERMISSIONS RESOLVER & FREEZE GUARD)
+// 🛡️ AUTH STATE LISTENER (HYBRID ONLINE/OFFLINE RESILIENT)
 onAuthStateChanged(authInstance, async (activeUser) => {
   const loginBtn = document.getElementById("loginBtn");
   if (loginBtn) {
@@ -602,10 +729,6 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       if (!snap.exists()) {
         renderAuthAlert(`🚫 මෙම ගිණුම Database හි users node යටතේ ලියාපදිංචි වී නොමැත.`, true);
         await signOut(authInstance);
-        if (loginBtn) {
-          loginBtn.disabled = false;
-          loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
-        }
         return;
       }
 
@@ -619,10 +742,6 @@ onAuthStateChanged(authInstance, async (activeUser) => {
           renderAuthAlert(`🚫 Access Denied: කරුණාකර පළමුව Owner Account එකෙන් ලොග් වන්න.`, true);
           await signOut(authInstance);
           updateDeviceTerminalBadgeUI();
-          if (loginBtn) {
-            loginBtn.disabled = false;
-            loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
-          }
           return;
         }
       }
@@ -668,27 +787,28 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       }
     } catch (err) {
       console.error("Auth state error:", err);
-      renderAuthAlert("දත්ත ලබාගැනීමේ දෝෂයකි: " + err.message, true);
-      if (loginBtn) {
-        loginBtn.disabled = false;
-        loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
+      if (!navigator.onLine && localStorage.getItem("pairedHotelTenantId")) {
+        showLiveToast("⚡ Offline Mode Active", "Internet නොමැති බැවින් Local Offline දත්ත භාවිත වේ.", "info", "fa-bolt");
+      } else {
+        renderAuthAlert("දත්ත ලබාගැනීමේ දෝෂයකි: " + err.message, true);
       }
     }
   } else {
-    setCurrentTenant(null);
-    currentStaffPermissions = null;
-    clearAllFirebaseStreams();
-    document.getElementById("authScreen")?.classList.remove("hidden");
-    document.getElementById("mainApp")?.classList.add("hidden");
-    Payroll.stopKioskCameraStream();
-    updateDeviceTerminalBadgeUI();
-    if (loginBtn) {
-      loginBtn.disabled = false;
-      loginBtn.innerHTML = `<span>Login වන්න</span> <i class="fa-solid fa-arrow-right"></i>`;
+    if (!navigator.onLine && localStorage.getItem("pairedHotelTenantId")) {
+      switchAuthMode("offline");
+    } else {
+      setCurrentTenant(null);
+      currentStaffPermissions = null;
+      clearAllFirebaseStreams();
+      document.getElementById("authScreen")?.classList.remove("hidden");
+      document.getElementById("mainApp")?.classList.add("hidden");
+      Payroll.stopKioskCameraStream();
+      updateDeviceTerminalBadgeUI();
     }
   }
 });
 
+// Periodic offline sync
 setInterval(() => {
   if (navigator.onLine && currentTenant) {
     POS.syncOfflineInvoicesToCloud();
@@ -699,11 +819,13 @@ window.logout = function() {
   if (confirm("ඔබට Logout වීමට අවශ්‍යද?")) {
     clearAllFirebaseStreams();
     Payroll.stopKioskCameraStream();
-    signOut(authInstance);
+    signOut(authInstance).catch(() => {
+      window.location.reload();
+    });
   }
 };
 
-// 🔒 5-YEAR ZERO-LAG BOUNDED REALTIME DATA LISTENERS (WITH CENTRAL CLOUD PRINT HUB TRIGGER)
+// 🔒 5-YEAR ZERO-LAG BOUNDED REALTIME DATA LISTENERS
 function initializeRealtimeDataStreams(tenantId) {
   clearAllFirebaseStreams();
   const basePath = `tenants/${tenantId}`;
@@ -746,6 +868,11 @@ function initializeRealtimeDataStreams(tenantId) {
         loyaltyRate: 100, 
         loyaltyPointValue: 1.0 
       }, snapshot.val());
+
+      try {
+        localStorage.setItem("cached_erp_settings", JSON.stringify(erpState.settings));
+      } catch(e) {}
+
       syncSettingsUI();
       POS.recalculateCartTotalsUI();
     }
@@ -815,7 +942,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubTables);
 
-  // 9. Kitchen Orders (WITH CENTRAL CLOUD PRINT HUB TRIGGER FOR TABLETS & MOBILES)
+  // 9. Kitchen Orders (Central Print Hub)
   const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(100));
   const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
     const prevOrders = erpState.kitchenOrders || {};
@@ -828,7 +955,6 @@ function initializeRealtimeDataStreams(tenantId) {
       triggerAudioAlert("newOrder");
     }
 
-    // 🖨️ CENTRAL AUTO-PRINT HUB: Detect incoming orders placed from Waiter Tablets/Mobiles & Auto-Print!
     if (window.electronAPI && window.electronAPI.printSilent) {
       Object.entries(currentOrders).forEach(([orderId, orderData]) => {
         if (orderData && orderData.status === "Cooking" && orderData.isPrinted === false) {
@@ -878,7 +1004,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubGrns);
 
-  // 13. Invoices & Reports Sync
+  // 13. Invoices
   const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(100));
   const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
     const fromVal = document.getElementById("repFromDate")?.value;
@@ -921,9 +1047,13 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubPetty);
 
-  // 16. Employees (Live Updates Staff Permissions if Owner changes them in real-time)
+  // 16. Employees (Cache locally for Offline PIN login)
   const unsubEmployees = onValue(ref(dbInstance, `${basePath}/employees`), (snapshot) => {
     erpState.employees = snapshot.val() || {};
+    try {
+      localStorage.setItem("cached_erp_employees", JSON.stringify(erpState.employees));
+    } catch (e) {}
+
     Payroll.renderEmployeesTable();
     Tables.populateTableWaiterDropdown();
     Payroll.populateAttendanceEmployeeFilter();
@@ -988,7 +1118,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubActiveBills);
 
-  // 20. LIVE HEARTBEAT & SAAS SUBSCRIPTION
+  // 20. Heartbeat & SaaS Subscription
   const sendHeartbeat = () => {
     if (currentTenant && dbRef && navigator.onLine) {
       update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
@@ -1036,14 +1166,14 @@ function initializeRealtimeDataStreams(tenantId) {
     } else {
       const lockScreen = document.getElementById("saasLockoutScreen");
       if (lockScreen) lockScreen.classList.add("hidden");
-      if (authInstance.currentUser) {
+      if (authInstance.currentUser || currentTenant) {
         document.getElementById("mainApp")?.classList.remove("hidden");
       }
     }
   });
   activeFirebaseUnsubscribers.push(unsubSub);
 
-  // 21. DAY-END Z-REPORTS SYNC
+  // 21. Day-End Reports
   const recentDayEndQuery = query(ref(dbInstance, `${basePath}/dayEndReports`), limitToLast(40));
   const unsubDayEnd = onValue(recentDayEndQuery, (snapshot) => {
     erpState.dayEndReports = snapshot.val() || {};
@@ -1065,7 +1195,7 @@ window.toggleCustomerDisplayWindow = async function() {
   }
 };
 
-// NAVIGATION & VIEW SWITCHER (WITH REAL-TIME STAFF ACCESS RESTRICTION GUARD)
+// NAVIGATION & VIEW SWITCHER
 const availableViews = ["pos", "tables", "kitchen", "menu", "inventory", "suppliersGrn", "customers", "pettyCash", "faceScan", "employees", "reports", "settings"];
 
 export function switchView(viewName) {
@@ -1226,7 +1356,7 @@ window.openMergeTableModal = Tables.openMergeTableModal;
 window.closeMergeTableModal = Tables.closeMergeTableModal;
 window.handleMergeTables = Tables.handleMergeTables;
 
-// Inventory & Upgraded Multi-Department Store Issues
+// Inventory
 window.openRawCategoryModal = Inventory.openRawCategoryModal;
 window.closeRawCategoryModal = Inventory.closeRawCategoryModal;
 window.deleteRawCategory = Inventory.deleteRawCategory;
@@ -1282,7 +1412,7 @@ window.openSupplierPayModal = Suppliers.openSupplierPayModal;
 window.closeSupplierPayModal = Suppliers.closeSupplierPayModal;
 window.onSupPayMethodChange = Suppliers.onSupPayMethodChange;
 
-// Customers CRM & Loyalty Program Exports
+// Customers CRM
 window.openCustomerModal = Customers.openCustomerModal;
 window.closeCustomerModal = Customers.closeCustomerModal;
 window.handleCustomerSubmit = Customers.handleCustomerSubmit;
@@ -1323,7 +1453,7 @@ window.printActiveThermalPayslip = Payroll.printActiveThermalPayslip;
 window.closePayslipModal = Payroll.closePayslipModal;
 window.exportPayrollToCSV = Payroll.exportPayrollToCSV;
 
-// Reports Global Window Exports
+// Reports
 window.switchReportTab = Reports.switchReportTab;
 window.setReportPeriodPreset = Reports.setReportPeriodPreset;
 window.applyReportDateFilter = Reports.applyReportDateFilter;
@@ -1341,14 +1471,14 @@ window.closeManagerOverrideModal = Reports.closeManagerOverrideModal;
 window.submitManagerOverrideAction = Reports.submitManagerOverrideAction;
 window.openDayEndModal = Reports.openDayEndModal;
 window.closeDayEndModal = Reports.closeDayEndModal;
-window.calculateCashDenominations = calculateCashDenominations;
-window.calculateDayEndVariance = calculateDayEndVariance;
-window.printAndSaveZReport = printAndSaveZReport;
+window.calculateCashDenominations = Reports.calculateCashDenominations;
+window.calculateDayEndVariance = Reports.calculateDayEndVariance;
+window.printAndSaveZReport = Reports.printAndSaveZReport;
 window.openShiftHandoverModal = Reports.openShiftHandoverModal;
 window.closeShiftHandoverModal = Reports.closeShiftHandoverModal;
 window.handleShiftHandoverSubmit = Reports.handleShiftHandoverSubmit;
 
-// POS Global Window Exports
+// POS
 window.addNewBillTab = POS.addNewBillTab;
 window.switchBillTab = POS.switchBillTab;
 window.closeBillTab = POS.closeBillTab;
