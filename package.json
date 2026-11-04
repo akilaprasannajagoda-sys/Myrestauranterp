@@ -1,20 +1,26 @@
 {
   "name": "restaurant-erp-pos",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "Professional Restaurant ERP & POS System",
   "main": "main.js",
   "author": "Restaurant ERP Enterprise",
   "scripts": {
+    "build-vendor": "esbuild vendor-entry.js --bundle --minify --format=esm --outfile=vendor/firebase.bundle.js",
+    "prestart": "npm run build-vendor",
+    "prebuild": "npm run build-vendor",
+    "predist": "npm run build-vendor",
     "start": "electron .",
     "build": "electron-builder --win",
     "dist": "electron-builder --win --x64"
   },
   "dependencies": {
-    "electron-updater": "^6.1.7"
+    "electron-updater": "^6.1.7",
+    "firebase": "^10.8.0"
   },
   "devDependencies": {
     "electron": "^28.2.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.9.1",
+    "esbuild": "^0.20.1"
   },
   "build": {
     "appId": "com.restauranterp.pos",
