@@ -26,9 +26,6 @@ if (!gotTheLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
-      if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.focus();
-      }
     }
   });
   
@@ -41,7 +38,7 @@ if (!gotTheLock) {
   });
 }
 
-// 🖨️ 3. REUSABLE HIGH-PERFORMANCE PRINT WORKER WINDOW
+// 🖨️ 3. NON-FOCUSABLE SILENT PRINT WORKER (PREVENTS TEXTBOX FOCUS FREEZE)
 function initPrintWorkerWindow() {
   if (!printWorkerWindow || printWorkerWindow.isDestroyed()) {
     printWorkerWindow = new BrowserWindow({
@@ -49,6 +46,8 @@ function initPrintWorkerWindow() {
       height: 600,
       show: false,
       frame: false,
+      focusable: false, // 🛡️ CRITICAL: Never steals keyboard focus from Cashier textboxes!
+      skipTaskbar: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -75,6 +74,7 @@ function createOrUpdateCustomerDisplay() {
           fullscreen: true,
           frame: false,
           show: true,
+          focusable: false, // 🛡️ Secondary screen never steals keyboard focus
           autoHideMenuBar: true,
           title: "Customer Facing Display",
           webPreferences: {
@@ -132,10 +132,10 @@ function createWindow() {
   mainWindow.maximize();
   mainWindow.loadFile('index.html');
 
-  // 🛡️ ZERO-FREEZE AUTO-FOCUS GUARD: Ensures textboxes and keyboard focus are never lost
-  mainWindow.on('focus', () => {
+  // 🛡️ RECOVER NATIVE FOCUS CLEANLY (WITHOUT BLURRING ACTIVE TEXTBOX)
+  mainWindow.on('restore', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.focus();
+      mainWindow.focus();
     }
   });
   
@@ -214,11 +214,10 @@ ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   }
 });
 
-// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (WITH FULL-CONTENT HASH & KOT/BOT COMPLIANCE)
+// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (WITH ABSOLUTE OS FOCUS RESTORE)
 let lastPrintTimestamp = 0;
 let lastPrintedContentHash = "";
 
-// 🛡️ Full-content 32-bit Hash Generator (KOT සහ BOT එකිනෙකට පැටලීම 100% වළක්වයි)
 function computeStringHash(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -228,7 +227,27 @@ function computeStringHash(str) {
   return String(hash);
 }
 
-ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
+let printExecutionLock = Promise.resolve();
+
+ipcMain.handle('print-silent', async (event, printArgs) => {
+  return new Promise((resolve) => {
+    printExecutionLock = printExecutionLock.then(async () => {
+      try {
+        const result = await executeSinglePrintTask(printArgs);
+        resolve(result);
+      } catch (err) {
+        resolve({ success: false, error: err.message || "Print execution failed" });
+      } finally {
+        // 🛡️ CRITICAL UNFREEZE: Restore native OS keyboard focus back to Main Window immediately
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.focus();
+        }
+      }
+    });
+  });
+});
+
+async function executeSinglePrintTask({ printerName, htmlContent }) {
   return new Promise(async (resolve) => {
     let isFinished = false;
 
@@ -249,10 +268,9 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         return resolve({ success: false, error: "Print content is empty" });
       }
 
-      // 🛡️ සම්පූර්ණ අන්තර්ගතයම පදනම් කරගත් Anti-Duplicate Check (KOT සහ BOT Hash වෙනස් බැවින් BOT කවදාවත් Drop නොවේ)
       const nowMs = Date.now();
       const contentHash = computeStringHash(htmlContent);
-      if (contentHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1200) {
+      if (contentHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1000) {
         clearTimeout(timeoutTimer);
         return resolve({ success: true, duplicateIgnored: true });
       }
@@ -262,7 +280,6 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       const printers = await mainWindow.webContents.getPrintersAsync();
       let targetDevice = "";
       
-      // Smart Two-Way Match: පරිගණකයේ ඇති Printer නම සහ Settings වල නම ගැළපීම
       if (printerName && printerName.trim()) {
         const cleanReq = printerName.trim().toLowerCase();
         const matched = printers.find(p => {
@@ -274,7 +291,6 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
         }
       }
       
-      // Settings වල නම නොගැලපුණහොත් Default Printer එක තෝරාගැනීම
       if (!targetDevice) {
         const def = printers.find(p => p.isDefault);
         targetDevice = def ? def.name : (printers.length > 0 ? printers[0].name : "");
@@ -367,28 +383,22 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       
       await pWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullPrintHtml)}`);
       
-      setTimeout(async () => {
-        try {
-          await pWin.webContents.print({
-            silent: true,
-            printBackground: true,
-            deviceName: targetDevice,
-            margins: { marginType: 'none' }
-          });
-          
-          if (!isFinished) {
-            isFinished = true;
-            clearTimeout(timeoutTimer);
+      pWin.webContents.print({
+        silent: true,
+        printBackground: true,
+        deviceName: targetDevice,
+        margins: { marginType: 'none' }
+      }, (success, failureReason) => {
+        if (!isFinished) {
+          isFinished = true;
+          clearTimeout(timeoutTimer);
+          if (success) {
             resolve({ success: true, usedPrinter: targetDevice });
-          }
-        } catch (printErr) {
-          if (!isFinished) {
-            isFinished = true;
-            clearTimeout(timeoutTimer);
-            resolve({ success: false, error: printErr.message });
+          } else {
+            resolve({ success: false, error: failureReason || "Printer spooler rejected job" });
           }
         }
-      }, 150);
+      });
 
     } catch (err) {
       if (!isFinished) {
@@ -398,7 +408,7 @@ ipcMain.handle('print-silent', async (event, { printerName, htmlContent }) => {
       }
     }
   });
-});
+}
 
 ipcMain.handle('get-printers', async () => {
   if (!mainWindow) return [];
