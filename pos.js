@@ -1,6 +1,6 @@
 // ==========================================================================
-// MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & SMART DELTA SAFE)
-// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (AUTO-PRUNED OFFLINE SYNC)
+// MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & ACTIVE FOCUS GUARD)
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HIGH-CONTRAST PURE-BLACK RECEIPT)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
@@ -42,7 +42,7 @@ async function processPrintJobQueue() {
     } catch (err) {
       console.error("Print queue job execution error:", err);
     }
-    await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
   isProcessingPrintQueue = false;
@@ -313,6 +313,7 @@ export function renderBillTabsBar() {
   });
 }
 
+// 🛡️ SYNC BILL TO FORM UI WITH ACTIVE FOCUS GUARD
 export function syncActiveBillToFormUI() {
   const currentBill = getActiveBillData();
   const oType = document.getElementById("orderType");
@@ -321,9 +322,11 @@ export function syncActiveBillToFormUI() {
   const bSub = document.getElementById("currentBillSubtitle");
   const discIn = document.getElementById("cartDiscountInput");
 
-  if (oType) oType.value = currentBill.orderType || "Dine-in";
-  if (oTab) oTab.value = currentBill.tableNo || "";
-  if (discIn) discIn.value = currentBill.discountVal || "";
+  const activeEl = document.activeElement;
+
+  if (oType && activeEl !== oType) oType.value = currentBill.orderType || "Dine-in";
+  if (oTab && activeEl !== oTab) oTab.value = currentBill.tableNo || "";
+  if (discIn && activeEl !== discIn) discIn.value = currentBill.discountVal || "";
 
   setDiscountType(currentBill.discountType || "fixed");
   
@@ -346,7 +349,7 @@ export function syncActiveBillToFormUI() {
     if (pointsBadge) pointsBadge.innerText = `⭐ ${cust.loyaltyPoints || 0} Points Available`;
     if (badgeContainer) badgeContainer.classList.remove("hidden");
     if (redeemBox) redeemBox.classList.remove("hidden");
-    if (redeemInput) {
+    if (redeemInput && activeEl !== redeemInput) {
       redeemInput.value = currentBill.loyaltyPointsRedeemed || "";
       redeemInput.max = cust.loyaltyPoints || 0;
     }
@@ -354,7 +357,7 @@ export function syncActiveBillToFormUI() {
     if (badgeContainer) badgeContainer.classList.add("hidden");
     if (redeemBox) redeemBox.classList.add("hidden");
     if (hiddenId) hiddenId.value = "";
-    if (redeemInput) redeemInput.value = "";
+    if (redeemInput && activeEl !== redeemInput) redeemInput.value = "";
   }
 
   selectPayMethod(currentBill.selectedPayMethod || "cash", false);
@@ -766,7 +769,9 @@ export function recalculateCartTotalsUI() {
     const maxAvailable = parseFloat(erpState.customers[attachedCustId].loyaltyPoints || 0);
     if (loyaltyRedeemed > maxAvailable) {
       loyaltyRedeemed = maxAvailable;
-      if (redeemIn) redeemIn.value = maxAvailable > 0 ? maxAvailable : "";
+      if (redeemIn && document.activeElement !== redeemIn) {
+        redeemIn.value = maxAvailable > 0 ? maxAvailable : "";
+      }
     }
   }
 
@@ -874,6 +879,7 @@ export function selectPayMethod(method, syncCloud = true) {
     }
   });
 
+  const activeEl = document.activeElement;
   if (method === "credit") {
     const currentBill = getActiveBillData();
     const custId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId;
@@ -881,8 +887,8 @@ export function selectPayMethod(method, syncCloud = true) {
       const cust = erpState.customers[custId];
       const nameIn = document.getElementById("creditCustomerName");
       const phoneIn = document.getElementById("creditCustomerPhone");
-      if (nameIn && !nameIn.value) nameIn.value = cust.name;
-      if (phoneIn && !phoneIn.value) phoneIn.value = cust.phone;
+      if (nameIn && activeEl !== nameIn && !nameIn.value) nameIn.value = cust.name;
+      if (phoneIn && activeEl !== phoneIn && !phoneIn.value) phoneIn.value = cust.phone;
     }
   }
 
@@ -971,16 +977,16 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
 
   if (itemsContainer) {
     itemsContainer.innerHTML = payload.items.map(i => `
-      <div style="border-bottom: 1px dashed #000; padding: 4px 0; margin-bottom: 3px; width: 100%;">
+      <div style="border-bottom: 1.5px dashed #000000; padding: 4px 0; margin-bottom: 3px; width: 100%; color: #000000;">
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-          <span style="font-weight: 800; font-size: 13.5px; width: 72%; line-height: 1.25; color: #000; display: inline-block;">
-            ${i.name}${i.isAddOn ? ' <span style="font-size: 10px; border: 1px solid #000; padding: 0 2px;">ADD-ON</span>' : ''}
+          <span style="font-weight: 800; font-size: 13.5px; width: 72%; line-height: 1.25; color: #000000; display: inline-block;">
+            ${i.name}${i.isAddOn ? ' <span style="font-size: 10px; border: 1.5px solid #000000; padding: 0 2px; font-weight: 900;">ADD-ON</span>' : ''}
           </span>
-          <span style="font-weight: 900; font-size: 15px; width: 28%; text-align: right; padding-right: 4px; color: #000; display: inline-block; white-space: nowrap;">
+          <span style="font-weight: 900; font-size: 15px; width: 28%; text-align: right; padding-right: 4px; color: #000000; display: inline-block; white-space: nowrap;">
             [ x${i.qty} ]
           </span>
         </div>
-        ${i.note ? `<div style="font-size: 11px; font-weight: bold; background: #eee; padding: 2px 4px; margin-top: 3px; border-left: 3px solid #000;">>> NOTE: ${i.note}</div>` : ''}
+        ${i.note ? `<div style="font-size: 11px; font-weight: 900; background: #eee; padding: 2px 4px; margin-top: 3px; border-left: 3px solid #000000; color: #000000;">>> NOTE: ${i.note}</div>` : ''}
       </div>
     `).join("");
   }
@@ -989,7 +995,7 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ 100% SMART DELTA & OFFLINE-SAFE STATION ORDER SENDER (REPRINT DUPLICATE PROOF)
+// 🖨️ SMART DELTA & OFFLINE-SAFE STATION ORDER SENDER
 export async function sendOrderToKitchen(forceReprintAll = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -999,7 +1005,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
   const deltaBarItems = [];
   const updatedCart = [];
 
-  // 1. Calculate ONLY unsent items (Delta)
   cartList.forEach(item => {
     const totalQty = parseInt(item.qty) || 0;
     const sentQty = parseInt(item.sentQty) || 0;
@@ -1086,7 +1091,7 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
     }
 
     if (!isDesktopPrinterHost && !forceReprintAll) {
-      showLiveToast("🔥 Order Sent", "ඇණවුම සාර්ථකව කුස්සියට සහ බාර් එකට යවන ලදී (Main PC එකෙන් Auto-Print වේ).", "kitchen", "fa-fire-burner");
+      showLiveToast("🔥 Order Sent", "ඇණවුම සාර්ථකව කුස්සියට සහ බාර් එකට යවන ලදී.", "kitchen", "fa-fire-burner");
       return;
     }
 
@@ -1111,7 +1116,7 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
         printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
 
         if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
-          await new Promise(resolve => setTimeout(resolve, 800));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
@@ -1134,11 +1139,11 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
     });
 
   } catch (err) {
-    showLiveToast("⚠️ මුද්‍රණ දෝෂයකි", "KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-print");
+    showLiveToast("⚠️ දෝෂයකි", "KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-print");
   }
 }
 
-// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS (CALLED BY CLOUD LISTENER ON MAIN PC)
+// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS
 export function handleIncomingCloudPrint(orderId, orderData) {
   if (!window.electronAPI || !window.electronAPI.printSilent) return;
   if (!orderData || !orderData.items || orderData.status !== "Cooking" || orderData.isPrinted === true) return;
@@ -1171,7 +1176,7 @@ export function handleIncomingCloudPrint(orderId, orderData) {
       printedSummary.push(`KOT (Kitchen: ${kitchenItems.length})`);
 
       if (isSinglePrinterSetup && barItems.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -1231,7 +1236,7 @@ export async function printPreBillEstimate() {
   showLiveToast("📄 Pre-Bill Printed", `Table ${currentBill.tableNo || 'N/A'} සඳහා Estimate බිලක් Print කරන ලදී.`, "info", "fa-file-lines");
 }
 
-// 🔒 CHECKOUT ENGINE (WITH AUTO-FOCUS TOAST VALIDATIONS & ZERO FREEZE)
+// ⚡ OPTIMISTIC ZERO-LAG INSTANT BILL PROCESSOR & CHECKOUT ENGINE
 export async function processOrder(sendWhatsApp = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart || [];
@@ -1351,151 +1356,147 @@ export async function processOrder(sendWhatsApp = false) {
     date: getLocalDateString(),
     createdAt: new Date().toISOString()
   };
-  
-  try {
-    payDetails.items = cartList;
-    syncLiveCustomerDisplay(true, payDetails);
 
-    if (navigator.onLine && dbRef && pushFn && currentTenant) {
-      const invoiceRef = await pushFn(dbRef(`tenants/${currentTenant}/invoices`), invoiceData);
-      
-      if (attachedCustomerId && erpState.customers?.[attachedCustomerId] && updateFn) {
-        const cust = erpState.customers[attachedCustomerId];
-        const prevPoints = parseFloat(cust.loyaltyPoints || 0);
-        const newPoints = Math.max(0, prevPoints - loyaltyRedeemed + earnedLoyaltyPoints);
-        const newSpend = parseFloat(cust.totalSpend || 0) + netTotal;
-        const newVisits = parseInt(cust.totalVisits || 0) + 1;
+  payDetails.items = cartList;
+  syncLiveCustomerDisplay(true, payDetails);
 
-        const updatedCustData = {
-          loyaltyPoints: newPoints,
-          totalSpend: Math.round(newSpend * 100) / 100,
-          totalVisits: newVisits,
-          lastVisit: new Date().toISOString()
-        };
+  // 🚀 1. OPTIMISTIC INSTANT PRINT
+  if (sendWhatsApp) {
+    const hotelName = currentTenantInfo?.hotelName || "Restaurant ERP";
+    sendInvoiceViaWhatsApp(invoiceData, hotelName);
+  } else {
+    printThermalReceipt(invoiceData);
+  }
 
-        await updateFn(dbRef(`tenants/${currentTenant}/customers/${attachedCustomerId}`), updatedCustData);
+  // Clear inputs immediately
+  const cashIn = document.getElementById("cashTendered");
+  const cardIn = document.getElementById("cardLast4");
+  const transIn = document.getElementById("transferRef");
+  const splitC = document.getElementById("splitPayCash");
+  const splitCard = document.getElementById("splitPayCard");
+  const nameIn = document.getElementById("creditCustomerName");
+  const phoneIn = document.getElementById("creditCustomerPhone");
+  if (discIn) discIn.value = "";
+  if (redeemIn) redeemIn.value = "";
+  if (cashIn) cashIn.value = "";
+  if (cardIn) cardIn.value = "";
+  if (transIn) transIn.value = "";
+  if (splitC) splitC.value = "";
+  if (splitCard) splitCard.value = "";
+  if (nameIn) nameIn.value = "";
+  if (phoneIn) phoneIn.value = "";
 
-        Object.assign(erpState.customers[attachedCustomerId], updatedCustData);
-        if (window.renderCustomersTable) window.renderCustomersTable();
-      }
+  const custBadge = document.getElementById("posSelectedCustomerBadge");
+  const custIdIn = document.getElementById("posAttachedCustomerId");
+  const redeemBox = document.getElementById("posLoyaltyRedeemBox");
+  if (custBadge) custBadge.classList.add("hidden");
+  if (redeemBox) redeemBox.classList.add("hidden");
+  if (custIdIn) custIdIn.value = "";
 
-      if (payMethod === "credit") {
-        await pushFn(dbRef(`tenants/${currentTenant}/customerCredits`), {
-          invoiceId: invoiceRef.key,
-          invoiceNumber: invoiceNumber,
-          customerId: attachedCustomerId,
-          customerName: payDetails.customerName,
-          customerPhone: payDetails.customerPhone,
-          amount: netTotal,
-          status: "Unpaid",
-          date: getLocalDateString(),
-          createdAt: new Date().toISOString()
-        });
-      }
-      
-      const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
-      if (isRecipeMode) {
-        for (const item of cartList) {
-          const dish = erpState.dishes[item.dishId];
-          if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
-            for (const ing of dish.ingredients) {
-              const rawItem = erpState.rawItems[ing.rawId];
-              if (rawItem) {
-                const convertedQtyPerPortion = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
-                const totalDeduct = convertedQtyPerPortion * (parseInt(item.qty) || 1);
-                
-                if (transactionFn) {
-                  await transactionFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}/stock`), (currentStock) => {
-                    const prevStock = (currentStock === null || isNaN(currentStock)) ? 0 : parseFloat(currentStock);
-                    return Math.max(0, parseFloat((prevStock - totalDeduct).toFixed(3)));
-                  });
-                } else if (updateFn) {
-                  const currentStock = parseFloat(rawItem.stock || 0);
-                  const newStock = Math.max(0, currentStock - totalDeduct);
-                  await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
-                    stock: parseFloat(newStock.toFixed(3))
-                  });
+  const savedActiveBillId = activeBillId;
+  delete erpState.activeBills[savedActiveBillId];
+
+  renderCartItemsUI();
+  renderBillTabsBar();
+
+  showLiveToast("✅ Bill Settled", `Invoice #${invoiceNumber} (Rs. ${netTotal.toFixed(2)}) නිකුත් විය.`, "success", "fa-circle-check");
+
+  // 🚀 2. NON-BLOCKING BACKGROUND SYNC
+  (async () => {
+    try {
+      if (navigator.onLine && dbRef && pushFn && currentTenant) {
+        const invoiceRef = await pushFn(dbRef(`tenants/${currentTenant}/invoices`), invoiceData);
+        
+        if (attachedCustomerId && erpState.customers?.[attachedCustomerId] && updateFn) {
+          const cust = erpState.customers[attachedCustomerId];
+          const prevPoints = parseFloat(cust.loyaltyPoints || 0);
+          const newPoints = Math.max(0, prevPoints - loyaltyRedeemed + earnedLoyaltyPoints);
+          const newSpend = parseFloat(cust.totalSpend || 0) + netTotal;
+          const newVisits = parseInt(cust.totalVisits || 0) + 1;
+
+          const updatedCustData = {
+            loyaltyPoints: newPoints,
+            totalSpend: Math.round(newSpend * 100) / 100,
+            totalVisits: newVisits,
+            lastVisit: new Date().toISOString()
+          };
+
+          await updateFn(dbRef(`tenants/${currentTenant}/customers/${attachedCustomerId}`), updatedCustData);
+          Object.assign(erpState.customers[attachedCustomerId], updatedCustData);
+          if (window.renderCustomersTable) window.renderCustomersTable();
+        }
+
+        if (payMethod === "credit") {
+          await pushFn(dbRef(`tenants/${currentTenant}/customerCredits`), {
+            invoiceId: invoiceRef.key,
+            invoiceNumber: invoiceNumber,
+            customerId: attachedCustomerId,
+            customerName: payDetails.customerName,
+            customerPhone: payDetails.customerPhone,
+            amount: netTotal,
+            status: "Unpaid",
+            date: getLocalDateString(),
+            createdAt: new Date().toISOString()
+          });
+        }
+        
+        const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
+        if (isRecipeMode) {
+          for (const item of cartList) {
+            const dish = erpState.dishes[item.dishId];
+            if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
+              for (const ing of dish.ingredients) {
+                const rawItem = erpState.rawItems[ing.rawId];
+                if (rawItem) {
+                  const convertedQtyPerPortion = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
+                  const totalDeduct = convertedQtyPerPortion * (parseInt(item.qty) || 1);
+                  
+                  if (transactionFn) {
+                    await transactionFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}/stock`), (currentStock) => {
+                      const prevStock = (currentStock === null || isNaN(currentStock)) ? 0 : parseFloat(currentStock);
+                      return Math.max(0, parseFloat((prevStock - totalDeduct).toFixed(3)));
+                    });
+                  } else if (updateFn) {
+                    const currentStock = parseFloat(rawItem.stock || 0);
+                    const newStock = Math.max(0, currentStock - totalDeduct);
+                    await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
+                      stock: parseFloat(newStock.toFixed(3))
+                    });
+                  }
                 }
               }
             }
           }
         }
-      }
-      
-      if (currentBill.tableNo && updateFn) {
-        const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
-          ([k, b]) => k !== activeBillId && b.tableNo === currentBill.tableNo && b.cart && b.cart.length > 0
-        );
-        if (!hasOtherBillsOnTable) {
-          const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-          if (matchedTable) {
-            await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+        
+        if (currentBill.tableNo && updateFn) {
+          const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+            ([k, b]) => k !== savedActiveBillId && b.tableNo === currentBill.tableNo && b.cart && b.cart.length > 0
+          );
+          if (!hasOtherBillsOnTable) {
+            const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
+            if (matchedTable) {
+              await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+            }
           }
         }
+        
+        if (removeFn) {
+          await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${savedActiveBillId}`));
+        }
+      } else if (localDBInstance) {
+        await localDBInstance.offlineInvoices.add({
+          ...invoiceData,
+          synced: 0
+        });
       }
-      
-      if (removeFn) {
-        await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`));
-      }
-      delete erpState.activeBills[activeBillId];
-      showLiveToast("✅ Bill Settled", `Invoice #${invoiceNumber} (Rs. ${netTotal.toFixed(2)}) ගෙවා අවසන් විය.`, "success", "fa-circle-check");
-      
-    } else if (localDBInstance) {
-      await localDBInstance.offlineInvoices.add({
-        ...invoiceData,
-        synced: 0
-      });
-
-      if (erpState.activeBills && erpState.activeBills[activeBillId]) {
-        erpState.activeBills[activeBillId].cart = [];
-        erpState.activeBills[activeBillId].tableNo = "";
-        erpState.activeBills[activeBillId].discountVal = 0;
-        erpState.activeBills[activeBillId].loyaltyPointsRedeemed = 0;
-      }
-      renderCartItemsUI();
-      renderBillTabsBar();
-
-      showLiveToast("⚠️ Offline Bill Saved", `Invoice #${invoiceNumber} සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
+    } catch (bgErr) {
+      console.warn("Background billing sync queued offline:", bgErr);
     }
-
-    if (sendWhatsApp) {
-      const hotelName = currentTenantInfo?.hotelName || "Restaurant ERP";
-      await sendInvoiceViaWhatsApp(invoiceData, hotelName);
-    } else {
-      await printThermalReceipt(invoiceData);
-    }
-    
-    const cashIn = document.getElementById("cashTendered");
-    const cardIn = document.getElementById("cardLast4");
-    const transIn = document.getElementById("transferRef");
-    const splitC = document.getElementById("splitPayCash");
-    const splitCard = document.getElementById("splitPayCard");
-    const nameIn = document.getElementById("creditCustomerName");
-    const phoneIn = document.getElementById("creditCustomerPhone");
-    if (discIn) discIn.value = "";
-    if (redeemIn) redeemIn.value = "";
-
-    if (cashIn) cashIn.value = "";
-    if (cardIn) cardIn.value = "";
-    if (transIn) transIn.value = "";
-    if (splitC) splitC.value = "";
-    if (splitCard) splitCard.value = "";
-    if (nameIn) nameIn.value = "";
-    if (phoneIn) phoneIn.value = "";
-
-    const custBadge = document.getElementById("posSelectedCustomerBadge");
-    const custIdIn = document.getElementById("posAttachedCustomerId");
-    const redeemBox = document.getElementById("posLoyaltyRedeemBox");
-    if (custBadge) custBadge.classList.add("hidden");
-    if (redeemBox) redeemBox.classList.add("hidden");
-    if (custIdIn) custIdIn.value = "";
-    
-  } catch (err) {
-    showLiveToast("⚠️ දෝෂයකි", "බිල්පත සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
-  }
+  })();
 }
 
-// 🖨️ XPRINTER & 80MM RECEIPT PRINT ENGINE (ZERO RIGHT CLIPPING)
+// 🖨️ XPRINTER & 80MM RECEIPT PRINT ENGINE (PURE-BLACK HIGH-CONTRAST VECTOR PRINTING)
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const p1Dev = (pr.p1?.device || "").trim();
@@ -1512,7 +1513,11 @@ export async function printThermalReceipt(inv) {
   const rFoot = document.getElementById("receiptFooterNote");
 
   if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
-  if (rAddr) rAddr.innerText = currentTenantInfo?.address || "Smart Restaurant POS";
+  
+  // Format clean address spacing (e.g., "24,galle, colombo" -> "24, Galle, Colombo")
+  const rawAddr = currentTenantInfo?.address || "Smart Restaurant POS";
+  if (rAddr) rAddr.innerText = rawAddr.replace(/,([^\s])/g, ', $1');
+  
   if (rPhone) rPhone.innerText = currentTenantInfo?.phone ? `Tel: ${currentTenantInfo.phone}` : "";
   
   if (rTax) {
@@ -1530,18 +1535,26 @@ export async function printThermalReceipt(inv) {
   if (dEl) dEl.innerText = `Date: ${new Date(inv.createdAt || Date.now()).toLocaleString()}`;
   if (tEl) tEl.innerText = `${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''}${inv.customerName ? ' | Cust: ' + inv.customerName : ''})`;
 
+  // 🌟 ULTRA-CRISP PURE BLACK RECEIPT ITEMS FORMATTING
   const itemsContainer = document.getElementById("receiptItems");
   if (itemsContainer) {
     itemsContainer.innerHTML = "";
     (inv.items || []).forEach(i => {
       const row = document.createElement("div");
-      row.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; padding: 2px 0;";
+      row.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; padding: 2.5px 0; font-size: 11px; font-weight: 700; color: #000000;";
       row.innerHTML = `
-        <span style="width: 48%; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${i.name} x${i.qty}</span>
-        <span style="width: 25%; text-align: right;">${parseFloat(i.price).toFixed(2)}</span>
-        <span style="width: 27%; text-align: right; font-weight: 700;">${(i.price * i.qty).toFixed(2)}</span>
+        <span style="width: 48%; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000000;">${i.name} x${i.qty}</span>
+        <span style="width: 25%; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: #000000;">${parseFloat(i.price).toFixed(2)}</span>
+        <span style="width: 27%; text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; color: #000000;">${(i.price * i.qty).toFixed(2)}</span>
       `;
       itemsContainer.appendChild(row);
+
+      if (i.note) {
+        const noteDiv = document.createElement("div");
+        noteDiv.style.cssText = "font-size: 9.5px; font-weight: 800; padding-left: 2px; color: #000000; margin-bottom: 2px;";
+        noteDiv.innerText = `  >> NOTE: ${i.note}`;
+        itemsContainer.appendChild(noteDiv);
+      }
     });
   }
 
@@ -1569,7 +1582,7 @@ export async function printThermalReceipt(inv) {
     if (parseFloat(inv.scAmount || 0) > 0) {
       scRow.style.display = "flex";
       const scVal = document.getElementById("receiptScVal");
-      if (scVal) scVal.innerText = `Rs. ${parseFloat(inv.scAmount || 0).toFixed(2)}`;
+      if (scVal) scVal.innerText = `Rs. ${parseFloat(inv.scAmount).toFixed(2)}`;
     } else {
       scRow.style.display = "none";
     }
@@ -1591,7 +1604,7 @@ export async function printThermalReceipt(inv) {
     if (parseFloat(inv.cslAmount || 0) > 0) {
       cslRow.style.display = "flex";
       const cslVal = document.getElementById("receiptCslVal");
-      if (cslVal) cslVal.innerText = `Rs. ${parseFloat(inv.cslAmount || 0).toFixed(2)}`;
+      if (cslVal) cslVal.innerText = `Rs. ${parseFloat(inv.cslAmount).toFixed(2)}`;
     } else {
       cslRow.style.display = "none";
     }
@@ -1600,32 +1613,33 @@ export async function printThermalReceipt(inv) {
   const totEl = document.getElementById("receiptTotal");
   if (totEl) totEl.innerText = `Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}`;
 
+  // 🌟 PURE BLACK HIGH CONTRAST PAYMENT DETAILS
   const payDiv = document.getElementById("receiptPayDetails");
   if (payDiv) {
     const p = inv.payment || { method: "cash" };
-    let payText = `<div style="display: flex; justify-content: space-between; font-weight: bold;"><span>PAYMENT METHOD:</span><span>${(p.method || 'cash').toUpperCase()}</span></div>`;
+    let payText = `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 10.5px; color: #000000;"><span>PAYMENT METHOD:</span><span>${(p.method || 'cash').toUpperCase()}</span></div>`;
 
     if (p.method === "cash") {
-      payText += `<div style="display: flex; justify-content: space-between;"><span>Cash Tendered:</span><span>Rs. ${parseFloat(p.cashTendered || inv.netTotal).toFixed(2)}</span></div>`;
-      payText += `<div style="display: flex; justify-content: space-between; font-weight: bold;"><span>Cash Change:</span><span>Rs. ${parseFloat(p.change || 0).toFixed(2)}</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Cash Tendered:</span><span style="font-weight: 800;">Rs. ${parseFloat(p.cashTendered || inv.netTotal).toFixed(2)}</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; color: #000000;"><span>Cash Change:</span><span style="font-weight: 900;">Rs. ${parseFloat(p.change || 0).toFixed(2)}</span></div>`;
     } else if (p.method === "card") {
-      payText += `<div style="display: flex; justify-content: space-between;"><span>Card:</span><span>${p.cardType || 'Card'} (**** ${p.last4 || '****'})</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Card:</span><span style="font-weight: 800;">${p.cardType || 'Card'} (**** ${p.last4 || '****'})</span></div>`;
     } else if (p.method === "transfer") {
-      payText += `<div style="display: flex; justify-content: space-between;"><span>Ref / TXN ID:</span><span>${p.refNo || '-'}</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Ref / TXN ID:</span><span style="font-weight: 800;">${p.refNo || '-'}</span></div>`;
     } else if (p.method === "split") {
-      payText += `<div style="display: flex; justify-content: space-between;"><span>Split Cash:</span><span>Rs. ${parseFloat(p.splitCash || 0).toFixed(2)}</span></div>`;
-      payText += `<div style="display: flex; justify-content: space-between;"><span>Split Card:</span><span>Rs. ${parseFloat(p.splitCard || 0).toFixed(2)}</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Cash:</span><span>Rs. ${parseFloat(p.splitCash || 0).toFixed(2)}</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Card:</span><span>Rs. ${parseFloat(p.splitCard || 0).toFixed(2)}</span></div>`;
     } else if (p.method === "credit") {
-      payText += `<div style="display: flex; justify-content: space-between;"><span>Customer:</span><span>${p.customerName || 'Customer'} (${p.customerPhone || 'N/A'})</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Customer:</span><span style="font-weight: 800;">${p.customerName || 'Customer'} (${p.customerPhone || 'N/A'})</span></div>`;
     }
 
     if (inv.loyaltyPointsEarned > 0 || inv.loyaltyPointsRedeemed > 0) {
-      payText += `<div style="border-top: 1px dashed #000; padding-top: 2px; margin-top: 2px;">`;
+      payText += `<div style="border-top: 1.5px dashed #000000; padding-top: 3px; margin-top: 3px; color: #000000;">`;
       if (inv.loyaltyPointsRedeemed > 0) {
-        payText += `<div style="display: flex; justify-content: space-between; font-size: 9px; color: #333;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts (-Rs. ${inv.loyaltyDiscount})</span></div>`;
+        payText += `<div style="display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 700;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts (-Rs. ${inv.loyaltyDiscount})</span></div>`;
       }
       if (inv.loyaltyPointsEarned > 0) {
-        payText += `<div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 9.5px;"><span>⭐ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
+        payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 10px;"><span>⭐ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
       }
       payText += `</div>`;
     }
@@ -1794,6 +1808,7 @@ export function openShiftFloatModal() {
   if (amtIn) amtIn.value = "10000";
   if (cName) cName.value = "Cashier (Morning Shift)";
   document.getElementById("shiftFloatModal")?.classList.remove("hidden");
+  setTimeout(() => amtIn?.focus(), 50);
 }
 
 export function closeShiftFloatModal() {
@@ -1894,12 +1909,14 @@ export async function syncOfflineInvoicesToCloud() {
           const newSpend = parseFloat(cust.totalSpend || 0) + inv.netTotal;
           const newVisits = parseInt(cust.totalVisits || 0) + 1;
 
-          await updateFn(dbRef(`tenants/${currentTenant}/customers/${inv.customerId}`), {
+          const updatedCustData = {
             loyaltyPoints: newPoints,
             totalSpend: Math.round(newSpend * 100) / 100,
             totalVisits: newVisits,
             lastVisit: new Date().toISOString()
-          });
+          };
+
+          await updateFn(dbRef(`tenants/${currentTenant}/customers/${inv.customerId}`), updatedCustData);
 
           if (erpState.customers[inv.customerId]) {
             erpState.customers[inv.customerId].loyaltyPoints = newPoints;
