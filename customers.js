@@ -1,5 +1,6 @@
 // ==========================================================================
 // MODULE 13: CUSTOMER DIRECTORY, CRM & LOYALTY POINTS ENGINE (UNFREEZE READY)
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (DOM SLICED & DEBOUNCED ZERO-LAG)
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
@@ -11,8 +12,10 @@ let updateFn = null;
 let removeFn = null;
 let transactionFn = null;
 
-// 🛡️ Double-Submission Lock (පාරිභෝගිකයා දෙපාරක් Save වීම 100% ක් වළක්වයි)
+// 🛡️ Double-Submission Lock
 let isSubmittingCustomer = false;
+let customerSearchDebounceTimer = null;
+let currentCustomerDisplayLimit = 80;
 
 export function initCustomersContext(dbRefInstance, pushMethod, updateMethod, removeMethod, runTransactionMethod = null) {
   dbRef = dbRefInstance;
@@ -62,7 +65,7 @@ export function closeCustomerModal() {
   isSubmittingCustomer = false;
 }
 
-// 2. SUBMIT / SAVE CUSTOMER RECORD (WITH AUTO-FOCUS & ZERO FREEZE)
+// 2. SUBMIT / SAVE CUSTOMER RECORD
 export async function handleCustomerSubmit(e) {
   if (e) e.preventDefault();
   
@@ -141,11 +144,16 @@ export async function handleCustomerSubmit(e) {
   }
 }
 
-// 3. RENDER CUSTOMERS DIRECTORY TABLE WITH LIVE SEARCH
+// 3. DEBOUNCED INSTANT SEARCH
 export function onCustomerSearchInput() {
-  renderCustomersTable();
+  if (customerSearchDebounceTimer) clearTimeout(customerSearchDebounceTimer);
+  customerSearchDebounceTimer = setTimeout(() => {
+    currentCustomerDisplayLimit = 80;
+    renderCustomersTable();
+  }, 120);
 }
 
+// 4. HIGH-PERFORMANCE DOM-SLICED CUSTOMERS DIRECTORY TABLE
 export function renderCustomersTable() {
   const tbody = document.getElementById("customersTableBody");
   const badge = document.getElementById("customerCountBadge");
@@ -163,9 +171,10 @@ export function renderCustomersTable() {
     });
   }
 
-  if (badge) badge.innerText = `${list.length} Customers`;
+  const totalMatchingCount = list.length;
+  if (badge) badge.innerText = `${totalMatchingCount} Customers`;
 
-  if (list.length === 0) {
+  if (totalMatchingCount === 0) {
     if (query) {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">"${query}" නමින් පාරිභෝගිකයින් හමු නොවීය...</td></tr>`;
     } else {
@@ -177,7 +186,10 @@ export function renderCustomersTable() {
   tbody.innerHTML = "";
   list.sort((a, b) => (parseFloat(b[1].loyaltyPoints || 0)) - (parseFloat(a[1].loyaltyPoints || 0)));
 
-  list.forEach(([id, c]) => {
+  // 🛡️ DOM SLICING: Render up to current limit (default 80) to prevent browser thread freeze
+  const visibleSubset = list.slice(0, currentCustomerDisplayLimit);
+
+  visibleSubset.forEach(([id, c]) => {
     const points = parseFloat(c.loyaltyPoints || 0);
     const visits = parseInt(c.totalVisits || 0);
     const spend = parseFloat(c.totalSpend || 0);
@@ -210,9 +222,28 @@ export function renderCustomersTable() {
     `;
     tbody.appendChild(tr);
   });
+
+  // If there are more customers than visible limit, append Load More button
+  if (totalMatchingCount > currentCustomerDisplayLimit) {
+    const loadMoreRow = document.createElement("tr");
+    loadMoreRow.innerHTML = `
+      <td colspan="7" class="text-center py-4 bg-gray-50 border-t border-gray-200">
+        <button type="button" onclick="loadMoreCustomersUI()" class="px-5 py-2 bg-white hover:bg-blue-50 border border-blue-300 text-blue-700 font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">
+          <i class="fa-solid fa-circle-chevron-down mr-1"></i> තවත් පාරිභෝගිකයින් පෙන්වන්න (+80 Load More - Remaining: ${totalMatchingCount - currentCustomerDisplayLimit})
+        </button>
+      </td>
+    `;
+    tbody.appendChild(loadMoreRow);
+  }
 }
 
-// 4. DELETE CUSTOMER RECORD
+export function loadMoreCustomersUI() {
+  currentCustomerDisplayLimit += 80;
+  renderCustomersTable();
+}
+window.loadMoreCustomersUI = loadMoreCustomersUI;
+
+// 5. DELETE CUSTOMER RECORD
 export async function deleteCustomer(id) {
   if (confirm("මෙම පාරිභෝගිකයා ඉවත් කිරීමට අවශ්‍යද?")) {
     if (dbRef && removeFn && currentTenant) {
@@ -224,7 +255,7 @@ export async function deleteCustomer(id) {
   }
 }
 
-// 5. LOYALTY MANUAL ADJUSTMENT MODAL (AUTO-FOCUS SAFE)
+// 6. LOYALTY MANUAL ADJUSTMENT MODAL
 let currentAdjustCustomerId = null;
 
 export function openLoyaltyAdjustModal(customerId) {
@@ -298,7 +329,7 @@ export async function submitLoyaltyAdjustment(e) {
   }
 }
 
-// 6. POS CUSTOMER SELECTION & ATTACHMENT
+// 7. POS CUSTOMER SELECTION & ATTACHMENT
 export function onPosCustomerSearch(input) {
   const query = (input?.value || "").toLowerCase().trim();
   const dropdown = document.getElementById("posCustomerSearchResults");
@@ -412,7 +443,7 @@ export function removeCustomerFromCurrentBill() {
   showLiveToast("👤 Customer Unlinked", "පාරිභෝගිකයා බිලෙන් ඉවත් කරන ලදී.", "info", "fa-user-minus");
 }
 
-// 7. EXPORT CUSTOMERS DIRECTORY TO CSV
+// 8. EXPORT CUSTOMERS DIRECTORY TO CSV
 export function exportCustomersToCSV() {
   const list = Object.values(erpState.customers || {});
   if (list.length === 0) {
@@ -434,6 +465,7 @@ window.closeCustomerModal = closeCustomerModal;
 window.handleCustomerSubmit = handleCustomerSubmit;
 window.onCustomerSearchInput = onCustomerSearchInput;
 window.renderCustomersTable = renderCustomersTable;
+window.loadMoreCustomersUI = loadMoreCustomersUI;
 window.deleteCustomer = deleteCustomer;
 window.openLoyaltyAdjustModal = openLoyaltyAdjustModal;
 window.closeLoyaltyAdjustModal = closeLoyaltyAdjustModal;
