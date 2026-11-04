@@ -1,10 +1,10 @@
 // ==========================================================================
 // MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & WHATSAPP
-// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (INDEXED SERVER QUERIES & ATOMIC AUDIT)
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (USAR COMPLIANT P&L WITH STORE ISSUES & WASTAGE)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, currentUserRole } from './state.js';
-import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal, showCustomInputModal } from './utils.js';
+import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal, showCustomInputModal, verifyPin } from './utils.js';
 import { convertRecipeQtyToBaseUnit } from './menu.js';
 import { sendDirectSilentPrint } from './printer.js';
 
@@ -98,7 +98,7 @@ export function setReportPeriodPreset(preset) {
   applyReportDateFilter();
 }
 
-// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY (PROTECTED FROM HEAP OVERFLOW)
+// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY
 export async function applyReportDateFilter() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -161,7 +161,7 @@ export function getFilteredInvoicesList() {
   });
 }
 
-// 1. INVOICES & INCOME REPORT (WITH LOYALTY POINTS TRANSPARENCY)
+// 1. INVOICES & INCOME REPORT (DOM SLICED FOR 3-5 YEAR ZERO-LAG)
 export function renderInvoiceReportsList() {
   const tbody = document.getElementById("repInvoicesTableBody");
   const countBadge = document.getElementById("repInvoiceCount");
@@ -210,7 +210,10 @@ export function renderInvoiceReportsList() {
   tbody.innerHTML = "";
   list.sort((a, b) => new Date(b[1].createdAt || 0).getTime() - new Date(a[1].createdAt || 0).getTime());
 
-  list.forEach(([id, inv]) => {
+  // 🛡️ DOM Slicing: Render top 120 invoices to keep UI smooth, rest accessed via search/date filter
+  const visibleSubset = list.slice(0, 120);
+
+  visibleSubset.forEach(([id, inv]) => {
     const isVoided = inv.status === "Voided";
     const p = inv.payment || { method: "cash" };
     
@@ -235,7 +238,6 @@ export function renderInvoiceReportsList() {
         payDetailHtml += ` <span class="text-[10px] text-yellow-800 block font-bold">${p.customerName || 'Customer'} (${p.customerPhone || ''})</span>`;
       }
 
-      // ⭐ Display Loyalty Redemption Details on Invoices Table
       if (parseFloat(inv.loyaltyDiscount || 0) > 0) {
         payDetailHtml += `<span class="text-[9.5px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded font-extrabold block mt-0.5 w-fit">⭐ Pts Disc: -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)} (${inv.loyaltyPointsRedeemed || 0} Pts)</span>`;
       }
@@ -283,7 +285,7 @@ export function renderInvoiceReportsList() {
   });
 }
 
-// 2. ESTIMATED PROFIT & LOSS (P&L) STATEMENT (100% AIRTIGHT WITH LOYALTY DISCOUNTS)
+// 2. ⭐ COMPREHENSIVE PROFIT & LOSS (P&L) STATEMENT (100% USAR COMPLIANT WITH STORE ISSUES & WASTAGE)
 export function renderPnLStatement() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -291,10 +293,13 @@ export function renderPnLStatement() {
   const fromTime = fromVal ? new Date(fromVal).getTime() : 0;
   const toTime = toVal ? new Date(toVal).getTime() : Infinity;
 
+  const invMode = erpState.settings?.inventoryMode || "recipe";
+
+  // 1. REVENUE CALCULATIONS
   let grossMenuSales = 0;
   let totalBillDiscounts = 0;
   let totalLoyaltyDiscounts = 0;
-  let totalFoodCostCOGS = 0;
+  let recipeBOMCost = 0;
 
   Object.values(erpState.invoices || {}).forEach(inv => {
     if (inv.status === "Voided") return;
@@ -310,28 +315,67 @@ export function renderPnLStatement() {
     totalBillDiscounts += disc;
     totalLoyaltyDiscounts += loyaltyDisc;
 
-    (inv.items || []).forEach(item => {
-      const q = parseInt(item.qty) || 0;
-      const dish = erpState.dishes[item.dishId];
-      if (dish && dish.foodCost) {
-        totalFoodCostCOGS += (parseFloat(dish.foodCost) * q);
-      } else if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
-        let singleDishCost = 0;
-        dish.ingredients.forEach(ing => {
-          const raw = erpState.rawItems[ing.rawId];
-          if (raw) {
-            const convertedQty = convertRecipeQtyToBaseUnit(raw.unit, ing.qty, ing.unit);
-            singleDishCost += (parseFloat(raw.cost || 0) * convertedQty);
-          }
-        });
-        totalFoodCostCOGS += (singleDishCost * q);
-      }
-    });
+    if (invMode === "recipe") {
+      (inv.items || []).forEach(item => {
+        const q = parseInt(item.qty) || 0;
+        const dish = erpState.dishes[item.dishId];
+        if (dish && dish.foodCost) {
+          recipeBOMCost += (parseFloat(dish.foodCost) * q);
+        } else if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
+          let singleDishCost = 0;
+          dish.ingredients.forEach(ing => {
+            const raw = erpState.rawItems[ing.rawId];
+            if (raw) {
+              const convertedQty = convertRecipeQtyToBaseUnit(raw.unit, ing.qty, ing.unit);
+              singleDishCost += (parseFloat(raw.cost || 0) * convertedQty);
+            }
+          });
+          recipeBOMCost += (singleDishCost * q);
+        }
+      });
+    }
   });
 
+  // 2. STORE ISSUES CALCULATION (PRODUCTION COGS VS OVERHEAD DEPARTMENTS)
+  let productionStoreIssuesCost = 0;
+  let otherDeptIssuesCost = 0;
+
+  const productionDepts = ["Kitchen", "Bar", "F&B", "Bakery"];
+
+  Object.values(erpState.storeIssues || {}).forEach(iss => {
+    const issTime = new Date(iss.timestamp || iss.date).getTime();
+    if (issTime >= fromTime && issTime <= toTime) {
+      const cost = parseFloat(iss.totalIssuedCost || 0);
+      const dept = iss.department || "Kitchen";
+
+      if (invMode === "issue") {
+        if (productionDepts.includes(dept)) {
+          productionStoreIssuesCost += cost;
+        } else {
+          otherDeptIssuesCost += cost;
+        }
+      } else {
+        // In Recipe Mode, Store Issues to non-recipe overhead departments (Staff Meals, Housekeeping, Other) are added as Operating Expenses
+        if (!productionDepts.includes(dept)) {
+          otherDeptIssuesCost += cost;
+        }
+      }
+    }
+  });
+
+  // 3. KITCHEN WASTAGE / SPOILAGE LOSS CALCULATION
+  let totalWastageLoss = 0;
+  Object.values(erpState.wastageLogs || {}).forEach(w => {
+    const wTime = new Date(w.timestamp || w.date).getTime();
+    if (wTime >= fromTime && wTime <= toTime) {
+      totalWastageLoss += parseFloat(w.totalLossAmount || 0);
+    }
+  });
+
+  // 4. PETTY CASH OPERATING EXPENSES
   let totalPettyExpenses = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
-    const pTime = new Date(p.timestamp || 0).getTime();
+    const pTime = new Date(p.timestamp || p.date || 0).getTime();
     if (pTime >= fromTime && pTime <= toTime) {
       if (p.type === "out") {
         totalPettyExpenses += parseFloat(p.amount || 0);
@@ -339,42 +383,60 @@ export function renderPnLStatement() {
     }
   });
 
+  // 5. FINAL P&L METRICS
+  const totalFoodCostCOGS = (invMode === "issue") ? productionStoreIssuesCost : recipeBOMCost;
   const totalAllDiscounts = totalBillDiscounts + totalLoyaltyDiscounts;
   const netSalesRevenue = Math.max(0, grossMenuSales - totalAllDiscounts);
   const grossProfit = Math.max(0, netSalesRevenue - totalFoodCostCOGS);
-  const estimatedNetProfit = netSalesRevenue - totalFoodCostCOGS - totalPettyExpenses;
+  
+  const totalOperatingExpenses = totalPettyExpenses + otherDeptIssuesCost + totalWastageLoss;
+  const estimatedNetProfit = netSalesRevenue - totalFoodCostCOGS - totalOperatingExpenses;
   
   const netProfitMarginPct = netSalesRevenue > 0 ? ((estimatedNetProfit / netSalesRevenue) * 100).toFixed(1) : "0.0";
   const foodCostPct = netSalesRevenue > 0 ? ((totalFoodCostCOGS / netSalesRevenue) * 100).toFixed(1) : "0.0";
 
+  // 6. UPDATE SUMMARY CARDS
   const revEl = document.getElementById("pnlNetRevenueVal");
   const cogsEl = document.getElementById("pnlFoodCostVal");
   const cogsPctEl = document.getElementById("pnlFoodCostPctVal");
   const expEl = document.getElementById("pnlPettyExpensesVal");
+  const expSubEl = document.getElementById("pnlExpensesSubtext");
   const netProfEl = document.getElementById("pnlNetProfitVal");
   const netMargEl = document.getElementById("pnlProfitMarginPctVal");
+  const modeBadge = document.getElementById("pnlModeBadge");
+
+  if (modeBadge) {
+    modeBadge.innerText = (invMode === "issue") ? "Mode: Daily Store Issues" : "Mode: Recipe BOM";
+    modeBadge.className = (invMode === "issue") ? "text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full" : "text-xs bg-indigo-100 text-indigo-800 font-bold px-2.5 py-0.5 rounded-full";
+  }
 
   if (revEl) revEl.innerText = `Rs. ${netSalesRevenue.toFixed(2)}`;
   if (cogsEl) cogsEl.innerText = `Rs. ${totalFoodCostCOGS.toFixed(2)}`;
-  if (cogsPctEl) cogsPctEl.innerText = `${foodCostPct}% of Revenue`;
-  if (expEl) expEl.innerText = `Rs. ${totalPettyExpenses.toFixed(2)}`;
+  if (cogsPctEl) cogsPctEl.innerText = `${foodCostPct}% of Revenue (${invMode === 'issue' ? 'Store Issues' : 'BOM Recipe'})`;
+  if (expEl) expEl.innerText = `Rs. ${totalOperatingExpenses.toFixed(2)}`;
+  if (expSubEl) expSubEl.innerText = `Petty (Rs. ${totalPettyExpenses.toFixed(0)}) + Issues (Rs. ${otherDeptIssuesCost.toFixed(0)}) + Waste (Rs. ${totalWastageLoss.toFixed(0)})`;
+  
   if (netProfEl) {
     netProfEl.innerText = `Rs. ${estimatedNetProfit.toFixed(2)}`;
     netProfEl.className = estimatedNetProfit >= 0 ? "text-2xl font-black text-emerald-700 mt-1 block" : "text-2xl font-black text-red-600 mt-1 block";
   }
   if (netMargEl) netMargEl.innerText = `Net Margin: ${netProfitMarginPct}%`;
 
+  // 7. UPDATE DETAILED LEDGER BREAKDOWN ROWS
   const rGross = document.getElementById("pnlRowGrossSales");
   const rDisc = document.getElementById("pnlRowDiscounts");
   const rNet = document.getElementById("pnlRowNetSales");
+  const rLabelCOGS = document.getElementById("pnlLabelCOGS");
   const rCogs = document.getElementById("pnlRowCOGS");
   const rGrossProf = document.getElementById("pnlRowGrossProfit");
   const rPetty = document.getElementById("pnlRowPettyExp");
+  const rLabelDeptIssues = document.getElementById("pnlLabelDeptIssues");
+  const rDeptIssues = document.getElementById("pnlRowDeptIssues");
+  const rWastage = document.getElementById("pnlRowWastage");
   const rFinalNet = document.getElementById("pnlRowFinalNetProfit");
 
   if (rGross) rGross.innerText = `Rs. ${grossMenuSales.toFixed(2)}`;
   
-  // Show detailed discount itemization including Loyalty Points discount
   if (rDisc) {
     let discText = `-Rs. ${totalAllDiscounts.toFixed(2)}`;
     if (totalLoyaltyDiscounts > 0) {
@@ -384,9 +446,24 @@ export function renderPnLStatement() {
   }
 
   if (rNet) rNet.innerText = `Rs. ${netSalesRevenue.toFixed(2)}`;
+  
+  if (rLabelCOGS) {
+    rLabelCOGS.innerText = (invMode === "issue") 
+      ? "3. (-) Cost of Goods Sold (Materials Issued to Kitchen, Bar & F&B: Store Issues)" 
+      : "3. (-) Cost of Goods Sold (BOM Food Ingredients Cost of Billed Dishes)";
+  }
   if (rCogs) rCogs.innerText = `-Rs. ${totalFoodCostCOGS.toFixed(2)}`;
   if (rGrossProf) rGrossProf.innerText = `Rs. ${grossProfit.toFixed(2)}`;
   if (rPetty) rPetty.innerText = `-Rs. ${totalPettyExpenses.toFixed(2)}`;
+
+  if (rLabelDeptIssues) {
+    rLabelDeptIssues.innerText = (invMode === "issue")
+      ? "5. (-) Non-Food Department Store Issues (Staff Meals, Housekeeping, Other)"
+      : "5. (-) Department Material Issues (Staff Meals, Housekeeping, Cleaning)";
+  }
+  if (rDeptIssues) rDeptIssues.innerText = `-Rs. ${otherDeptIssuesCost.toFixed(2)}`;
+  if (rWastage) rWastage.innerText = `-Rs. ${totalWastageLoss.toFixed(2)}`;
+
   if (rFinalNet) {
     rFinalNet.innerText = `Rs. ${estimatedNetProfit.toFixed(2)}`;
     rFinalNet.className = estimatedNetProfit >= 0 ? "text-base text-emerald-700 font-black" : "text-base text-red-600 font-black";
@@ -583,7 +660,7 @@ export function renderWaiterSalesReport() {
   });
 }
 
-// 🔒 MANAGER OVERRIDE VERIFICATION
+// 🔒 MANAGER OVERRIDE VERIFICATION (TOAST SAFE)
 export function requestManagerVoidOverride(invoiceId) {
   pendingVoidInvoiceId = invoiceId;
   const inv = erpState.invoices[invoiceId];
@@ -596,6 +673,7 @@ export function requestManagerVoidOverride(invoiceId) {
   if (pinIn) pinIn.value = "";
 
   document.getElementById("managerOverrideModal")?.classList.remove("hidden");
+  setTimeout(() => pinIn?.focus(), 50);
 }
 
 export function closeManagerOverrideModal() {
@@ -607,18 +685,28 @@ export async function submitManagerOverrideAction() {
   const enteredPin = document.getElementById("managerOverridePinInput")?.value.trim();
   if (!enteredPin || !pendingVoidInvoiceId) return;
 
-  const matchedManager = Object.values(erpState.employees || {}).find(e => {
+  let matchedManager = null;
+  for (const e of Object.values(erpState.employees || {})) {
     const role = (e.role || "").toLowerCase().trim();
     const isManagerRole = role === "manager" || role === "owner" || role === "admin";
-    return isManagerRole && String(e.password || "").trim() === enteredPin;
-  });
+    if (isManagerRole) {
+      const isMatch = await verifyPin(enteredPin, e.password);
+      if (isMatch) {
+        matchedManager = e;
+        break;
+      }
+    }
+  }
 
   const isOwnerDefault = (Object.values(erpState.employees || {}).length === 0 && enteredPin === "1234");
 
   if (!matchedManager && !isOwnerDefault) {
-    alert("❌ බලයලත් Manager කෙනෙකුගේ PIN අංකයක් නොවේ! කරුණාකර Staff & Payroll හි ලියාපදිංචි කළමනාකරුගේ PIN එක ඇතුළත් කරන්න.");
+    showLiveToast("🚫 අවසර නැත", "බලයලත් Manager කෙනෙකුගේ PIN අංකයක් නොවේ! කරුණාකර නිවැරදි PIN එක ඇතුළත් කරන්න.", "warning", "fa-shield-halved");
     const pinIn = document.getElementById("managerOverridePinInput");
-    if (pinIn) pinIn.value = "";
+    if (pinIn) {
+      pinIn.value = "";
+      pinIn.focus();
+    }
     return;
   }
 
@@ -628,7 +716,7 @@ export async function submitManagerOverrideAction() {
   await executeVoidInvoiceProcess(idToVoid, authorizerName);
 }
 
-// 🔒 EXECUTE VOID INVOICE ENGINE (ATOMIC TRANSACTION RESTOCKING & AUDIT LOGGED)
+// 🔒 EXECUTE VOID INVOICE ENGINE
 export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "Manager") {
   const inv = erpState.invoices[invoiceId];
   if (!inv) return;
@@ -659,7 +747,6 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
         erpState.invoices[invoiceId].voidAuthorizedBy = authorizedByName;
       }
 
-      // Reverse Customer Loyalty Points and Spend if invoice is voided
       if (inv.customerId && erpState.customers?.[inv.customerId]) {
         const cust = erpState.customers[inv.customerId];
         const pointsReversed = Math.max(0, parseFloat(cust.loyaltyPoints || 0) + (inv.loyaltyPointsRedeemed || 0) - (inv.loyaltyPointsEarned || 0));
@@ -679,7 +766,6 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
         }
       }
 
-      // Restock ingredients if in Recipe mode
       const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
       if (isRecipeMode) {
         for (const item of (inv.items || [])) {
@@ -708,7 +794,6 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
         }
       }
 
-      // Void customer credit entry if attached
       const matchedCreditEntry = Object.entries(erpState.customerCredits || {}).find(([id, c]) => c.invoiceId === invoiceId || c.invoiceNumber === inv.invoiceNumber);
       if (matchedCreditEntry) {
         await updateFn(dbRef(`tenants/${currentTenant}/customerCredits/${matchedCreditEntry[0]}`), {
@@ -724,7 +809,7 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
       renderInvoiceReportsList();
     }
   } catch (err) {
-    alert("බිල්පත Void කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "බිල්පත Void කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -873,14 +958,15 @@ export async function settleCustomerCredit(id) {
   }
 }
 
-// 🔒 UTF-8 BOM CSV EXPORT ENGINE (LOCAL DATE & LOYALTY ITEMIZED)
+// 🔒 UTF-8 BOM CSV EXPORT ENGINE (COMPREHENSIVE P&L EXPORT)
 export function exportCurrentReportToCSV() {
   const dateStr = getLocalDateString();
+  const invMode = erpState.settings?.inventoryMode || "recipe";
 
   if (activeReportTabName === "invoices") {
     const list = getFilteredInvoicesList();
     if (list.length === 0) {
-      alert("Export කිරීමට බිල්පත් දත්ත නොමැත.");
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට බිල්පත් දත්ත නොමැත.", "info", "fa-circle-info");
       return;
     }
     let csv = `Invoice Number,Date Time,Order Type,Table No,Waiter,Customer Name,Phone,Payment Method,Subtotal,Bill Discount,Loyalty Pts Redeemed,Loyalty Discount (Rs.),Points Earned,SC,VAT,SSCL,Net Total,Status\n`;
@@ -896,23 +982,27 @@ export function exportCurrentReportToCSV() {
     const rCogs = document.getElementById("pnlRowCOGS")?.innerText || "0.00";
     const rGrossProf = document.getElementById("pnlRowGrossProfit")?.innerText || "0.00";
     const rPetty = document.getElementById("pnlRowPettyExp")?.innerText || "0.00";
+    const rDeptIssues = document.getElementById("pnlRowDeptIssues")?.innerText || "0.00";
+    const rWastage = document.getElementById("pnlRowWastage")?.innerText || "0.00";
     const rFinalNet = document.getElementById("pnlRowFinalNetProfit")?.innerText || "0.00";
 
-    let csv = `P&L Statement Breakdown,Amount (Rs.)\n`;
+    let csv = `P&L Statement Breakdown (${invMode === 'issue' ? 'Daily Store Issues Mode' : 'Recipe BOM Mode'}),Amount (Rs.)\n`;
     csv += `"1. Gross Menu Sales","${rGross}"\n`;
     csv += `"2. (-) Bill & Loyalty Discounts","${rDisc}"\n`;
-    csv += `"3. Net Food Revenue","${rNet}"\n`;
-    csv += `"4. (-) Cost of Goods Sold (COGS)","${rCogs}"\n`;
+    csv += `"3. Net Food & Beverage Revenue","${rNet}"\n`;
+    csv += `"4. (-) Cost of Goods Sold (COGS: ${invMode === 'issue' ? 'Kitchen Store Issues' : 'BOM Recipe'})","${rCogs}"\n`;
     csv += `"5. Gross Kitchen Profit","${rGrossProf}"\n`;
-    csv += `"6. (-) Operating Petty Expenses","${rPetty}"\n`;
-    csv += `"7. ESTIMATED NET PROFIT","${rFinalNet}"\n`;
+    csv += `"6. (-) Operating Petty Cash Expenses","${rPetty}"\n`;
+    csv += `"7. (-) Department Material Issues (Staff Meals/Housekeeping/Other)","${rDeptIssues}"\n`;
+    csv += `"8. (-) Kitchen Spoilage / Wastage Loss","${rWastage}"\n`;
+    csv += `"9. ESTIMATED NET OPERATING PROFIT","${rFinalNet}"\n`;
 
     downloadCSVFile(csv, `Profit_And_Loss_Statement_${dateStr}.csv`);
 
   } else if (activeReportTabName === "hourly") {
     const rows = document.querySelectorAll("#repHourlyTableBody tr");
     if (rows.length === 0) {
-      alert("Export කිරීමට පැයෙන් පැය විකුණුම් දත්ත නොමැත.");
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට පැයෙන් පැය විකුණුම් දත්ත නොමැත.", "info", "fa-circle-info");
       return;
     }
     let csv = `Time Interval,Orders Count,Hourly Revenue (Rs.)\n`;
@@ -927,7 +1017,7 @@ export function exportCurrentReportToCSV() {
   } else if (activeReportTabName === "waiters") {
     const rows = document.querySelectorAll("#repWaitersTableBody tr");
     if (rows.length === 0) {
-      alert("Export කිරීමට වේටර්වරුන්ගේ දත්ත නොමැත.");
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට වේටර්වරුන්ගේ දත්ත නොමැත.", "info", "fa-circle-info");
       return;
     }
     let csv = `Emp ID,Waiter Name,Orders Served,Total Sales (Rs.),Generated SC (Rs.),Avg per Table (Rs.)\n`;
@@ -942,7 +1032,7 @@ export function exportCurrentReportToCSV() {
   } else if (activeReportTabName === "items") {
     const rows = document.querySelectorAll("#repItemSalesTableBody tr");
     if (rows.length === 0) {
-      alert("Export කිරීමට දත්ත නොමැත.");
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
       return;
     }
     let csv = `Dish Name,Category,Quantity Sold,Total Revenue\n`;
@@ -957,7 +1047,7 @@ export function exportCurrentReportToCSV() {
   } else if (activeReportTabName === "credits") {
     const list = Object.values(erpState.customerCredits || {});
     if (list.length === 0) {
-      alert("Export කිරීමට ණය දත්ත නොමැත.");
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට ණය දත්ත නොමැත.", "info", "fa-circle-info");
       return;
     }
     let csv = `Customer Name,Phone,Date,Invoice Number,Amount,Status\n`;
@@ -968,7 +1058,7 @@ export function exportCurrentReportToCSV() {
   }
 }
 
-// 5. 🔥 SMART SHIFT-BASED DAY-END Z-REPORT (ACCURATE SHIFT WINDOW & LOYALTY ITEMIZATION)
+// 5. SMART SHIFT-BASED DAY-END Z-REPORT
 export let currentZReportCalculatedData = null;
 
 export async function openDayEndModal() {
@@ -1147,6 +1237,7 @@ export async function openDayEndModal() {
 
   renderZReportModalBreakdowns(currentZReportCalculatedData);
   document.getElementById("dayEndModal")?.classList.remove("hidden");
+  setTimeout(() => actIn?.focus(), 50);
 }
 
 function renderZReportModalBreakdowns(data) {
@@ -1283,11 +1374,11 @@ export async function printAndSaveZReport() {
     closeDayEndModal();
     showLiveToast("📑 Z-Report Completed", "දවසේ සම්පූර්ණ Z-Report එක සාර්ථකව Print වී Local Backup එක සුරැකිණි.", "success", "fa-vault");
   } catch (err) {
-    alert("Z-Report සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Z-Report සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
-// THERMAL PRINTABLE Z-REPORT FORMATTER (ITEMIZES LOYALTY DISCOUNTS)
+// THERMAL PRINTABLE Z-REPORT FORMATTER
 function renderAdvancedThermalZReport(z) {
   const zHotel = document.getElementById("zHotelName");
   const zDate = document.getElementById("zReportDate");
@@ -1304,7 +1395,6 @@ function renderAdvancedThermalZReport(z) {
 
   if (zGross) zGross.innerText = `Rs. ${z.grossSales.toFixed(2)}`;
 
-  // Itemize Loyalty Points Discounts on Thermal Slip if redeemed
   let discDisplay = `-Rs. ${z.totalDiscounts.toFixed(2)}`;
   if (z.totalLoyaltyDiscounts > 0) {
     discDisplay += ` (Pts: -Rs.${z.totalLoyaltyDiscounts.toFixed(0)})`;
@@ -1401,6 +1491,7 @@ export function openShiftHandoverModal() {
   if (expVal) expVal.innerText = `Rs. ${expectedCash.toFixed(2)}`;
 
   document.getElementById("shiftHandoverModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("handoverActualCashInput")?.focus(), 50);
 }
 
 export function closeShiftHandoverModal() {
@@ -1452,7 +1543,7 @@ export async function handleShiftHandoverSubmit(e) {
 
     showLiveToast("🤝 Shift Handover Verified", `${outgoing} -> ${incoming} වෙත මුදල් පෙට්ටිය සාර්ථකව භාරදෙන ලදී.`, "success", "fa-arrows-split-up-and-left");
   } catch (err) {
-    alert("Shift Handover දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "Shift Handover දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
