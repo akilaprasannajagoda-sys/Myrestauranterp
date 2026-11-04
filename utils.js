@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP & HELPERS)
+// MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP, HASHING & HELPERS)
 // ==========================================================================
 
 import { erpState } from './state.js';
@@ -149,7 +149,7 @@ export function updateNotificationCenterUI() {
     row.className = "p-3 hover:bg-gray-50 flex items-start gap-2.5 transition";
     row.innerHTML = `
       <div class="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-        <i class="fa-solid ${item.icon}"></i>
+        <i class="fa-solid fa-item.icon"></i>
       </div>
       <div class="flex-1">
         <div class="flex justify-between items-center">
@@ -219,7 +219,7 @@ export function formatCurrency(amount = 0) {
   return `Rs. ${num.toFixed(2)}`;
 }
 
-// 🔒 7. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
+// 7. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
 export function showCustomInputModal(titleText, placeholderText = "", defaultValue = "") {
   return new Promise((resolve) => {
     const existing = document.getElementById("globalCustomPromptModal");
@@ -229,7 +229,7 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
     overlay.id = "globalCustomPromptModal";
     overlay.className = "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4";
     overlay.innerHTML = `
-      <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 border border-gray-100 text-center animate-pulse-once">
+      <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 border border-gray-100 text-center">
         <div class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center mx-auto text-xl">
           <i class="fa-brands fa-whatsapp"></i>
         </div>
@@ -268,7 +268,7 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
   });
 }
 
-// 📲 8. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE (WITH 100% TRANSPARENT LOYALTY BREAKDOWN)
+// 8. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE
 export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
   let rawPhone = inputPhone;
   
@@ -314,7 +314,6 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   message += `------------------------------------\n`;
   message += `Subtotal: Rs. ${parseFloat(invoiceData.subtotal || 0).toFixed(2)}\n`;
   
-  // Specific Itemized Discounts
   if (parseFloat(invoiceData.discountAmount || 0) > 0) {
     message += `Bill Discount: -Rs. ${parseFloat(invoiceData.discountAmount).toFixed(2)}\n`;
   }
@@ -341,7 +340,6 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
     message += `💳 Payment: ${p.method.toUpperCase()}\n`;
   }
 
-  // ⭐ LOYALTY REWARDS & BALANCE BREAKDOWN IN WHATSAPP RECEIPT
   if (invoiceData.loyaltyPointsRedeemed > 0 || invoiceData.loyaltyPointsEarned > 0 || invoiceData.customerId) {
     message += `------------------------------------\n`;
     message += `⭐ *LOYALTY REWARDS SUMMARY*\n`;
@@ -352,7 +350,6 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
       message += `▪️ Points Earned Today: +${invoiceData.loyaltyPointsEarned} Pts\n`;
     }
     
-    // Display remaining balance live from customer profile
     if (invoiceData.customerId && erpState.customers?.[invoiceData.customerId]) {
       const remainingBalance = erpState.customers[invoiceData.customerId].loyaltyPoints || 0;
       message += `▪️ *Your Available Balance:* ${remainingBalance} Points\n`;
@@ -363,7 +360,6 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   message += `🙏 *Thank you for dining with us! Come again.*\n\n`;
   message += `_Software by systems.lk | Tel: 0760672029_`;
   
-  // DIRECT DESKTOP APP PROTOCOL (Electron Windows App)
   if (window.electronAPI && window.electronAPI.openWhatsAppDirect) {
     try {
       const res = await window.electronAPI.openWhatsAppDirect({ phone: cleanPhone, text: message });
@@ -376,10 +372,34 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
     }
   }
 
-  // Fallback to Web Browser if not in Electron
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   window.open(waUrl, "_blank");
   showLiveToast("📱 WhatsApp Bill Ready", `Invoice #${invoiceData.invoiceNumber} WhatsApp වෙත යවන ලදී.`, "success", "fa-brands fa-whatsapp");
+}
+
+// 🔒 9. CRYPTOGRAPHIC PIN HASHING & VERIFICATION ENGINE (SHA-256)
+export async function hashPin(pin) {
+  if (!pin) return "";
+  const str = String(pin).trim();
+  const msgUint8 = new TextEncoder().encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function verifyPin(enteredPin, storedHashOrPlain) {
+  if (!enteredPin || !storedHashOrPlain) return false;
+  const enteredClean = String(enteredPin).trim();
+  const storedClean = String(storedHashOrPlain).trim();
+  
+  // 1. If stored password is already SHA-256 (64 hex characters)
+  if (/^[a-f0-9]{64}$/i.test(storedClean)) {
+    const enteredHashed = await hashPin(enteredClean);
+    return enteredHashed === storedClean;
+  }
+  
+  // 2. Backward compatibility fallback for legacy plain text PINs
+  return enteredClean === storedClean;
 }
 
 // Global Window Assignments
@@ -393,3 +413,5 @@ window.sendInvoiceViaWhatsApp = sendInvoiceViaWhatsApp;
 window.formatCurrency = formatCurrency;
 window.getLocalDateString = getLocalDateString;
 window.showCustomInputModal = showCustomInputModal;
+window.hashPin = hashPin;
+window.verifyPin = verifyPin;
