@@ -1,0 +1,6 @@
+{
+  "appId": "com.restauranterp.pos",
+  "appName": "Restaurant ERP",
+  "webDir": "dist-mobile",
+  "bundledWebRuntime": false
+}
