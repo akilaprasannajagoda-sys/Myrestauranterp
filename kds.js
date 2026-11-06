@@ -1,9 +1,10 @@
 // ==========================================================================
 // MODULE 03: KITCHEN DISPLAY SYSTEM (KDS) & LIVE ELAPSED TIMER ENGINE
+// 🛡️ XSS & SPECIAL CHARACTER NOTE-SAFE ARCHITECTURE
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast } from './utils.js';
+import { showLiveToast, escapeHTML } from './utils.js';
 
 let dbRef = null;
 let updateFn = null;
@@ -54,6 +55,7 @@ export function renderKDSOrdersGrid() {
     // Check if all items are prepared
     const allItemsPrepared = (order.items || []).length > 0 && (order.items || []).every(i => i.isPrepared);
     
+    // 🛡️ FIX: escapeHTML යොදා ඇති බැවින් <No spicy>, <Less Sugar> සටහන් කුස්සියේ Display එකේ කිසිවිටෙකත් සැඟවී නොයයි!
     const itemsHtml = (order.items || []).map((i, idx) => {
       const isCancelled = i.isCancelled;
       const isPrepared = i.isPrepared;
@@ -68,10 +70,10 @@ export function renderKDSOrdersGrid() {
           <div class="flex items-center gap-2.5">
             <input type="checkbox" ${isPrepared ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded cursor-pointer pointer-events-none">
             <div>
-              <span class="font-bold text-xs ${isPrepared ? 'line-through text-gray-500 font-semibold' : 'text-gray-900'}">${i.name}</span>
+              <span class="font-bold text-xs ${isPrepared ? 'line-through text-gray-500 font-semibold' : 'text-gray-900'}">${escapeHTML(i.name)}</span>
               ${i.isAddOn ? `<span class="ml-1 bg-yellow-100 text-yellow-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase">➕ Add-on</span>` : ''}
               ${isCancelled ? `<span class="ml-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase">❌ Cancelled</span>` : ''}
-              ${i.note ? `<span class="block text-[10px] text-purple-700 italic font-bold mt-0.5">📝 ${i.note}</span>` : ''}
+              ${i.note ? `<span class="block text-[10px] text-purple-700 italic font-bold mt-0.5">📝 ${escapeHTML(i.note)}</span>` : ''}
             </div>
           </div>
           <span class="font-black ${isPrepared ? 'bg-emerald-200 text-emerald-900' : 'bg-yellow-100 text-yellow-900'} px-2 py-0.5 rounded-lg text-xs">x${i.qty}</span>
@@ -84,12 +86,12 @@ export function renderKDSOrdersGrid() {
         <div class="flex justify-between items-start border-b border-gray-100 pb-2">
           <div>
             <div class="flex items-center gap-1.5">
-              <span class="text-[9px] bg-yellow-100 text-yellow-800 font-extrabold px-2 py-0.5 rounded-full uppercase">${order.orderType || 'Dine-in'}</span>
+              <span class="text-[9px] bg-yellow-100 text-yellow-800 font-extrabold px-2 py-0.5 rounded-full uppercase">${escapeHTML(order.orderType || 'Dine-in')}</span>
               <span id="kds-timer-${id}" class="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-green-100 text-green-800">
                 ⏱️ 00:00
               </span>
             </div>
-            <h4 class="font-black text-sm text-gray-900 mt-1">Table: ${order.tableNo}</h4>
+            <h4 class="font-black text-sm text-gray-900 mt-1">Table: ${escapeHTML(order.tableNo)}</h4>
           </div>
           <span class="text-[10px] text-gray-400 font-mono font-bold">${new Date(order.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
         </div>
