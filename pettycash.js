@@ -2,23 +2,12 @@
 // MODULE 08: 2-WAY PETTY CASH BOOK & EXPENSES ENGINE (WITH OPENING B/F BALANCE)
 // ==========================================================================
 
-import { erpState, currentTenant } from './state.js';
+import { erpState, currentTenant, sharedOfflineDB } from './state.js';
 import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
 let removeFn = null;
-
-// Offline Petty Cash Dexie Instance
-let offlinePettyDb = null;
-if (typeof Dexie !== 'undefined') {
-  offlinePettyDb = new Dexie("RestaurantERP_OfflineDB");
-  offlinePettyDb.version(1).stores({
-    offlineInvoices: '++id, invoiceNumber, createdAt, synced',
-    offlinePettyCash: '++id, timestamp, synced',
-    offlineAttendance: '++id, date, synced'
-  });
-}
 
 export function initPettyCashContext(dbRefInstance, pushMethod, removeMethod) {
   dbRef = dbRefInstance;
@@ -123,10 +112,10 @@ export async function handlePettyCashSubmit(e) {
       } else {
         showLiveToast("💸 Expense Recorded", `Rs. ${amount.toFixed(2)} (${category}) වියදම සාර්ථකව සටහන් විය.`, "warning", "fa-wallet");
       }
-    } else if (offlinePettyDb) {
-      // 🛡️ OFFLINE DEXIE FALLBACK
+    } else if (sharedOfflineDB) {
+      // 🛡️ OFFLINE DEXIE FALLBACK (SHARED INSTANCE)
       const tempKey = "offline_petty_" + Date.now();
-      await offlinePettyDb.offlinePettyCash.add({ ...transactionRecord, synced: 0 });
+      await sharedOfflineDB.offlinePettyCash.add({ ...transactionRecord, synced: 0 });
       if (!erpState.pettyCash) erpState.pettyCash = {};
       erpState.pettyCash[tempKey] = transactionRecord;
       
@@ -141,15 +130,15 @@ export async function handlePettyCashSubmit(e) {
 
 // 🔄 SYNC OFFLINE PETTY CASH TO FIREBASE CLOUD
 export async function syncOfflinePettyCashToCloud() {
-  if (!navigator.onLine || !offlinePettyDb || !dbRef || !pushFn || !currentTenant) return;
+  if (!navigator.onLine || !sharedOfflineDB || !dbRef || !pushFn || !currentTenant) return;
   try {
-    const unsynced = await offlinePettyDb.offlinePettyCash.where("synced").equals(0).toArray();
+    const unsynced = await sharedOfflineDB.offlinePettyCash.where("synced").equals(0).toArray();
     for (const rec of unsynced) {
       const cleanRec = { ...rec };
       delete cleanRec.id;
       delete cleanRec.synced;
       await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), cleanRec);
-      await offlinePettyDb.offlinePettyCash.delete(rec.id);
+      await sharedOfflineDB.offlinePettyCash.delete(rec.id);
     }
   } catch (e) {}
 }
