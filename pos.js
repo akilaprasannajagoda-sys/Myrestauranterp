@@ -1,6 +1,7 @@
 // ==========================================================================
 // MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & ACTIVE FOCUS GUARD)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HIGH-CONTRAST PURE-BLACK RECEIPT)
+// 🛡️ DUAL PAPER WIDTH (80MM / 58MM) & ZERO PERMISSION-DENIED SYNC ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
@@ -18,6 +19,11 @@ let transactionFn = null;
 
 let isOfflineSyncInProgress = false;
 export let currentDiscountType = "fixed";
+
+// 🛡️ Helper: Firebase Auth Session එක සක්‍රීයදැයි පරීක්ෂා කිරීම (PERMISSION_DENIED වැළැක්වීමට)
+function isAuthReady() {
+  return !!(window.authInstance && window.authInstance.currentUser);
+}
 
 // Dual-Screen Web BroadcastChannel Fallback
 const cfdBroadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel("restaurant_customer_display") : null;
@@ -179,7 +185,7 @@ export async function persistActiveBillToCloud(updatedObj) {
   });
 
   if (!currentTenant || !activeBillId || !dbRef || !updateFn) return;
-  if (navigator.onLine) {
+  if (navigator.onLine && isAuthReady()) {
     try {
       updateFn(dbRef(`tenants/${currentTenant}/activeBills/${activeBillId}`), {
         ...updatedObj,
@@ -218,7 +224,7 @@ export async function addNewBillTab() {
   renderBillTabsBar();
   syncActiveBillToFormUI();
 
-  if (dbRef && setFn && currentTenant && navigator.onLine) {
+  if (dbRef && setFn && currentTenant && navigator.onLine && isAuthReady()) {
     try {
       setFn(dbRef(`tenants/${currentTenant}/activeBills/${newKey}`), newBillPayload).catch(() => {});
     } catch (e) {}
@@ -254,7 +260,7 @@ export async function closeBillTab(key, ev) {
       const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === b.tableNo);
       if (matchedTable) {
         matchedTable[1].status = "Available";
-        if (dbRef && updateFn && currentTenant && navigator.onLine) {
+        if (dbRef && updateFn && currentTenant && navigator.onLine && isAuthReady()) {
           updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" }).catch(() => {});
         }
       }
@@ -263,7 +269,7 @@ export async function closeBillTab(key, ev) {
 
   delete erpState.activeBills[key];
 
-  if (dbRef && removeFn && currentTenant && navigator.onLine) {
+  if (dbRef && removeFn && currentTenant && navigator.onLine && isAuthReady()) {
     try {
       removeFn(dbRef(`tenants/${currentTenant}/activeBills/${key}`)).catch(() => {});
     } catch (e) {}
@@ -387,7 +393,7 @@ export async function updateCurrentBillSettings() {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tableNo);
     if (matchedTable) {
       matchedTable[1].status = "Occupied";
-      if (dbRef && updateFn && currentTenant && navigator.onLine) {
+      if (dbRef && updateFn && currentTenant && navigator.onLine && isAuthReady()) {
         updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" }).catch(() => {});
       }
     }
@@ -571,7 +577,7 @@ export async function addDishToActiveCart(dishId, dish) {
 
   persistActiveBillToCloud({ cart: cartList });
 
-  if (currentBill.tableNo && dbRef && updateFn && currentTenant && navigator.onLine) {
+  if (currentBill.tableNo && dbRef && updateFn && currentTenant && navigator.onLine && isAuthReady()) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
     if (matchedTable) {
       updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Occupied" }).catch(() => {});
@@ -957,7 +963,7 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
-// 🖨️ KOT & BOT DYNAMIC SLIP DISPATCHER
+// 🖨️ KOT & BOT DYNAMIC SLIP DISPATCHER (ZERO CLIPPING ON 58MM & 80MM)
 async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   const modalContainer = document.getElementById("kotPrintModal");
   if (!modalContainer) return;
@@ -977,16 +983,16 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
 
   if (itemsContainer) {
     itemsContainer.innerHTML = payload.items.map(i => `
-      <div style="border-bottom: 1.5px dashed #000000; padding: 4px 0; margin-bottom: 3px; width: 100%; color: #000000;">
-        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-          <span style="font-weight: 800; font-size: 13.5px; width: 72%; line-height: 1.25; color: #000000; display: inline-block;">
-            ${i.name}${i.isAddOn ? ' <span style="font-size: 10px; border: 1.5px solid #000000; padding: 0 2px; font-weight: 900;">ADD-ON</span>' : ''}
+      <div style="border-bottom: 1.5px dashed #000000; padding: 3px 0; margin-bottom: 2px; width: 100%; color: #000000;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+          <span style="flex: 1; font-weight: 800; font-size: inherit; line-height: 1.25; color: #000000; word-break: break-word;">
+            ${i.name}${i.isAddOn ? ' <span style="font-size: 0.8em; border: 1.5px solid #000000; padding: 0 2px; font-weight: 900;">ADD-ON</span>' : ''}
           </span>
-          <span style="font-weight: 900; font-size: 15px; width: 28%; text-align: right; padding-right: 4px; color: #000000; display: inline-block; white-space: nowrap;">
+          <span style="flex-shrink: 0; font-weight: 900; font-size: 1.15em; text-align: right; padding-left: 4px; color: #000000; white-space: nowrap;">
             [ x${i.qty} ]
           </span>
         </div>
-        ${i.note ? `<div style="font-size: 11px; font-weight: 900; background: #eee; padding: 2px 4px; margin-top: 3px; border-left: 3px solid #000000; color: #000000;">>> NOTE: ${i.note}</div>` : ''}
+        ${i.note ? `<div style="font-size: 0.85em; font-weight: 900; background: #eee; padding: 1px 3px; margin-top: 2px; border-left: 3px solid #000000; color: #000000;">>> NOTE: ${i.note}</div>` : ''}
       </div>
     `).join("");
   }
@@ -995,23 +1001,23 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ SMART DELTA & OFFLINE-SAFE STATION ORDER SENDER
+// 🖨️ SMART DELTA, OFFLINE-SAFE & LOCAL LAN STATION ORDER SENDER
 export async function sendOrderToKitchen(forceReprintAll = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
   if (cartList.length === 0) return;
-
+  
   const deltaKitchenItems = [];
   const deltaBarItems = [];
   const updatedCart = [];
-
+  
   cartList.forEach(item => {
     const totalQty = parseInt(item.qty) || 0;
     const sentQty = parseInt(item.sentQty) || 0;
     const diff = totalQty - sentQty;
-
+    
     const station = getDishStationTarget(item.dishId);
-
+    
     if (diff > 0) {
       const orderItemPayload = {
         dishId: item.dishId,
@@ -1021,26 +1027,26 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
         isAddOn: sentQty > 0,
         station: station
       };
-
+      
       if (station === "bar") {
         deltaBarItems.push(orderItemPayload);
       } else {
         deltaKitchenItems.push(orderItemPayload);
       }
     }
-
+    
     updatedCart.push({
       ...item,
       qty: totalQty,
       sentQty: totalQty
     });
   });
-
+  
   const totalDeltaCount = deltaKitchenItems.length + deltaBarItems.length;
-
+  
   let kitchenItemsToPrint = [];
   let barItemsToPrint = [];
-
+  
   if (forceReprintAll === true) {
     kitchenItemsToPrint = cartList.filter(i => getDishStationTarget(i.dishId) === "kitchen");
     barItemsToPrint = cartList.filter(i => getDishStationTarget(i.dishId) === "bar");
@@ -1052,9 +1058,9 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
     kitchenItemsToPrint = deltaKitchenItems;
     barItemsToPrint = deltaBarItems;
   }
-
+  
   const isDesktopPrinterHost = !!(window.electronAPI && window.electronAPI.printSilent);
-
+  
   try {
     if (totalDeltaCount > 0) {
       const allNewItems = [...deltaKitchenItems, ...deltaBarItems];
@@ -1068,11 +1074,32 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
         status: "Cooking",
         isPrinted: isDesktopPrinterHost ? true : false
       };
-
+      
       currentBill.cart = updatedCart;
       renderCartItemsUI();
-
-      if (navigator.onLine && dbRef && currentTenant) {
+      
+      // 📡 1. MOBILE APK OFFLINE LOCAL LAN DIRECT PRINT (INTERNET නැතත් PRINTER එකට කෙලින්ම යැවීම)
+      if (!isDesktopPrinterHost) {
+        const targetCashierIp = localStorage.getItem("cashier_lan_ip") || "192.168.8.100";
+        if (targetCashierIp) {
+          fetch(`http://${targetCashierIp}:8085/api/kot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(kotTicket)
+            })
+            .then(r => r.json())
+            .then(res => {
+              console.log("✅ Offline Order Sent via Local Wi-Fi successfully:", res);
+              showLiveToast("🖨️ Wi-Fi Print Sent", `Table ${kotTicket.tableNo} ඇණවුම Cashier Printer එකට Local Wi-Fi හරහා යවන ලදී.`, "kitchen", "fa-print");
+            })
+            .catch(err => {
+              console.warn("Local Wi-Fi unreachable, will rely on Cloud sync:", err.message);
+            });
+        }
+      }
+      
+      // ☁️ 2. CLOUD FIREBASE SYNC (INTERNET ඇති විට CLOUD එකටත් SAVE වේ)
+      if (navigator.onLine && dbRef && currentTenant && isAuthReady()) {
         if (pushFn) {
           pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket).catch(() => {});
         }
@@ -1089,20 +1116,21 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
         } catch (e) {}
       }
     }
-
+    
     if (!isDesktopPrinterHost && !forceReprintAll) {
       showLiveToast("🔥 Order Sent", "ඇණවුම සාර්ථකව කුස්සියට සහ බාර් එකට යවන ලදී.", "kitchen", "fa-fire-burner");
       return;
     }
-
+    
+    // 🖥️ 3. DESKTOP LOCAL SILENT PRINT QUEUE (CASHIER PC එකේදී PRINT වීම)
     enqueuePrintJob(async () => {
       const pr = erpState.settings?.printers || {};
       const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
       const barPrinter = (pr.p3?.device || pr.p1?.device || "").trim();
       const isSinglePrinterSetup = (!barPrinter || !kitchenPrinter || barPrinter.toLowerCase() === kitchenPrinter.toLowerCase());
-
+      
       let printedSummary = [];
-
+      
       if (kitchenItemsToPrint.length > 0) {
         const kitchenPayload = {
           tableNo: currentBill.tableNo || "N/A",
@@ -1111,15 +1139,15 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
           items: kitchenItemsToPrint,
           timestamp: new Date().toISOString()
         };
-
+        
         await dispatchStationPrintSlip(kitchenPrinter, kitchenPayload, "KOT");
         printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
-
+        
         if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
-
+      
       if (barItemsToPrint.length > 0) {
         const barPayload = {
           tableNo: currentBill.tableNo || "N/A",
@@ -1128,16 +1156,16 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
           items: barItemsToPrint,
           timestamp: new Date().toISOString()
         };
-
+        
         await dispatchStationPrintSlip(barPrinter, barPayload, "BOT");
         printedSummary.push(`BOT (Bar: ${barItemsToPrint.length})`);
       }
-
+      
       if (printedSummary.length > 0) {
         showLiveToast("🖨️ Orders Printed", `${printedSummary.join(" & ")} සාර්ථකව මුද්‍රණය විය!`, "kitchen", "fa-print");
       }
     });
-
+    
   } catch (err) {
     showLiveToast("⚠️ දෝෂයකි", "KOT/BOT මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-print");
   }
@@ -1149,7 +1177,7 @@ export function handleIncomingCloudPrint(orderId, orderData) {
   if (!orderData || !orderData.items || orderData.status !== "Cooking" || orderData.isPrinted === true) return;
 
   orderData.isPrinted = true;
-  if (dbRef && updateFn && currentTenant) {
+  if (dbRef && updateFn && currentTenant && isAuthReady()) {
     updateFn(dbRef(`tenants/${currentTenant}/kitchenOrders/${orderId}`), { isPrinted: true }).catch(() => {});
   }
 
@@ -1401,10 +1429,10 @@ export async function processOrder(sendWhatsApp = false) {
 
   showLiveToast("✅ Bill Settled", `Invoice #${invoiceNumber} (Rs. ${netTotal.toFixed(2)}) නිකුත් විය.`, "success", "fa-circle-check");
 
-  // 🚀 2. NON-BLOCKING BACKGROUND SYNC
+  // 🚀 2. NON-BLOCKING BACKGROUND SYNC (WITH OFFLINE STOCK & TABLE FIX)
   (async () => {
     try {
-      if (navigator.onLine && dbRef && pushFn && currentTenant) {
+      if (navigator.onLine && dbRef && pushFn && currentTenant && isAuthReady()) {
         const invoiceRef = await pushFn(dbRef(`tenants/${currentTenant}/invoices`), invoiceData);
         
         if (attachedCustomerId && erpState.customers?.[attachedCustomerId] && updateFn) {
@@ -1476,6 +1504,7 @@ export async function processOrder(sendWhatsApp = false) {
           if (!hasOtherBillsOnTable) {
             const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
             if (matchedTable) {
+              matchedTable[1].status = "Available"; // 👈 Floor Plan එකේ මේසය වහාම කොළ පාට වේ
               await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
             }
           }
@@ -1485,18 +1514,58 @@ export async function processOrder(sendWhatsApp = false) {
           await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${savedActiveBillId}`));
         }
       } else if (localDBInstance) {
+        // 🛡️ OFFLINE SAFE FALLBACK: Dexie IndexedDB එකේ සුරකියි
         await localDBInstance.offlineInvoices.add({
           ...invoiceData,
           synced: 0
         });
+
+        // 👈 FIX: Internet නැතිවිටද Local Memory එකෙන් Stock අඩු කරන්න
+        const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
+        if (isRecipeMode) {
+          for (const item of cartList) {
+            const dish = erpState.dishes[item.dishId];
+            if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
+              for (const ing of dish.ingredients) {
+                const rawItem = erpState.rawItems[ing.rawId];
+                if (rawItem) {
+                  const convertedQty = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
+                  const totalDeduct = convertedQty * (parseInt(item.qty) || 1);
+                  rawItem.stock = Math.max(0, parseFloat(((rawItem.stock || 0) - totalDeduct).toFixed(3)));
+                }
+              }
+            }
+          }
+        }
+
+        // 👈 FIX: Offline විටද මේසය නිදහස් කරන්න
+        if (currentBill.tableNo) {
+          const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+            ([k, b]) => k !== savedActiveBillId && b.tableNo === currentBill.tableNo && b.cart && b.cart.length > 0
+          );
+          if (!hasOtherBillsOnTable) {
+            const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
+            if (matchedTable) {
+              matchedTable[1].status = "Available";
+            }
+          }
+        }
       }
     } catch (bgErr) {
       console.warn("Background billing sync queued offline:", bgErr);
+      if (localDBInstance) {
+        try {
+          await localDBInstance.offlineInvoices.add({
+            ...invoiceData,
+            synced: 0
+          });
+        } catch (dexErr) {}
+      }
     }
   })();
 }
 
-// 🖨️ XPRINTER & 80MM RECEIPT PRINT ENGINE (PURE-BLACK HIGH-CONTRAST VECTOR PRINTING)
+// 🖨️ XPRINTER, EPSON & CHINESE THERMAL RECEIPT PRINT ENGINE (DUAL 80MM / 58MM ADAPTIVE)
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const p1Dev = (pr.p1?.device || "").trim();
@@ -1514,7 +1583,6 @@ export async function printThermalReceipt(inv) {
 
   if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   
-  // Format clean address spacing (e.g., "24,galle, colombo" -> "24, Galle, Colombo")
   const rawAddr = currentTenantInfo?.address || "Smart Restaurant POS";
   if (rAddr) rAddr.innerText = rawAddr.replace(/,([^\s])/g, ', $1');
   
@@ -1535,23 +1603,23 @@ export async function printThermalReceipt(inv) {
   if (dEl) dEl.innerText = `Date: ${new Date(inv.createdAt || Date.now()).toLocaleString()}`;
   if (tEl) tEl.innerText = `${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''}${inv.customerName ? ' | Cust: ' + inv.customerName : ''})`;
 
-  // 🌟 ULTRA-CRISP PURE BLACK RECEIPT ITEMS FORMATTING
+  // 🌟 ULTRA-CRISP PROPORTIONAL FLEXBOX ITEMS FORMATTING
   const itemsContainer = document.getElementById("receiptItems");
   if (itemsContainer) {
     itemsContainer.innerHTML = "";
     (inv.items || []).forEach(i => {
       const row = document.createElement("div");
-      row.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; padding: 2.5px 0; font-size: 11px; font-weight: 700; color: #000000;";
+      row.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; padding: 2px 0; font-size: inherit; font-weight: 700; color: #000000; width: 100%; box-sizing: border-box;";
       row.innerHTML = `
-        <span style="width: 48%; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000000;">${i.name} x${i.qty}</span>
-        <span style="width: 25%; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: #000000;">${parseFloat(i.price).toFixed(2)}</span>
-        <span style="width: 27%; text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; color: #000000;">${(i.price * i.qty).toFixed(2)}</span>
+        <span style="flex: 1.8; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 2px; color: #000000;">${i.name} x${i.qty}</span>
+        <span style="flex: 1.1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: #000000;">${parseFloat(i.price).toFixed(2)}</span>
+        <span style="flex: 1.2; text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; color: #000000;">${(i.price * i.qty).toFixed(2)}</span>
       `;
       itemsContainer.appendChild(row);
 
       if (i.note) {
         const noteDiv = document.createElement("div");
-        noteDiv.style.cssText = "font-size: 9.5px; font-weight: 800; padding-left: 2px; color: #000000; margin-bottom: 2px;";
+        noteDiv.style.cssText = "font-size: 0.85em; font-weight: 800; padding-left: 2px; color: #000000; margin-bottom: 2px;";
         noteDiv.innerText = `  >> NOTE: ${i.note}`;
         itemsContainer.appendChild(noteDiv);
       }
@@ -1617,7 +1685,7 @@ export async function printThermalReceipt(inv) {
   const payDiv = document.getElementById("receiptPayDetails");
   if (payDiv) {
     const p = inv.payment || { method: "cash" };
-    let payText = `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 10.5px; color: #000000;"><span>PAYMENT METHOD:</span><span>${(p.method || 'cash').toUpperCase()}</span></div>`;
+    let payText = `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: inherit; color: #000000;"><span>PAYMENT METHOD:</span><span>${(p.method || 'cash').toUpperCase()}</span></div>`;
 
     if (p.method === "cash") {
       payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Cash Tendered:</span><span style="font-weight: 800;">Rs. ${parseFloat(p.cashTendered || inv.netTotal).toFixed(2)}</span></div>`;
@@ -1634,12 +1702,12 @@ export async function printThermalReceipt(inv) {
     }
 
     if (inv.loyaltyPointsEarned > 0 || inv.loyaltyPointsRedeemed > 0) {
-      payText += `<div style="border-top: 1.5px dashed #000000; padding-top: 3px; margin-top: 3px; color: #000000;">`;
+      payText += `<div style="border-top: 1.5px dashed #000000; padding-top: 2px; margin-top: 2px; color: #000000;">`;
       if (inv.loyaltyPointsRedeemed > 0) {
-        payText += `<div style="display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 700;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts (-Rs. ${inv.loyaltyDiscount})</span></div>`;
+        payText += `<div style="display: flex; justify-content: space-between; font-size: 0.9em; font-weight: 700;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts (-Rs. ${inv.loyaltyDiscount})</span></div>`;
       }
       if (inv.loyaltyPointsEarned > 0) {
-        payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 10px;"><span>⭐ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
+        payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 0.95em;"><span>⭐ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
       }
       payText += `</div>`;
     }
@@ -1780,7 +1848,7 @@ export async function executeItemSplitToNewBill() {
       updatedAt: new Date().toISOString()
     };
 
-    if (dbRef && setFn && currentTenant && navigator.onLine) {
+    if (dbRef && setFn && currentTenant && navigator.onLine && isAuthReady()) {
       setFn(dbRef(`tenants/${currentTenant}/activeBills/${newSplitKey}`), newBillPayload).catch(() => {});
     }
     erpState.activeBills[newSplitKey] = newBillPayload;
@@ -1841,7 +1909,7 @@ export async function handleShiftFloatSubmit(e) {
   };
 
   try {
-    if (dbRef && pushFn && currentTenant && navigator.onLine) {
+    if (dbRef && pushFn && currentTenant && navigator.onLine && isAuthReady()) {
       await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), floatTransaction);
     }
     closeShiftFloatModal();
@@ -1854,6 +1922,10 @@ export async function handleShiftFloatSubmit(e) {
 // 🔄 5-YEAR PRODUCTION HARDENED OFFLINE INVOICES CLOUD SYNC
 export async function syncOfflineInvoicesToCloud() {
   if (!navigator.onLine || !localDBInstance || !dbRef || !pushFn || !currentTenant) return;
+  if (!isAuthReady()) {
+    console.warn("⏳ Offline sync waiting for authenticated Firebase session...");
+    return;
+  }
   if (isOfflineSyncInProgress) return;
 
   try {
