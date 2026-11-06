@@ -1,6 +1,8 @@
 // ==========================================================================
 // RESTAURANT ERP - ENTERPRISE ZERO-LAG HIGH-SPEED RESTAURANT PLATFORM
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (OFFLINE-FIRST HYBRID BOOT)
+// 🛡️ RE-AUTHENTICATION & PERMISSION-DENIED SECURE AUTO-RECOVERY ENGINE
+// 📡 OFFLINE LOCAL LAN AUTO-PRINT KOT/BOT INTEGRATED
 // ==========================================================================
 
 // 🛡️ 1. OFFLINE STANDALONE FIREBASE BUNDLE IMPORT (NO CDN DEPENDENCY)
@@ -31,7 +33,7 @@ import {
 
 // --- IMPORT CUSTOM ERP MODULES ---
 import { 
-  erpState, currentTenant, currentTenantInfo, currentUserRole, activeBillId, lastReadyOrderCount, activeSupplierLedgerId,
+  erpState, currentTenant, currentTenantInfo, currentUserRole, activeBillId, lastReadyOrderCount, activeSupplierLedgerId, sharedOfflineDB,
   setCurrentTenant, setCurrentTenantInfo, setCurrentUserRole, setActiveBillId, setLastReadyOrderCount
 } from './state.js';
 
@@ -64,7 +66,8 @@ const firebaseConfig = {
 };
 
 const appInstance = initializeApp(firebaseConfig);
-const authInstance = getAuth(appInstance);
+export const authInstance = getAuth(appInstance);
+window.authInstance = authInstance;
 const dbInstance = getDatabase(appInstance);
 const dbRef = (path) => ref(dbInstance, path);
 
@@ -166,16 +169,8 @@ async function createStaffAuthAccount(email, password, role, staffName, tenantId
   }
 }
 
-// --- OFFLINE LOCAL DATABASE SETUP ---
-let localDB = null;
-if (typeof Dexie !== 'undefined') {
-  localDB = new Dexie("RestaurantERP_OfflineDB");
-  localDB.version(1).stores({
-    offlineInvoices: '++id, invoiceNumber, createdAt, synced',
-    offlinePettyCash: '++id, timestamp, synced',
-    offlineAttendance: '++id, date, synced'
-  });
-}
+// --- OFFLINE LOCAL DATABASE SETUP (SHARED INSTANCE) ---
+let localDB = sharedOfflineDB;
 
 // --- INITIALIZE ALL MODULES ---
 PettyCash.initPettyCashContext(dbRef, push, remove);
@@ -233,7 +228,31 @@ export function switchAuthMode(mode) {
 }
 window.switchAuthMode = switchAuthMode;
 
-// ⚡ OFFLINE PIN LOGIN HANDLER (WITH SHA-256 VERIFY)
+// ⚡ SILENT BACKGROUND RE-AUTHENTICATION HELPER
+async function triggerBackgroundTerminalAuth() {
+  if (!navigator.onLine || authInstance.currentUser) return;
+  
+  const savedEmail = localStorage.getItem("terminal_auth_email");
+  const savedPass = localStorage.getItem("terminal_auth_password");
+
+  if (savedEmail && savedPass) {
+    try {
+      console.log("🔄 Background Terminal Re-authenticating with Firebase...");
+      await signInWithEmailAndPassword(authInstance, savedEmail, savedPass);
+      console.log("✅ Terminal Background Re-Authentication Successful.");
+      if (currentTenant) {
+        initializeRealtimeDataStreams(currentTenant);
+      }
+      if (POS && POS.syncOfflineInvoicesToCloud) {
+        POS.syncOfflineInvoicesToCloud();
+      }
+    } catch (err) {
+      console.warn("Silent background auth pass:", err.message);
+    }
+  }
+}
+
+// ⚡ OFFLINE PIN LOGIN HANDLER
 export async function handleOfflinePinSubmit(ev) {
   if (ev) ev.preventDefault();
   const pinIn = document.getElementById("offlinePinInput");
@@ -286,7 +305,7 @@ export async function handleOfflinePinSubmit(ev) {
     const sideUser = document.getElementById("sideUserName");
     const sideTen = document.getElementById("sideTenantId");
     const sideHotel = document.getElementById("sideHotelName");
-    if (sideUser) sideUser.innerText = `${staffName} (⚡ Offline)`;
+    if (sideUser) sideUser.innerText = `${staffName} (${navigator.onLine ? '🟢 Online' : '⚡ Offline'})`;
     if (sideTen) sideTen.innerText = pairedTenant;
     if (sideHotel) sideHotel.innerText = pairedHotelName;
 
@@ -295,7 +314,13 @@ export async function handleOfflinePinSubmit(ev) {
     resetInactivityTimer();
     loadInstalledPrintersToUI();
 
-    showLiveToast("⚡ Offline Counter Ready", `${staffName} ලෙස Offline කවුන්ටරය සාර්ථකව විවෘත විය.`, "success", "fa-bolt");
+    if (navigator.onLine && !authInstance.currentUser) {
+      triggerBackgroundTerminalAuth();
+    } else if (authInstance.currentUser && currentTenant) {
+      initializeRealtimeDataStreams(currentTenant);
+    }
+
+    showLiveToast("⚡ Counter Ready", `${staffName} ලෙස කවුන්ටරය සාර්ථකව විවෘත විය.`, "success", "fa-bolt");
   } else {
     renderAuthAlert("❌ වැරදි PIN අංකයකි! නැවත උත්සාහ කරන්න.", true);
     if (pinIn) {
@@ -306,7 +331,7 @@ export async function handleOfflinePinSubmit(ev) {
 }
 window.handleOfflinePinSubmit = handleOfflinePinSubmit;
 
-// 🛡️ FREEZE-PROOF SECURE LOGIN SUBMIT HANDLER
+// 🛡️ LOGIN SUBMIT HANDLER
 export async function handleLoginSubmit(ev) {
   if (ev) ev.preventDefault();
   const emailVal = document.getElementById("loginEmail")?.value.trim() || "";
@@ -323,7 +348,12 @@ export async function handleLoginSubmit(ev) {
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...`;
     }
-    await signInWithEmailAndPassword(authInstance, emailVal, passVal);
+    const userCred = await signInWithEmailAndPassword(authInstance, emailVal, passVal);
+    
+    if (userCred.user) {
+      localStorage.setItem("terminal_auth_email", emailVal);
+      localStorage.setItem("terminal_auth_password", passVal);
+    }
   } catch (err) {
     let errDesc = "Login දෝෂයකි: Email හෝ Password වැරදිය.";
     if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
@@ -390,12 +420,14 @@ document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e
   }
 });
 
-// PRINTER ROUTING
+// PRINTER ROUTING (WITH PAPER WIDTH FIX)
 document.getElementById("printerRoutingForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
 
   const isSilent = document.getElementById("silentPrintEnabled")?.checked ?? true;
+  const paperWidth = document.getElementById("setPaperWidth")?.value || "80mm";
+
   const printersData = {
     p1: { name: document.getElementById("p1_name")?.value.trim() || "Main Cashier 1", device: document.getElementById("p1_device")?.value.trim() || "POS-80", bill: document.getElementById("p1_bill")?.checked || false, kot: document.getElementById("p1_kot")?.checked || false },
     p2: { name: document.getElementById("p2_name")?.value.trim() || "Hot Kitchen KOT", device: document.getElementById("p2_device")?.value.trim() || "POS80-Kitchen", bill: document.getElementById("p2_bill")?.checked || false, kot: document.getElementById("p2_kot")?.checked || false },
@@ -404,11 +436,16 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
   };
 
   try {
-    await update(ref(dbInstance, `tenants/${currentTenant}/settings`), { silentPrintEnabled: isSilent, printers: printersData });
+    await update(ref(dbInstance, `tenants/${currentTenant}/settings`), { 
+      silentPrintEnabled: isSilent, 
+      paperWidth: paperWidth,
+      printers: printersData 
+    });
     if (!erpState.settings) erpState.settings = {};
     erpState.settings.silentPrintEnabled = isSilent;
+    erpState.settings.paperWidth = paperWidth;
     erpState.settings.printers = printersData;
-    showLiveToast("🖨️ Printers Updated", "Printers සාර්ථකව යාවත්කාලීන විය.", "success", "fa-print");
+    showLiveToast("🖨️ Printers Updated", "Printers සහ කඩදාසි සැකසුම් සාර්ථකව යාවත්කාලීන විය.", "success", "fa-print");
   } catch (err) {
     showLiveToast("⚠️ Printers Error", "Printers සැකසීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
@@ -420,9 +457,11 @@ document.getElementById("taxSettingsForm")?.addEventListener("submit", async (e)
   if (!dbRef || !currentTenant) return;
 
   const inventoryMode = document.querySelector('input[name="setInventoryMode"]:checked')?.value || "recipe";
+  const paperWidth = document.getElementById("setPaperWidth")?.value || "80mm";
 
   const settingsData = {
     inventoryMode: inventoryMode,
+    paperWidth: paperWidth,
     scEnabled: document.getElementById("setScEnabled")?.checked || false,
     scRate: parseFloat(document.getElementById("setScRate")?.value || 10),
     vatEnabled: document.getElementById("setVatEnabled")?.checked || false,
@@ -566,7 +605,7 @@ function resetInactivityTimer() {
   window.addEventListener(evt, resetInactivityTimer, { passive: true });
 });
 
-// 🔒 STRICT COUNTER PIN UNLOCK (WITH SHA-256 VERIFY)
+// 🔒 STRICT COUNTER PIN UNLOCK
 window.submitCounterUnlock = async function() {
   const pinIn = document.getElementById("unlockScreenPinInput");
   const pin = pinIn?.value.trim();
@@ -708,7 +747,7 @@ export function applyRoleBasedUI(role = "owner", permissions = null) {
   }
 }
 
-// 🛡️ AUTH STATE LISTENER (HYBRID ONLINE/OFFLINE RESILIENT)
+// 🛡️ AUTH STATE LISTENER
 onAuthStateChanged(authInstance, async (activeUser) => {
   const loginBtn = document.getElementById("loginBtn");
   if (loginBtn) {
@@ -794,8 +833,11 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       }
     }
   } else {
-    if (!navigator.onLine && localStorage.getItem("pairedHotelTenantId")) {
+    if (localStorage.getItem("pairedHotelTenantId")) {
       switchAuthMode("offline");
+      if (navigator.onLine) {
+        triggerBackgroundTerminalAuth();
+      }
     } else {
       setCurrentTenant(null);
       currentStaffPermissions = null;
@@ -808,24 +850,61 @@ onAuthStateChanged(authInstance, async (activeUser) => {
   }
 });
 
-// Periodic offline sync
+// Periodic offline sync & silent auth guard
 setInterval(() => {
   if (navigator.onLine && currentTenant) {
+    if (!authInstance.currentUser) {
+      triggerBackgroundTerminalAuth();
+    } else {
+      POS.syncOfflineInvoicesToCloud();
+    }
+  }
+}, 45000);
+
+window.addEventListener("online", () => {
+  showLiveToast("🌐 Internet Connected", "සම්බන්ධතාවය යථා තත්ත්වයට පත් විය. Cloud Sync වෙමින් පවතී...", "info", "fa-wifi");
+  if (!authInstance.currentUser) {
+    triggerBackgroundTerminalAuth();
+  } else if (currentTenant) {
     POS.syncOfflineInvoicesToCloud();
   }
-}, 60000);
+});
+
+// ==========================================================================
+// 🛡️ 4. LOCK TERMINAL VS FULL LOGOUT IMPLEMENTATION
+// ==========================================================================
+
+window.lockTerminal = function() {
+  if (Payroll && Payroll.stopKioskCameraStream) {
+    Payroll.stopKioskCameraStream();
+  }
+  document.getElementById("mainApp")?.classList.add("hidden");
+  document.getElementById("authScreen")?.classList.remove("hidden");
+  switchAuthMode("offline");
+  showLiveToast("🔒 Terminal Locked", "කවුන්ටරය අගුළු වැටිණි. ඊළඟ Cashier හට PIN එකෙන් ඇතුළු විය හැක.", "info", "fa-lock");
+};
 
 window.logout = function() {
-  if (confirm("ඔබට Logout වීමට අවශ්‍යද?")) {
+  const confirmFull = confirm("⚠️ අවධානයට:\n\nඔබට මෙම පරිගණකය හෝටල් ගිණුමෙන් සම්පූර්ණයෙන්ම ඉවත් කර (Sign Out) වීමට අවශ්‍යද?\n\n(සාමාන්‍ය Cashier මාරුවකට හෝ තාවකාලිකව වැසීමට නම් 'Cancel' ඔබා Lock Terminal භාවිත කරන්න)");
+  
+  if (confirmFull) {
     clearAllFirebaseStreams();
-    Payroll.stopKioskCameraStream();
+    if (Payroll && Payroll.stopKioskCameraStream) {
+      Payroll.stopKioskCameraStream();
+    }
+    
+    localStorage.removeItem("pairedHotelTenantId");
+    localStorage.removeItem("pairedHotelName");
+    localStorage.removeItem("terminal_auth_email");
+    localStorage.removeItem("terminal_auth_password");
+
     signOut(authInstance).catch(() => {
       window.location.reload();
     });
   }
 };
 
-// 🔒 5-YEAR ZERO-LAG BOUNDED REALTIME DATA LISTENERS
+// 🔒 BOUNDED REALTIME DATA LISTENERS
 function initializeRealtimeDataStreams(tenantId) {
   clearAllFirebaseStreams();
   const basePath = `tenants/${tenantId}`;
@@ -862,6 +941,7 @@ function initializeRealtimeDataStreams(tenantId) {
     if (snapshot.exists()) {
       erpState.settings = Object.assign({ 
         shiftHours: 8.0, 
+        paperWidth: "80mm",
         silentPrintEnabled: true, 
         inventoryMode: "recipe", 
         loyaltyEnabled: true, 
@@ -1257,6 +1337,13 @@ export function switchView(viewName) {
 
   if (viewName === "settings") {
     loadInstalledPrintersToUI();
+    // 🌐 Update local server IP badge in UI
+    if (window.electronAPI && window.electronAPI.getLocalServerInfo) {
+      window.electronAPI.getLocalServerInfo().then(info => {
+        const badge = document.getElementById("lanServerIpDisplay");
+        if (badge) badge.innerText = info.serverUrl;
+      }).catch(() => {});
+    }
   }
 
   const sidebarElem = document.getElementById("sidebar");
@@ -1279,6 +1366,9 @@ function startLiveClockWidget() {
 }
 
 function syncSettingsUI() {
+  const setPaper = document.getElementById("setPaperWidth");
+  if (setPaper) setPaper.value = erpState.settings?.paperWidth || "80mm";
+
   const setSc = document.getElementById("setScEnabled");
   const setScRate = document.getElementById("setScRate");
   const setVat = document.getElementById("setVatEnabled");
@@ -1327,6 +1417,51 @@ function syncSettingsUI() {
       if (billCb) billCb.checked = !!p.bill;
       if (kotCb) kotCb.checked = !!p.kot;
     }
+  });
+}
+
+// ==========================================================================
+// 📡 LOCAL LAN OFFLINE AUTO-PRINT & KDS LISTENER (NO-INTERNET MOBILE ORDERS)
+// ==========================================================================
+if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
+  window.electronAPI.onLanOrderReceived((orderData) => {
+    console.log("📥 [LAN] Local Offline Order received from Mobile:", orderData);
+
+    // 1. Alert Sound & Show Live Notification
+    triggerAudioAlert("newOrder");
+    showLiveToast(
+      "📱 Mobile Order (Offline Wi-Fi)",
+      `Table ${orderData.tableNo || 'N/A'} සඳහා ඇණවුමක් ලැබුණි. KOT/BOT Print වෙමින් පවතී...`,
+      "kitchen",
+      "fa-print"
+    );
+
+    // 2. Add Order to KDS (Kitchen Display System)
+    const tempOrderId = "lan_" + Date.now();
+    const formattedOrder = {
+      ...orderData,
+      timestamp: orderData.timestamp || new Date().toISOString(),
+      status: "Cooking",
+      isPrinted: false
+    };
+
+    if (!erpState.kitchenOrders) erpState.kitchenOrders = {};
+    erpState.kitchenOrders[tempOrderId] = formattedOrder;
+    KDS.renderKDSOrdersGrid();
+
+    // 3. Mark Table Occupied in Floor Plan
+    if (orderData.tableNo) {
+      const matchedTable = Object.values(erpState.tables || {}).find(
+        t => String(t.tableNo) === String(orderData.tableNo) || parseInt(t.tableNo, 10) === parseInt(orderData.tableNo, 10)
+      );
+      if (matchedTable) {
+        matchedTable.status = "Occupied";
+        Tables.renderTablesFloorGrid();
+      }
+    }
+
+    // 4. 🔥 AUTO-PRINT KOT & BOT DIRECTLY TO PHYSICAL PRINTERS!
+    POS.handleIncomingCloudPrint(tempOrderId, formattedOrder);
   });
 }
 
@@ -1436,6 +1571,7 @@ window.submitKioskAttendance = Payroll.submitKioskAttendance;
 window.switchEmployeeSubTab = Payroll.switchEmployeeSubTab;
 window.openEmployeeModal = Payroll.openEmployeeModal;
 window.closeEmployeeModal = Payroll.closeEmployeeModal;
+window.handleEmployeeSubmit = Payroll.handleEmployeeSubmit;
 window.deleteEmployee = Payroll.deleteEmployee;
 window.openStaffLoginModal = Payroll.openStaffLoginModal;
 window.closeStaffLoginModal = Payroll.closeStaffLoginModal;
