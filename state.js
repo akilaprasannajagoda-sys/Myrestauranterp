@@ -37,6 +37,7 @@ export const erpState = {
     cslEnabled: false,
     cslRate: 2.5,
     shiftHours: 8.0,
+    paperWidth: "80mm", // 🛡️ Default Thermal Paper Width
     inventoryMode: "recipe", // "recipe" (Auto-deduct by Recipe) හෝ "issue" (Daily Store Issue)
     loyaltyEnabled: true,
     loyaltyRate: 100, // Rs. 100 spent = 1 Loyalty Point
@@ -59,6 +60,17 @@ export let activeSupplierLedgerId = null;
 // Attendance Kiosk Camera State
 export let kioskCameraStream = null;
 export let todayLiveScans = [];
+
+// 🛡️ CENTRAL SINGLE OFFLINE DATABASE INSTANCE (PREVENTS DB LOCK CONFLICTS)
+export let sharedOfflineDB = null;
+if (typeof Dexie !== 'undefined') {
+  sharedOfflineDB = new Dexie("RestaurantERP_OfflineDB");
+  sharedOfflineDB.version(1).stores({
+    offlineInvoices: '++id, invoiceNumber, createdAt, synced',
+    offlinePettyCash: '++id, timestamp, synced',
+    offlineAttendance: '++id, date, synced'
+  });
+}
 
 // Safe State Mutators
 export function setCurrentTenant(val) {
