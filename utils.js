@@ -1,5 +1,6 @@
 // ==========================================================================
 // MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP, HASHING & HELPERS)
+// 🛡️ XSS & SPECIAL CHARACTER ESCAPING IMMUNE ARCHITECTURE
 // ==========================================================================
 
 import { erpState } from './state.js';
@@ -61,7 +62,18 @@ export function triggerAudioAlert(soundType = "info") {
   }
 }
 
-// 2. HIGH-VISIBILITY FLOATING TOAST NOTIFICATION
+// 🛡️ 2. SANITIZATION / HTML ESCAPING HELPER (PREVENTS NOTE DISAPPEARANCE & XSS)
+export function escapeHTML(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// 3. HIGH-VISIBILITY FLOATING TOAST NOTIFICATION
 export function showLiveToast(titleText, msgText, alertType = "info", iconClass = "fa-bell") {
   triggerAudioAlert(alertType);
   
@@ -95,11 +107,11 @@ export function showLiveToast(titleText, msgText, alertType = "info", iconClass 
   toastElem.innerHTML = `
     <div class="flex items-center gap-3">
       <div class="w-9 h-9 rounded-xl bg-black bg-opacity-20 flex items-center justify-center text-base font-bold flex-shrink-0">
-        <i class="fa-solid ${iconClass}"></i>
+        <i class="fa-solid ${escapeHTML(iconClass)}"></i>
       </div>
       <div>
-        <h5 class="font-black text-sm leading-tight">${titleText}</h5>
-        <p class="text-xs mt-0.5 font-medium leading-snug opacity-95">${msgText}</p>
+        <h5 class="font-black text-sm leading-tight">${escapeHTML(titleText)}</h5>
+        <p class="text-xs mt-0.5 font-medium leading-snug opacity-95">${escapeHTML(msgText)}</p>
       </div>
     </div>
     <button onclick="this.parentElement.remove()" class="text-white opacity-70 hover:opacity-100 p-1 text-sm ml-3 cursor-pointer">
@@ -118,7 +130,7 @@ export function showLiveToast(titleText, msgText, alertType = "info", iconClass 
   }, 4500);
 }
 
-// 3. NOTIFICATION DRAWER
+// 4. NOTIFICATION DRAWER
 export function toggleNotificationPanel() {
   const panel = document.getElementById("notifPanel");
   if (!panel) return;
@@ -149,14 +161,14 @@ export function updateNotificationCenterUI() {
     row.className = "p-3 hover:bg-gray-50 flex items-start gap-2.5 transition";
     row.innerHTML = `
       <div class="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-        <i class="fa-solid fa-item.icon"></i>
+        <i class="fa-solid ${escapeHTML(item.icon || 'fa-bell')}"></i>
       </div>
       <div class="flex-1">
         <div class="flex justify-between items-center">
-          <h6 class="font-bold text-gray-800 text-xs">${item.title}</h6>
-          <span class="text-[9px] text-gray-400">${item.time}</span>
+          <h6 class="font-bold text-gray-800 text-xs">${escapeHTML(item.title)}</h6>
+          <span class="text-[9px] text-gray-400">${escapeHTML(item.time)}</span>
         </div>
-        <p class="text-[11px] text-gray-500 mt-0.5">${item.message}</p>
+        <p class="text-[11px] text-gray-500 mt-0.5">${escapeHTML(item.message)}</p>
       </div>
     `;
     listElem.appendChild(row);
@@ -174,7 +186,7 @@ export function manualPurgeSystemMemory() {
   showLiveToast("🧹 RAM & Cache Cleaned", "පද්ධතියේ තාවකාලික මතකය (Cache) සාර්ථකව පිරිසිදු කරන ලදී.", "success", "fa-broom");
 }
 
-// 4. ACCURATE SINHALA UTF-8 BOM CSV EXPORT HELPER
+// 5. ACCURATE SINHALA UTF-8 BOM CSV EXPORT HELPER
 export function downloadCSVFile(csvContent, filename) {
   const BOM = "\uFEFF";
   const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
@@ -186,7 +198,7 @@ export function downloadCSVFile(csvContent, filename) {
   showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
 }
 
-// 5. DEBOUNCE HELPER
+// 6. DEBOUNCE HELPER
 export function debounce(func, wait = 250) {
   let timeout;
   return function executedFunction(...args) {
@@ -199,7 +211,7 @@ export function debounce(func, wait = 250) {
   };
 }
 
-// 6. DATE FORMATTING UTILITIES (SRI LANKA LOCAL TIME SAFE)
+// 7. DATE FORMATTING UTILITIES (SRI LANKA LOCAL TIME SAFE)
 export function getLocalDateString(d = new Date()) {
   const dateObj = typeof d === "string" ? new Date(d) : d;
   if (isNaN(dateObj.getTime())) return new Date().toISOString().split("T")[0];
@@ -219,7 +231,7 @@ export function formatCurrency(amount = 0) {
   return `Rs. ${num.toFixed(2)}`;
 }
 
-// 7. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
+// 8. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
 export function showCustomInputModal(titleText, placeholderText = "", defaultValue = "") {
   return new Promise((resolve) => {
     const existing = document.getElementById("globalCustomPromptModal");
@@ -234,10 +246,10 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
           <i class="fa-brands fa-whatsapp"></i>
         </div>
         <div>
-          <h4 class="font-black text-base text-gray-800">${titleText}</h4>
+          <h4 class="font-black text-base text-gray-800">${escapeHTML(titleText)}</h4>
           <p class="text-[11px] text-gray-400 mt-0.5">පාරිභෝගිකයාගේ WhatsApp අංකය ඇතුළත් කරන්න</p>
         </div>
-        <input type="text" id="customPromptInputField" value="${defaultValue}" placeholder="${placeholderText}" class="w-full p-3 border-2 border-green-400 rounded-2xl text-center text-base font-bold outline-none bg-green-50/40 text-gray-800 focus:bg-white focus:border-green-600 transition">
+        <input type="text" id="customPromptInputField" value="${escapeHTML(defaultValue)}" placeholder="${escapeHTML(placeholderText)}" class="w-full p-3 border-2 border-green-400 rounded-2xl text-center text-base font-bold outline-none bg-green-50/40 text-gray-800 focus:bg-white focus:border-green-600 transition">
         <div class="flex justify-end gap-2 pt-2 text-xs font-bold border-t border-gray-100">
           <button type="button" id="customPromptCancelBtn" class="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition cursor-pointer">Cancel</button>
           <button type="button" id="customPromptOkBtn" class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md transition cursor-pointer">OK (Send)</button>
@@ -268,7 +280,7 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
   });
 }
 
-// 8. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE
+// 9. DIRECT WHATSAPP DESKTOP RECEIPT ENGINE
 export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restaurant ERP", inputPhone = null) {
   let rawPhone = inputPhone;
   
@@ -377,7 +389,7 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   showLiveToast("📱 WhatsApp Bill Ready", `Invoice #${invoiceData.invoiceNumber} WhatsApp වෙත යවන ලදී.`, "success", "fa-brands fa-whatsapp");
 }
 
-// 🔒 9. CRYPTOGRAPHIC PIN HASHING & VERIFICATION ENGINE (SHA-256)
+// 🔒 10. CRYPTOGRAPHIC PIN HASHING & VERIFICATION ENGINE (SHA-256)
 export async function hashPin(pin) {
   if (!pin) return "";
   const str = String(pin).trim();
@@ -402,7 +414,8 @@ export async function verifyPin(enteredPin, storedHashOrPlain) {
   return enteredClean === storedClean;
 }
 
-// Global Window Assignments
+// 🛡️ Global Window Assignments (අනෙක් ඕනෑම file එකකදී කෙලින්ම escapeHTML භාවිත කළ හැකි වන සේ)
+window.escapeHTML = escapeHTML;
 window.triggerAudioAlert = triggerAudioAlert;
 window.showLiveToast = showLiveToast;
 window.toggleNotificationPanel = toggleNotificationPanel;
