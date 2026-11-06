@@ -2,10 +2,14 @@ const { app, BrowserWindow, ipcMain, dialog, screen, shell } = require('electron
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const os = require('os');
 
 let mainWindow = null;
 let customerWindow = null;
 let printWorkerWindow = null;
+let localHttpServer = null;
+const LOCAL_SERVER_PORT = 8085;
 
 // 🛡️ 1. GLOBAL CRASH-PROOF EXCEPTION HANDLERS
 process.on('uncaughtException', (error) => {
@@ -15,6 +19,109 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error("CRITICAL: Unhandled Promise Rejection at:", promise, "reason:", reason);
 });
+
+// 🌐 1.1 HELPER: GET LOCAL WI-FI / ETHERNET IP ADDRESS (ROUTER LOCAL IP)
+function getLocalIpAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const ifaceName in interfaces) {
+    for (const iface of interfaces[ifaceName]) {
+      // IPv4 ලිපිනයක් සහ internal (127.0.0.1) නොවන සැබෑ LAN IP එක තෝරාගැනීම
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+// 📡 1.2 OFFLINE LOCAL LAN HTTP PRINT SERVER (MOBILE APK DIRECT COMMUNICATION)
+function startLocalLanPrintServer() {
+  if (localHttpServer) return;
+
+  try {
+    localHttpServer = http.createServer((req, res) => {
+      // 🛡️ Full CORS Headers (Android APK එකෙන් කෙලින්ම Data Fetch කළ හැකි වන සේ)
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      // Preflight OPTIONS Request handling
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const url = req.url || '';
+
+      // Health Check / Connection Test Endpoint (Mobile App එකට Server එක On ද බැලීමට)
+      if (req.method === 'GET' && (url === '/' || url === '/api/status' || url === '/api/info')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'online',
+          app: 'Restaurant ERP LAN Print Server',
+          localIp: getLocalIpAddress(),
+          port: LOCAL_SERVER_PORT,
+          timestamp: new Date().toISOString()
+        }));
+        return;
+      }
+
+      // 📥 Direct KOT/BOT Order Receiving Endpoint from Mobile Waiter APK
+      if (req.method === 'POST' && (url === '/api/order' || url === '/api/kot')) {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+
+        req.on('end', () => {
+          try {
+            const orderData = JSON.parse(body);
+            if (!orderData || !orderData.items || !Array.isArray(orderData.items)) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Invalid order items payload' }));
+              return;
+            }
+
+            console.log(`📥 [LAN Server] Offline Order Received from Mobile for Table: ${orderData.tableNo || 'N/A'}`);
+
+            // ⚡ Main Window එකට දත්ත යවා KOT/BOT Auto-Print කිරීම සහ තිරයේ යාවත්කාලීන කිරීම
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('lan-order-received', orderData);
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Order successfully received via Local Wi-Fi and sent to printer',
+              tableNo: orderData.tableNo || 'N/A',
+              timestamp: new Date().toISOString()
+            }));
+          } catch (err) {
+            console.error("Local Order Parsing Error:", err.message);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // Not found for unknown routes
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Endpoint not found' }));
+    });
+
+    localHttpServer.listen(LOCAL_SERVER_PORT, '0.0.0.0', () => {
+      console.log(`📡 Local LAN Offline Print Server Running: http://${getLocalIpAddress()}:${LOCAL_SERVER_PORT}`);
+    });
+
+    localHttpServer.on('error', (err) => {
+      console.error("Local LAN Server Error:", err.message);
+    });
+  } catch (err) {
+    console.error("Failed to start Local LAN Server:", err.message);
+  }
+}
 
 // 🔒 2. SINGLE INSTANCE LOCK
 const gotTheLock = app.requestSingleInstanceLock();
@@ -32,6 +139,7 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createWindow();
     initPrintWorkerWindow();
+    startLocalLanPrintServer(); // 👈 Start LAN Offline Server on startup
     setTimeout(() => {
       createOrUpdateCustomerDisplay();
     }, 1500);
@@ -153,6 +261,27 @@ function createWindow() {
       event.preventDefault();
     }
   });
+
+  // 🛡️ CASHIER ACCIDENTAL CLOSE GUARD (අත්වැරදීමකින් මෘදුකාංගය වැසීම වැළැක්වීම)
+  mainWindow.on('close', (e) => {
+    if (!app.isQuitting) {
+      const choice = dialog.showMessageBoxSync(mainWindow, {
+        type: 'warning',
+        buttons: ['ඔව්, ඉවත් වන්න (Exit)', 'නැත, කවුන්ටරයේ රැඳෙන්න (Cancel)'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Restaurant ERP තහවුරු කිරීම',
+        message: 'ඔබට මෙම කවුන්ටර මෘදුකාංගයෙන් ඉවත් වීමට අවශ්‍යද?',
+        detail: 'විවෘත බිල්පත් හෝ සක්‍රීය Shift එකක් ඇත්නම් කරුණාකර පළමුව පරීක්ෂා කරන්න.'
+      });
+
+      if (choice === 1) {
+        e.preventDefault();
+      } else {
+        app.isQuitting = true;
+      }
+    }
+  });
   
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -163,6 +292,10 @@ function createWindow() {
     if (printWorkerWindow && !printWorkerWindow.isDestroyed()) {
       printWorkerWindow.destroy();
       printWorkerWindow = null;
+    }
+    if (localHttpServer) {
+      try { localHttpServer.close(); } catch (e) {}
+      localHttpServer = null;
     }
   });
   
@@ -214,7 +347,7 @@ ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   }
 });
 
-// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (WITH ABSOLUTE OS FOCUS RESTORE)
+// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (WITH DUAL 80MM & 58MM ADAPTATION)
 let lastPrintTimestamp = 0;
 let lastPrintedContentHash = "";
 
@@ -247,7 +380,7 @@ ipcMain.handle('print-silent', async (event, printArgs) => {
   });
 });
 
-async function executeSinglePrintTask({ printerName, htmlContent }) {
+async function executeSinglePrintTask({ printerName, htmlContent, paperWidth = "80mm" }) {
   return new Promise(async (resolve) => {
     let isFinished = false;
 
@@ -303,6 +436,14 @@ async function executeSinglePrintTask({ printerName, htmlContent }) {
       
       const pWin = initPrintWorkerWindow();
       
+      // 🛡️ DUAL PAPER WIDTH DYNAMIC CONFIGURATION (80mm vs 58mm)
+      const is58mm = (paperWidth === "58mm");
+      const pageSize = is58mm ? "58mm auto" : "80mm auto";
+      const bodyWidth = is58mm ? "48mm" : "68mm";
+      const baseFontSize = is58mm ? "9.5px" : "11px";
+      const lineHeight = is58mm ? "1.25" : "1.35";
+      const truncateMax = is58mm ? "24mm" : "40mm";
+
       const fullPrintHtml = `
         <!DOCTYPE html>
         <html lang="si">
@@ -311,7 +452,7 @@ async function executeSinglePrintTask({ printerName, htmlContent }) {
           <style>
             @page { 
               margin: 0 !important; 
-              size: 80mm auto !important; 
+              size: ${pageSize} !important; 
             }
             *, *::before, *::after {
               box-sizing: border-box !important;
@@ -320,15 +461,15 @@ async function executeSinglePrintTask({ printerName, htmlContent }) {
               padding: 0;
             }
             html, body {
-              width: 68mm !important;
-              max-width: 68mm !important;
+              width: ${bodyWidth} !important;
+              max-width: ${bodyWidth} !important;
               margin: 0 !important;
-              padding: 1mm 1mm 3mm 1mm !important;
-              font-family: 'Courier New', Courier, monospace, sans-serif !important;
-              font-size: 11px !important;
-              line-height: 1.35 !important;
-              color: #000 !important;
-              background: #fff !important;
+              padding: 0.5mm 1mm 2mm 1mm !important;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Courier New", Courier, monospace, sans-serif !important;
+              font-size: ${baseFontSize} !important;
+              line-height: ${lineHeight} !important;
+              color: #000000 !important;
+              background: #ffffff !important;
               text-align: left !important;
               visibility: visible !important;
               overflow: visible !important;
@@ -337,7 +478,7 @@ async function executeSinglePrintTask({ printerName, htmlContent }) {
             }
             div, p, span, h2, h3, h4, table, tr, td {
               visibility: visible !important;
-              color: #000 !important;
+              color: #000000 !important;
             }
             .text-center { text-align: center !important; }
             .text-right { text-align: right !important; }
@@ -355,26 +496,27 @@ async function executeSinglePrintTask({ printerName, htmlContent }) {
             .space-y-0\\.5 > * + * { margin-top: 2px !important; }
             .space-y-1 > * + * { margin-top: 3px !important; }
             .space-y-1\\.5 > * + * { margin-top: 4px !important; }
-            .border-b { border-bottom: 1px dashed #000 !important; padding-bottom: 3px !important; margin-bottom: 3px !important; }
-            .border-b-2 { border-bottom: 2px dashed #000 !important; padding-bottom: 4px !important; margin-bottom: 4px !important; }
-            .border-t { border-top: 1px dashed #000 !important; padding-top: 3px !important; margin-top: 3px !important; }
+            .border-b { border-bottom: 1px dashed #000000 !important; padding-bottom: 2px !important; margin-bottom: 2px !important; }
+            .border-b-2 { border-bottom: 2px solid #000000 !important; padding-bottom: 3px !important; margin-bottom: 3px !important; }
+            .border-t { border-top: 1px dashed #000000 !important; padding-top: 2px !important; margin-top: 2px !important; }
+            .border-t-2 { border-top: 2px solid #000000 !important; padding-top: 3px !important; margin-top: 3px !important; }
             .truncate { 
               overflow: hidden !important; 
               text-overflow: ellipsis !important; 
               white-space: nowrap !important; 
-              max-width: 40mm !important; 
+              max-width: ${truncateMax} !important; 
             }
-            .w-12 { width: 12mm !important; }
-            .w-32 { width: 30mm !important; }
-            .w-36 { width: 34mm !important; }
-            .w-44 { width: 40mm !important; }
+            .w-12 { width: ${is58mm ? '8mm' : '12mm'} !important; }
+            .w-32 { width: ${is58mm ? '20mm' : '30mm'} !important; }
+            .w-36 { width: ${is58mm ? '24mm' : '34mm'} !important; }
+            .w-44 { width: ${is58mm ? '28mm' : '40mm'} !important; }
             .w-1\\/2, .w-1-2 { width: 48% !important; display: inline-block !important; }
             .w-1\\/4, .w-1-4 { width: 26% !important; display: inline-block !important; text-align: right !important; }
             .w-3\\/4, .w-3-4 { width: 72% !important; display: inline-block !important; }
           </style>
         </head>
         <body>
-          <div style="width: 68mm; max-width: 68mm; margin: 0; text-align: left;">
+          <div style="width: ${bodyWidth}; max-width: ${bodyWidth}; margin: 0; text-align: left;">
             ${htmlContent}
           </div>
         </body>
@@ -413,6 +555,15 @@ async function executeSinglePrintTask({ printerName, htmlContent }) {
 ipcMain.handle('get-printers', async () => {
   if (!mainWindow) return [];
   return await mainWindow.webContents.getPrintersAsync();
+});
+
+// 🌐 7. LOCAL SERVER INFO IPC FOR FRONTEND SETTINGS
+ipcMain.handle('get-local-server-info', async () => {
+  return {
+    localIp: getLocalIpAddress(),
+    port: LOCAL_SERVER_PORT,
+    serverUrl: `http://${getLocalIpAddress()}:${LOCAL_SERVER_PORT}`
+  };
 });
 
 ipcMain.handle('open-whatsapp-direct', async (event, { phone, text }) => {
