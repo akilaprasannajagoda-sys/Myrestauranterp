@@ -23,9 +23,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: 📦 Install dependencies & Build Vendor
-        run: |
-          npm install
+      - name: 📦 Install dependencies
+        run: npm install
 
       - name: 🚀 Build and Publish Electron App (.exe)
         env:
@@ -34,7 +33,7 @@ jobs:
 
   # 🤖 2. BUILD ANDROID APK & ATTACH TO SAME RELEASE
   build-android:
-    needs: build-windows # 👈 Windows .exe එක හැදී Release එක හැදෙන තුරු රැඳී සිටියි
+    needs: build-windows
     runs-on: ubuntu-latest
 
     steps:
@@ -87,10 +86,11 @@ jobs:
           name: Restaurant-ERP-Android-APK
           path: "Restaurant-ERP-POS-${{ env.APP_VERSION }}.apk"
 
-      - name: 🌟 Auto-Attach APK to the Windows GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.APP_VERSION }}
-          files: "Restaurant-ERP-POS-${{ env.APP_VERSION }}.apk"
+      - name: 🌟 Attach APK to Release & Auto-Publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Uploading APK to release v${{ env.APP_VERSION }}..."
+          gh release upload "v${{ env.APP_VERSION }}" "Restaurant-ERP-POS-${{ env.APP_VERSION }}.apk" --clobber
+          echo "Publishing release..."
+          gh release edit "v${{ env.APP_VERSION }}" --draft=false --latest
