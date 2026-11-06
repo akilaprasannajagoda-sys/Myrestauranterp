@@ -2,6 +2,7 @@
 // MODULE 04: TABLE & FLOOR PLAN MANAGEMENT ENGINE (100% UNFREEZE & REAL-TIME)
 // 🎨 ARCHITECTURAL RESTAURANT FLOOR PLAN ENGINE (EXACT CLIENT PHOTO REPLICA)
 // 100% COMPATIBLE WITH EXISTING POS, BILLING & REALTIME FIREBASE LOGIC
+// 📐 SCALED UP TO FILL SCREEN BEAUTIFULLY (+35% LARGER TOUCH TARGETS)
 // ==========================================================================
 
 import { erpState, currentTenant, currentAreaFilter, setCurrentAreaFilter, setActiveBillId } from './state.js';
@@ -243,7 +244,7 @@ export async function handleTableSubmit(e) {
 }
 
 // ==========================================================================
-// 3. ARCHITECTURAL FLOOR PLAN GRID (EXACT SAMBAPOS REPLICA: TABLES 01 - 36)
+// 3. ARCHITECTURAL FLOOR PLAN GRID (SCALED UP TO FILL SCREEN PROPORTIONS)
 // ==========================================================================
 
 export function renderTablesFloorGrid() {
@@ -285,12 +286,10 @@ export function renderTablesFloorGrid() {
     return tableData.status === "Occupied" || hasActiveOrders;
   }
 
-  // 🪑 SVG CHAIR & TABLE RENDERERS (BLUEPRINT ARCHITECTURAL VECTOR STYLE)
+  // 🪑 SCALED-UP VECTOR BLUEPRINT TABLES (+35% BIGGER FOR POS TOUCH SCREENS)
   function renderTableElement(numStr, type = "cross-4") {
     const tData = getTableData(numStr);
     const occupied = isTableOccupied(tData);
-
-    // Filter by Area if active (dims non-matching areas without breaking floor layout)
     const matchesArea = (currentAreaFilter === "ALL" || (tData.area && tData.area === currentAreaFilter));
 
     const wrap = document.createElement("div");
@@ -308,87 +307,66 @@ export function renderTablesFloorGrid() {
 
     let svgContent = "";
 
-    // 1. Vertical 2-Seater Booth (Tables 01-12, 17-20)
+    // 1. Vertical 2-Seater Booth (Scaled: 62x86)
     if (type === "vertical-2") {
       svgContent = `
-        <svg width="48" height="66" viewBox="0 0 48 66" class="drop-shadow-xs">
-          <!-- Top Chair -->
-          <path d="M12,12 C12,4 36,4 36,12 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Table Surface -->
-          <rect x="6" y="14" width="36" height="38" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <!-- Bottom Chair -->
-          <path d="M12,54 C12,62 36,62 36,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Table Number -->
-          <text x="24" y="38" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        <svg width="62" height="86" viewBox="0 0 48 66" class="drop-shadow-sm">
+          <path d="M12,12 C12,4 36,4 36,12 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <rect x="6" y="14" width="36" height="38" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.5" />
+          <path d="M12,54 C12,62 36,62 36,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <text x="24" y="38" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
         </svg>
       `;
     }
-    // 2. Horizontal 2-Seater (Table 13)
+    // 2. Horizontal 2-Seater (Table 13: 88x60)
     else if (type === "horizontal-2") {
       svgContent = `
-        <svg width="68" height="46" viewBox="0 0 68 46" class="drop-shadow-xs">
-          <!-- Left Chair -->
-          <path d="M14,11 C6,11 6,35 14,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Table Surface -->
-          <rect x="16" y="7" width="36" height="32" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <!-- Right Chair -->
-          <path d="M54,11 C62,11 62,35 54,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Table Number -->
-          <text x="34" y="28" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        <svg width="88" height="60" viewBox="0 0 68 46" class="drop-shadow-sm">
+          <path d="M14,11 C6,11 6,35 14,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <rect x="16" y="7" width="36" height="32" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.5" />
+          <path d="M54,11 C62,11 62,35 54,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <text x="34" y="28" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
         </svg>
       `;
     }
-    // 3. Large Vertical Family Table (Table 14 - 6 Seats)
+    // 3. Large Vertical Family Table (Table 14: 86x114)
     else if (type === "rect-large") {
       svgContent = `
-        <svg width="66" height="88" viewBox="0 0 66 88" class="drop-shadow-xs">
-          <!-- Left Chairs -->
-          <path d="M14,16 C6,16 6,34 14,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <path d="M14,54 C6,54 6,72 14,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Table Surface -->
-          <rect x="16" y="8" width="34" height="72" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <!-- Right Chairs -->
-          <path d="M52,16 C60,16 60,34 52,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <path d="M52,54 C60,54 60,72 52,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Table Number -->
-          <text x="33" y="49" font-size="16" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        <svg width="86" height="114" viewBox="0 0 66 88" class="drop-shadow-sm">
+          <path d="M14,16 C6,16 6,34 14,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <path d="M14,54 C6,54 6,72 14,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <rect x="16" y="8" width="34" height="72" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.5" />
+          <path d="M52,16 C60,16 60,34 52,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <path d="M52,54 C60,54 60,72 52,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <text x="33" y="49" font-size="17" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
         </svg>
       `;
     }
-    // 4. Round Table with 6 Circular Chairs (Table 16)
+    // 4. Round 6-Seater Table (Table 16: 100x100)
     else if (type === "round-6") {
       svgContent = `
-        <svg width="76" height="76" viewBox="0 0 76 76" class="drop-shadow-xs">
-          <!-- 6 Radial Circular Chairs -->
-          <circle cx="38" cy="8" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <circle cx="64" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <circle cx="64" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <circle cx="38" cy="68" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <circle cx="12" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <circle cx="12" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Center Round Table Surface -->
-          <circle cx="38" cy="38" r="22" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <!-- Table Number -->
-          <text x="38" y="44" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        <svg width="100" height="100" viewBox="0 0 76 76" class="drop-shadow-sm">
+          <circle cx="38" cy="8" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <circle cx="64" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <circle cx="64" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <circle cx="38" cy="68" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <circle cx="12" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <circle cx="12" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <circle cx="38" cy="38" r="22" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.5" />
+          <text x="38" y="44" font-size="16" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
         </svg>
       `;
     }
-    // 5. Cross 4-Seater Square Tables (Tables 21-28, 29, 30, 31-36)
+    // 5. Cross 4-Seater Square Tables (Scaled: 88x88)
     else {
       svgContent = `
-        <svg width="68" height="68" viewBox="0 0 68 68" class="drop-shadow-xs">
-          <!-- Top Chair -->
-          <path d="M22,14 C22,5 46,5 46,14 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Bottom Chair -->
-          <path d="M22,54 C22,63 46,63 46,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Left Chair -->
-          <path d="M14,22 C5,22 5,46 14,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Right Chair -->
-          <path d="M54,22 C63,22 63,46 54,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
-          <!-- Center Square Table Surface -->
-          <rect x="16" y="16" width="36" height="36" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <!-- Table Number -->
-          <text x="34" y="40" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        <svg width="88" height="88" viewBox="0 0 68 68" class="drop-shadow-sm">
+          <path d="M22,14 C22,5 46,5 46,14 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <path d="M22,54 C22,63 46,63 46,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <path d="M14,22 C5,22 5,46 14,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <path d="M54,22 C63,22 63,46 54,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
+          <rect x="16" y="16" width="36" height="36" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.5" />
+          <text x="34" y="40" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
         </svg>
       `;
     }
@@ -397,15 +375,15 @@ export function renderTablesFloorGrid() {
       ${svgContent}
       ${
         occupied
-          ? `<span class="absolute -top-1 -right-1 flex h-3 w-3">
+          ? `<span class="absolute -top-1 -right-1 flex h-3.5 w-3.5">
                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-               <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+               <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-600"></span>
              </span>`
           : ''
       }
       ${
         tData.assignedWaiter
-          ? `<span class="text-[9px] font-bold text-gray-500 truncate max-w-[60px] block mt-0.5" title="${tData.assignedWaiter}">${tData.assignedWaiter}</span>`
+          ? `<span class="text-[10px] font-black text-gray-600 truncate max-w-[75px] block mt-1 bg-white/80 px-1.5 py-0.2 rounded border border-gray-200 shadow-2xs" title="${tData.assignedWaiter}">${tData.assignedWaiter}</span>`
           : ''
       }
     `;
@@ -413,22 +391,22 @@ export function renderTablesFloorGrid() {
     return wrap;
   }
 
-  // 🏗️ BUILD THE ARCHITECTURAL FLOOR PLAN CONTAINER
+  // 🏗️ BUILD EXPANDED CONTAINER THAT FILLS THE SCREEN WIDTH
   const floorPlanWrapper = document.createElement("div");
-  floorPlanWrapper.className = "w-full bg-slate-50 border-2 border-slate-300 rounded-3xl p-6 sm:p-8 shadow-inner overflow-x-auto min-w-[960px]";
+  floorPlanWrapper.className = "w-full bg-slate-50 border-2 border-slate-300 rounded-3xl p-6 sm:p-8 shadow-inner overflow-x-auto";
 
   floorPlanWrapper.innerHTML = `
-    <!-- ARCHITECTURAL FLOOR PLAN GRID MATCHING SAMBAPOS PHOTO -->
-    <div class="flex items-start justify-between gap-6">
+    <!-- SCALED FLOOR PLAN GRID (SCREEN FILLING PROPORTIONS) -->
+    <div class="flex items-start justify-between gap-8 lg:gap-12 min-w-[1080px]">
 
       <!-- ================= SECTION 1: LEFT BOOTHS & SPECIAL TABLES ================= -->
-      <div class="flex flex-col gap-6">
+      <div class="flex flex-col gap-8">
         
-        <!-- TOP SECTION: 01-06 (3 Columns) and 17-20 (2 Columns) -->
-        <div class="flex items-start gap-6">
+        <!-- TOP SECTION: 01-06 (3 Cols) and 17-20 (2 Cols) -->
+        <div class="flex items-start gap-8">
           
           <!-- Columns 01, 02, 03 & 04, 05, 06 -->
-          <div class="grid grid-cols-3 gap-3">
+          <div class="grid grid-cols-3 gap-x-5 gap-y-6">
             <div id="tp-01"></div>
             <div id="tp-02"></div>
             <div id="tp-03"></div>
@@ -438,7 +416,7 @@ export function renderTablesFloorGrid() {
           </div>
 
           <!-- Columns 17, 18 & 19, 20 -->
-          <div class="grid grid-cols-2 gap-3 pl-2">
+          <div class="grid grid-cols-2 gap-x-5 gap-y-6 pl-2">
             <div id="tp-17"></div>
             <div id="tp-18"></div>
             <div id="tp-19"></div>
@@ -447,11 +425,11 @@ export function renderTablesFloorGrid() {
 
         </div>
 
-        <!-- BOTTOM SECTION: 07-12 (3 Columns), 13/14, and 16 (Round) -->
-        <div class="flex items-end gap-6 pt-3 border-t-2 border-dashed border-slate-200">
+        <!-- BOTTOM SECTION: 07-12 (3 Cols), 13/14, and 16 (Round) -->
+        <div class="flex items-end gap-8 pt-6 border-t-2 border-dashed border-slate-200">
           
           <!-- Columns 07, 08, 09 & 10, 11, 12 -->
-          <div class="grid grid-cols-3 gap-3">
+          <div class="grid grid-cols-3 gap-x-5 gap-y-6">
             <div id="tp-07"></div>
             <div id="tp-08"></div>
             <div id="tp-09"></div>
@@ -461,13 +439,13 @@ export function renderTablesFloorGrid() {
           </div>
 
           <!-- Tables 13 (Horizontal) & 14 (Family Rect) -->
-          <div class="flex flex-col items-center justify-end gap-3 pl-1">
+          <div class="flex flex-col items-center justify-end gap-4 pl-1">
             <div id="tp-13"></div>
             <div id="tp-14"></div>
           </div>
 
           <!-- Table 16 (Large Round Table) -->
-          <div class="flex items-center justify-center pl-1 pb-2">
+          <div class="flex items-center justify-center pl-2 pb-3">
             <div id="tp-16"></div>
           </div>
 
@@ -475,9 +453,9 @@ export function renderTablesFloorGrid() {
 
       </div>
 
-      <!-- ================= SECTION 2: CENTER DINING HALL (4 x 3 GRID) ================= -->
-      <div class="flex-1 flex flex-col items-center justify-center px-4 border-l-2 border-r-2 border-dashed border-slate-200">
-        <div class="grid grid-cols-4 gap-x-5 gap-y-7">
+      <!-- ================= SECTION 2: CENTER DINING HALL (4 x 3 EXPANDED GRID) ================= -->
+      <div class="flex-1 flex flex-col items-center justify-center px-6 lg:px-10 border-l-2 border-r-2 border-dashed border-slate-200">
+        <div class="grid grid-cols-4 gap-x-7 lg:gap-x-9 gap-y-8 lg:gap-y-10">
           <!-- Row 1: 25, 26, 27, 28 -->
           <div id="tp-25"></div>
           <div id="tp-26"></div>
@@ -499,7 +477,7 @@ export function renderTablesFloorGrid() {
       </div>
 
       <!-- ================= SECTION 3: RIGHT WALL / TERRACE (COLUMN) ================= -->
-      <div class="flex flex-col items-center justify-between gap-5 pl-2">
+      <div class="flex flex-col items-center justify-between gap-8 pl-3">
         <div id="tp-33"></div>
         <div id="tp-34"></div>
         <div id="tp-35"></div>
@@ -510,48 +488,43 @@ export function renderTablesFloorGrid() {
 
     <!-- BOTTOM LEGEND & FLOOR SUMMARY -->
     <div class="mt-8 pt-4 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs font-bold text-slate-500">
-      <div class="flex items-center gap-4">
-        <div class="flex items-center gap-1.5">
-          <span class="w-3.5 h-3.5 bg-white border-2 border-slate-700 rounded-sm"></span>
-          <span>Available (හිස් මේස)</span>
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-4 bg-white border-2 border-slate-700 rounded-sm"></span>
+          <span class="text-xs">Available (හිස් මේස)</span>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span class="w-3.5 h-3.5 bg-red-500 border-2 border-red-700 rounded-sm animate-pulse"></span>
-          <span class="text-red-700 font-extrabold">Occupied (කෑම ඇණවුම් සහිත)</span>
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-4 bg-red-500 border-2 border-red-700 rounded-sm animate-pulse"></span>
+          <span class="text-red-700 font-black text-xs">Occupied (කෑම ඇණවුම් සහිත)</span>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <button type="button" onclick="openMergeTableModal()" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl transition shadow-xs cursor-pointer">
-          <i class="fa-solid fa-object-group text-blue-600 mr-1"></i> Merge Tables
+      <div class="flex items-center gap-4">
+        <button type="button" onclick="openMergeTableModal()" class="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl transition shadow-xs cursor-pointer font-bold text-xs">
+          <i class="fa-solid fa-object-group text-blue-600 mr-1.5"></i> Merge Tables
         </button>
-        <span>Total: 36 Blueprint Tables</span>
+        <span class="font-extrabold text-slate-600">Total: 36 Blueprint Tables</span>
       </div>
     </div>
   `;
 
   container.appendChild(floorPlanWrapper);
 
-  // 🔌 MOUNT EACH TABLE INTO ITS CORRESPONDING BLUEPRINT SLOT
   const mountMap = {
-    // Left Booths Top
     "01": "vertical-2", "02": "vertical-2", "03": "vertical-2",
     "04": "vertical-2", "05": "vertical-2", "06": "vertical-2",
     "17": "vertical-2", "18": "vertical-2",
     "19": "vertical-2", "20": "vertical-2",
 
-    // Left Booths Bottom & Specials
     "07": "vertical-2", "08": "vertical-2", "09": "vertical-2",
     "10": "vertical-2", "11": "vertical-2", "12": "vertical-2",
     "13": "horizontal-2",
     "14": "rect-large",
     "16": "round-6",
 
-    // Center Cross Tables
     "25": "cross-4", "26": "cross-4", "27": "cross-4", "28": "cross-4",
     "21": "cross-4", "22": "cross-4", "23": "cross-4", "24": "cross-4",
     "29": "cross-4", "30": "cross-4", "31": "cross-4", "32": "cross-4",
 
-    // Right Column
     "33": "cross-4", "34": "cross-4", "35": "cross-4", "36": "cross-4"
   };
 
