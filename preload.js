@@ -23,5 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // දෙවන තිරය (customer-display.html) මඟින් සජීවී දත්ත ලබාගැනීම
   onCustomerDisplayUpdate: (callback) => {
     ipcRenderer.on('customer-display-update', (event, data) => callback(data));
-  }
+  },
+  
+  // 📡 Local LAN Offline Printing Bridges (අන්තර්ජාලය නැතිව Print කිරීමට)
+  getLocalServerInfo: () => ipcRenderer.invoke('get-local-server-info'),
+  onLanOrderReceived: (callback) => ipcRenderer.on('lan-order-received', (event, data) => callback(data))
 });
