@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -37,7 +40,7 @@ jobs:
 
       - name: 🤖 Initialize Android Project & Sync
         run: |
-          npx cap add android
+          npx cap add android || true
           npx cap sync android
 
       - name: ⚙️ Build Debug APK with Gradle
@@ -46,8 +49,23 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: 🏷️ Get Version from package.json & Prepare APK
+        id: prep_apk
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          cp android/app/build/outputs/apk/debug/app-debug.apk "Restaurant-ERP-POS-${VERSION}.apk"
+
       - name: 🚀 Upload Android APK to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Restaurant-ERP-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: "Restaurant-ERP-POS-${{ env.APP_VERSION }}.apk"
+
+      - name: 🌟 Auto-Publish APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION }}
+          files: "Restaurant-ERP-POS-${{ env.APP_VERSION }}.apk"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
