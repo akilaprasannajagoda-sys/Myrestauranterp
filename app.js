@@ -3,6 +3,7 @@
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (OFFLINE-FIRST HYBRID BOOT)
 // 🛡️ RE-AUTHENTICATION & PERMISSION-DENIED SECURE AUTO-RECOVERY ENGINE
 // 📡 OFFLINE LOCAL LAN AUTO-PRINT KOT/BOT INTEGRATED
+// 🚀 MOBILE APK IN-APP GITHUB AUTO-UPDATE SYNC ENGINE
 // ==========================================================================
 
 // 🛡️ 1. OFFLINE STANDALONE FIREBASE BUNDLE IMPORT (NO CDN DEPENDENCY)
@@ -1464,6 +1465,90 @@ if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
     POS.handleIncomingCloudPrint(tempOrderId, formattedOrder);
   });
 }
+
+// ==========================================================================
+// 🚀 MOBILE APK IN-APP AUTO-UPDATE DETECTOR (GITHUB RELEASES SYNC)
+// ==========================================================================
+const CURRENT_MOBILE_VERSION = "1.0.20"; // දැනට පවතින App Version එක
+const GITHUB_REPO_PATH = "akilaprasannajagoda-sys/Myrestauranterp";
+
+async function checkForMobileAppUpdates() {
+  // Desktop Electron App එකේදී මෙය ක්‍රියාත්මක නොවේ (එය autoUpdater මඟින් සිදුවේ)
+  if (window.electronAPI) return;
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO_PATH}/releases/latest`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!res.ok) return;
+
+    const releaseData = await res.json();
+    const latestVersion = (releaseData.tag_name || "").replace(/^v/, "").trim();
+
+    // Version දෙක සංසන්දනය කිරීම
+    if (latestVersion && isNewerVersion(latestVersion, CURRENT_MOBILE_VERSION)) {
+      // Release Assets අතරින් .apk ගොනුව සොයාගැනීම
+      const apkAsset = (releaseData.assets || []).find(a => a.name.endsWith('.apk'));
+      const apkDownloadUrl = apkAsset ? apkAsset.browser_download_url : releaseData.html_url;
+
+      showMobileUpdateModal(latestVersion, apkDownloadUrl, releaseData.body);
+    }
+  } catch (err) {
+    console.log("Mobile update check bypass:", err.message);
+  }
+}
+
+// Version Numbers සංසන්දනය කරන Helper
+function isNewerVersion(latest, current) {
+  const lParts = latest.split('.').map(Number);
+  const cParts = current.split('.').map(Number);
+  for (let i = 0; i < Math.max(lParts.length, cParts.length); i++) {
+    const l = lParts[i] || 0;
+    const c = cParts[i] || 0;
+    if (l > c) return true;
+    if (l < c) return false;
+  }
+  return false;
+}
+
+// 📱 MOBILE UPDATE NOTIFICATION MODAL
+function showMobileUpdateModal(newVer, downloadUrl, releaseNotes) {
+  if (document.getElementById("mobileUpdatePromptModal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "mobileUpdatePromptModal";
+  modal.className = "fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4";
+  modal.innerHTML = `
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border-2 border-blue-500 text-center space-y-4">
+      <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center mx-auto text-3xl shadow-lg">
+        <i class="fa-solid fa-cloud-arrow-down animate-pulse"></i>
+      </div>
+      <div>
+        <span class="text-[10px] bg-blue-100 text-blue-800 font-extrabold px-2.5 py-0.5 rounded-full uppercase">Update Available</span>
+        <h3 class="text-lg font-black text-gray-800 mt-1">නව Version එකක් ඇත!</h3>
+        <p class="text-xs text-gray-500 mt-0.5 font-bold">Version ${newVer} (Current: v${CURRENT_MOBILE_VERSION})</p>
+      </div>
+
+      <div class="p-3 bg-gray-50 border border-gray-200 rounded-2xl text-[11px] text-gray-600 text-left">
+        <p class="font-bold text-gray-800 mb-1">🔥 අලුත් විශේෂාංග:</p>
+        <p class="text-gray-500">Floor Plan, Local Wi-Fi Printing සහ නව වෙනස්කම් ලබා ගැනීමට කරුණාකර App එක දැන්ම Update කරගන්න.</p>
+      </div>
+
+      <div class="space-y-2 pt-1">
+        <a href="${downloadUrl}" target="_blank" onclick="document.getElementById('mobileUpdatePromptModal').remove()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer block">
+          <i class="fa-solid fa-download"></i> දැන්ම Update කරන්න (Download APK)
+        </a>
+        <button type="button" onclick="document.getElementById('mobileUpdatePromptModal').remove()" class="text-gray-400 hover:text-gray-600 text-[11px] font-bold block mx-auto py-1">
+          පසුව කරන්න (Later)
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+// App එක පණගැන්වී තත්පර 2කට පසු Update තිබේදැයි ස්වයංක්‍රීයව පරීක්ෂා කිරීම
+setTimeout(checkForMobileAppUpdates, 2000);
 
 // ALL GLOBAL WINDOW EXPORTS
 window.showLiveToast = showLiveToast;
