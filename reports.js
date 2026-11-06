@@ -210,7 +210,7 @@ export function renderInvoiceReportsList() {
   tbody.innerHTML = "";
   list.sort((a, b) => new Date(b[1].createdAt || 0).getTime() - new Date(a[1].createdAt || 0).getTime());
 
-  // 🛡️ DOM Slicing: Render top 120 invoices to keep UI smooth, rest accessed via search/date filter
+  // 🛡️ DOM Slicing: Render top 120 invoices to keep UI smooth
   const visibleSubset = list.slice(0, 120);
 
   visibleSubset.forEach(([id, inv]) => {
@@ -285,7 +285,7 @@ export function renderInvoiceReportsList() {
   });
 }
 
-// 2. ⭐ COMPREHENSIVE PROFIT & LOSS (P&L) STATEMENT (100% USAR COMPLIANT WITH STORE ISSUES & WASTAGE)
+// 2. ⭐ COMPREHENSIVE PROFIT & LOSS (P&L) STATEMENT
 export function renderPnLStatement() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -336,7 +336,7 @@ export function renderPnLStatement() {
     }
   });
 
-  // 2. STORE ISSUES CALCULATION (PRODUCTION COGS VS OVERHEAD DEPARTMENTS)
+  // 2. STORE ISSUES CALCULATION
   let productionStoreIssuesCost = 0;
   let otherDeptIssuesCost = 0;
 
@@ -355,7 +355,6 @@ export function renderPnLStatement() {
           otherDeptIssuesCost += cost;
         }
       } else {
-        // In Recipe Mode, Store Issues to non-recipe overhead departments (Staff Meals, Housekeeping, Other) are added as Operating Expenses
         if (!productionDepts.includes(dept)) {
           otherDeptIssuesCost += cost;
         }
@@ -1058,15 +1057,24 @@ export function exportCurrentReportToCSV() {
   }
 }
 
-// 5. SMART SHIFT-BASED DAY-END Z-REPORT
+// 5. SMART SHIFT-BASED DAY-END Z-REPORT (PAST-MIDNIGHT SHIFT RECONCILED)
 export let currentZReportCalculatedData = null;
 
 export async function openDayEndModal() {
   const now = new Date();
   const todayLocalStr = getLocalDateString(now);
 
-  let shiftStartTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
-  
+  // 🛡️ FIX: රාත්‍රී 12:00 පසු වී පාන්දර 5:00 ට පෙර Z-Report එකක් ගත්තද පෙර දින විකුණුම් ආරක්ෂා කර ගැනීම
+  let shiftStartTimeMs;
+  if (now.getHours() < 5) {
+    // පාන්දර 5ට පෙර නම් ඊයේ දහවල් සිට සිදුවූ විකුණුම් ආවරණය කරයි (පැය 24 ක පෙර කාලය)
+    shiftStartTimeMs = now.getTime() - (24 * 60 * 60 * 1000);
+  } else {
+    // සාමාන්‍ය දිවා කාලයේදී අද උදෑසන 05:00 සිට ආරම්භ කරයි
+    const todayMorning = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 5, 0, 0);
+    shiftStartTimeMs = todayMorning.getTime();
+  }
+
   const pastReports = Object.values(erpState.dayEndReports || {});
   if (pastReports.length > 0) {
     const validPastTimestamps = pastReports
@@ -1076,8 +1084,8 @@ export async function openDayEndModal() {
     if (validPastTimestamps.length > 0) {
       const lastAuditTimestamp = Math.max(...validPastTimestamps);
       const hoursSinceLastZ = (now.getTime() - lastAuditTimestamp) / (1000 * 60 * 60);
-      if (hoursSinceLastZ <= 30) {
-        shiftStartTimeMs = lastAuditTimestamp;
+      if (hoursSinceLastZ <= 36) {
+        shiftStartTimeMs = lastAuditTimestamp; // අවසන් Z-Report එකේ සිට මේ දක්වා
       }
     }
   }
