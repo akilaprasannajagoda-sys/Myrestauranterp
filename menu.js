@@ -1,9 +1,10 @@
 // ==========================================================================
 // MODULE 06: MENU, DISHES, PORTIONS & BOM RECIPES ENGINE (KOT / BOT STATION SAFE)
+// 🛡️ XSS & SPECIAL CHARACTER SAFE MENU ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast } from './utils.js';
+import { showLiveToast, escapeHTML } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -113,7 +114,7 @@ export function renderDishCategoryListUI() {
     row.className = "flex justify-between items-center p-2 rounded-xl bg-gray-50 border border-gray-200 text-xs";
     row.innerHTML = `
       <div class="flex items-center gap-2">
-        <span class="font-bold text-gray-800">${cat.name}</span>
+        <span class="font-bold text-gray-800">${escapeHTML(cat.name)}</span>
         <span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${isBar ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-yellow-100 text-yellow-800 border border-yellow-200'}">
           ${isBar ? '🍹 Bar (BOT)' : '👨‍🍳 Kitchen (KOT)'}
         </span>
@@ -138,7 +139,7 @@ export function populateDishCategoryDropdown() {
   if (!sel) return;
   sel.innerHTML = `<option value="">General</option>`;
   Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
-    sel.innerHTML += `<option value="${cat.name}">${cat.name}</option>`;
+    sel.innerHTML += `<option value="${escapeHTML(cat.name)}">${escapeHTML(cat.name)}</option>`;
   });
 }
 
@@ -197,7 +198,7 @@ export function addRecipeIngredientRow(selectedRawId = "", qty = 1, selectedUnit
   Object.entries(erpState.rawItems || {}).forEach(([id, raw]) => {
     const isSel = id === selectedRawId;
     if (isSel) baseUnitOfSelected = raw.unit || "kg";
-    options += `<option value="${id}" data-baseunit="${raw.unit}" data-cost="${raw.cost}" ${isSel ? 'selected' : ''}>${raw.name} (${raw.unit} - Rs. ${raw.cost})</option>`;
+    options += `<option value="${id}" data-baseunit="${raw.unit}" data-cost="${raw.cost}" ${isSel ? 'selected' : ''}>${escapeHTML(raw.name)} (${raw.unit} - Rs. ${raw.cost})</option>`;
   });
 
   const compatibleUnits = getCompatibleUnits(baseUnitOfSelected);
@@ -304,7 +305,7 @@ export async function handleDishSubmit(e) {
   closeDishModal();
 }
 
-// 🔍 SEARCHABLE MENU DISHES TABLE ENGINE
+// 🔍 SEARCHABLE MENU DISHES TABLE ENGINE (XSS IMMUNE)
 export function onMenuSearchInput() {
   renderMenuDishesTable();
 }
@@ -331,7 +332,7 @@ export function renderMenuDishesTable() {
   
   if (list.length === 0) {
     if (query) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">"${query}" නමින් කෑම වර්ග හමු නොවීය...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">"${escapeHTML(query)}" නමින් කෑම වර්ග හමු නොවීය...</td></tr>`;
     } else {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">කෑම වර්ග තවම ඇතුළත් කර නැත... (+ Add Dish & Recipe ඔබන්න)</td></tr>`;
     }
@@ -350,12 +351,12 @@ export function renderMenuDishesTable() {
     tr.className = "hover:bg-gray-50 border-b border-gray-100";
     tr.innerHTML = `
       <td class="p-3.5">
-        <span class="font-bold text-gray-800 block">${dish.name}</span>
+        <span class="font-bold text-gray-800 block">${escapeHTML(dish.name)}</span>
         <span class="text-[9px] font-extrabold ${isBar ? 'text-purple-700' : 'text-yellow-700'} uppercase">
           ${isBar ? '🍹 Bar Ticket (BOT)' : '👨‍🍳 Kitchen Ticket (KOT)'}
         </span>
       </td>
-      <td class="p-3.5"><span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md text-[10px] font-bold">${dish.category || 'General'}</span></td>
+      <td class="p-3.5"><span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md text-[10px] font-bold">${escapeHTML(dish.category || 'General')}</span></td>
       <td class="p-3.5 font-bold text-blue-600">Rs. ${price.toFixed(2)}</td>
       <td class="p-3.5 font-semibold text-gray-600">Rs. ${cost.toFixed(2)}</td>
       <td class="p-3.5"><span class="text-green-600 font-black">${margin}%</span></td>
