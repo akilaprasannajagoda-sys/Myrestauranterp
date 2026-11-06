@@ -2,7 +2,7 @@
 // MODULE 04: TABLE & FLOOR PLAN MANAGEMENT ENGINE (100% UNFREEZE & REAL-TIME)
 // 🎨 ARCHITECTURAL RESTAURANT FLOOR PLAN ENGINE (EXACT CLIENT PHOTO REPLICA)
 // 100% COMPATIBLE WITH EXISTING POS, BILLING & REALTIME FIREBASE LOGIC
-// 📐 BALANCED PROPORTIONS - ZERO OVERLAPPING & PERFECT SCREEN FIT
+// 📐 ZERO-OVERFLOW UNIFIED VECTOR CANVAS - GUARANTEED SCREEN FIT (TABLES 01-36)
 // ==========================================================================
 
 import { erpState, currentTenant, currentAreaFilter, setCurrentAreaFilter, setActiveBillId } from './state.js';
@@ -244,7 +244,7 @@ export async function handleTableSubmit(e) {
 }
 
 // ==========================================================================
-// 3. ARCHITECTURAL FLOOR PLAN GRID (BALANCED PROPORTIONS - ZERO OVERLAP)
+// 3. ARCHITECTURAL FLOOR PLAN GRID (100% EXACT SAMBAPOS REPLICA: TABLES 01 - 36)
 // ==========================================================================
 
 export function renderTablesFloorGrid() {
@@ -284,208 +284,220 @@ export function renderTablesFloorGrid() {
     return tableData.status === "Occupied" || hasActiveOrders;
   }
 
-  // 🪑 PERFECTLY PROPORTIONED TABLES (SHARP VECTOR SVGs)
-  function renderTableElement(numStr, type = "cross-4") {
-    const tData = getTableData(numStr);
-    const occupied = isTableOccupied(tData);
-    const matchesArea = (currentAreaFilter === "ALL" || (tData.area && tData.area === currentAreaFilter));
+  // 📐 36 TABLES EXACT BLUEPRINT COORDINATES (viewBox="0 0 940 480")
+  const tableLayoutConfig = [
+    // Top-Left Booths (01-03 over 04-06)
+    { no: "01", type: "booth", x: 42,  y: 45 },
+    { no: "02", type: "booth", x: 92,  y: 45 },
+    { no: "03", type: "booth", x: 142, y: 45 },
+    { no: "04", type: "booth", x: 42,  y: 145 },
+    { no: "05", type: "booth", x: 92,  y: 145 },
+    { no: "06", type: "booth", x: 142, y: 145 },
 
-    const wrap = document.createElement("div");
-    wrap.className = `relative flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-150 transform hover:scale-105 active:scale-95 ${
-      !matchesArea ? 'opacity-30 grayscale' : 'opacity-100'
-    }`;
-    wrap.onclick = () => linkTableToPos(tData.tableNo);
+    // Center-Left Top Booths (17, 18 over 19, 20)
+    { no: "17", type: "booth", x: 215, y: 45 },
+    { no: "18", type: "booth", x: 265, y: 45 },
+    { no: "19", type: "booth", x: 215, y: 145 },
+    { no: "20", type: "booth", x: 265, y: 145 },
+
+    // Bottom-Left Booths (07-09 over 10-12)
+    { no: "07", type: "booth", x: 42,  y: 295 },
+    { no: "08", type: "booth", x: 92,  y: 295 },
+    { no: "09", type: "booth", x: 142, y: 295 },
+    { no: "10", type: "booth", x: 42,  y: 395 },
+    { no: "11", type: "booth", x: 92,  y: 395 },
+    { no: "12", type: "booth", x: 142, y: 395 },
+
+    // Special Tables: 13 (Horizontal), 14 (Family 4-Seater), 16 (Round 6-Seater)
+    { no: "13", type: "horiz-2", x: 205, y: 300 },
+    { no: "14", type: "family-4", x: 205, y: 375 },
+    { no: "16", type: "round-6", x: 310, y: 410 },
+
+    // Center Dining Hall (4x3 Grid)
+    // Row 1: 25, 26, 27, 28
+    { no: "25", type: "cross-4", x: 405, y: 65 },
+    { no: "26", type: "cross-4", x: 495, y: 65 },
+    { no: "27", type: "cross-4", x: 585, y: 65 },
+    { no: "28", type: "cross-4", x: 675, y: 65 },
+
+    // Row 2: 21, 22, 23, 24
+    { no: "21", type: "cross-4", x: 405, y: 185 },
+    { no: "22", type: "cross-4", x: 495, y: 185 },
+    { no: "23", type: "cross-4", x: 585, y: 185 },
+    { no: "24", type: "cross-4", x: 675, y: 185 },
+
+    // Row 3: 29, 30 (Vertical Rect), 31, 32
+    { no: "29", type: "cross-4", x: 405, y: 395 },
+    { no: "30", type: "rect-4",  x: 495, y: 395 },
+    { no: "31", type: "cross-4", x: 585, y: 395 },
+    { no: "32", type: "cross-4", x: 675, y: 395 },
+
+    // Far Right Terrace Column (33, 34, 35, 36)
+    { no: "33", type: "cross-4", x: 805, y: 65 },
+    { no: "34", type: "cross-4", x: 805, y: 185 },
+    { no: "35", type: "cross-4", x: 805, y: 295 },
+    { no: "36", type: "cross-4", x: 805, y: 395 }
+  ];
+
+  // 🪑 GENERATE SVG SHAPE FOR EACH TABLE TYPE
+  function generateTableSvg(tCfg, tData, occupied, matchesArea) {
+    const { no, type, x, y } = tCfg;
 
     const tableBg = occupied ? "#ef4444" : "#ffffff";
-    const tableBorder = occupied ? "#b91c1c" : "#1e293b";
+    const tableStroke = occupied ? "#b91c1c" : "#1e3a8a";
     const chairFill = occupied ? "#fca5a5" : "#e2e8f0";
-    const chairBorder = occupied ? "#ef4444" : "#475569";
+    const chairStroke = occupied ? "#ef4444" : "#3b82f6";
     const textColor = occupied ? "#ffffff" : "#0f172a";
+    const opacityAttr = matchesArea ? "1" : "0.3";
 
-    let svgContent = "";
+    let shapes = "";
 
-    // 1. Vertical 2-Seater Booth (54x74)
-    if (type === "vertical-2") {
-      svgContent = `
-        <svg width="54" height="74" viewBox="0 0 48 66" class="drop-shadow-xs">
-          <path d="M12,12 C12,4 36,4 36,12 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <rect x="6" y="14" width="36" height="38" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <path d="M12,54 C12,62 36,62 36,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <text x="24" y="38" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
-        </svg>
+    // 1. BOOTH (VERTICAL 2-SEATER WITH TOP/BOTTOM ARCH CHAIRS)
+    if (type === "booth") {
+      shapes = `
+        <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="linkTableToPos('${no}')">
+          <!-- Top Chair -->
+          <path d="M ${x + 6} ${y} C ${x + 6} ${y - 12}, ${x + 26} ${y - 12}, ${x + 26} ${y} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Table Rectangle -->
+          <rect x="${x}" y="${y}" width="32" height="38" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <!-- Bottom Chair -->
+          <path d="M ${x + 6} ${y + 38} C ${x + 6} ${y + 50}, ${x + 26} ${y + 50}, ${x + 26} ${y + 38} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Number -->
+          <text x="${x + 16}" y="${y + 24}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
+          ${occupied ? `<circle cx="${x + 30}" cy="${y + 2}" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />` : ''}
+          ${tData.assignedWaiter ? `<text x="${x + 16}" y="${y + 58}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
+        </g>
       `;
     }
-    // 2. Horizontal 2-Seater (Table 13: 74x50)
-    else if (type === "horizontal-2") {
-      svgContent = `
-        <svg width="74" height="50" viewBox="0 0 68 46" class="drop-shadow-xs">
-          <path d="M14,11 C6,11 6,35 14,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <rect x="16" y="7" width="36" height="32" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <path d="M54,11 C62,11 62,35 54,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <text x="34" y="28" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
-        </svg>
+    // 2. HORIZONTAL 2-SEATER (TABLE 13)
+    else if (type === "horiz-2") {
+      shapes = `
+        <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="linkTableToPos('${no}')">
+          <!-- Left Chair -->
+          <path d="M ${x} ${y + 5} C ${x - 11} ${y + 5}, ${x - 11} ${y + 23}, ${x} ${y + 23} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Table Rectangle -->
+          <rect x="${x}" y="${y}" width="38" height="28" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <!-- Right Chair -->
+          <path d="M ${x + 38} ${y + 5} C ${x + 49} ${y + 5}, ${x + 49} ${y + 23}, ${x + 38} ${y + 23} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Number -->
+          <text x="${x + 19}" y="${y + 19}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
+          ${occupied ? `<circle cx="${x + 36}" cy="${y + 2}" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />` : ''}
+          ${tData.assignedWaiter ? `<text x="${x + 19}" y="${y + 39}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
+        </g>
       `;
     }
-    // 3. Large Vertical Family Table (Table 14: 74x98)
-    else if (type === "rect-large") {
-      svgContent = `
-        <svg width="74" height="98" viewBox="0 0 66 88" class="drop-shadow-xs">
-          <path d="M14,16 C6,16 6,34 14,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <path d="M14,54 C6,54 6,72 14,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <rect x="16" y="8" width="34" height="72" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <path d="M52,16 C60,16 60,34 52,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <path d="M52,54 C60,54 60,72 52,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <text x="33" y="49" font-size="16" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
-        </svg>
+    // 3. FAMILY TABLE (TABLE 14: VERTICAL RECTANGLE WITH EXACT 4 CHAIRS - 2 LEFT, 2 RIGHT)
+    else if (type === "family-4") {
+      shapes = `
+        <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="linkTableToPos('${no}')">
+          <!-- Left 2 Chairs -->
+          <path d="M ${x} ${y + 10} C ${x - 12} ${y + 10}, ${x - 12} ${y + 28}, ${x} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <path d="M ${x} ${y + 44} C ${x - 12} ${y + 44}, ${x - 12} ${y + 62}, ${x} ${y + 62} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Table Rectangle -->
+          <rect x="${x}" y="${y}" width="38" height="72" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <!-- Right 2 Chairs -->
+          <path d="M ${x + 38} ${y + 10} C ${x + 50} ${y + 10}, ${x + 50} ${y + 28}, ${x + 38} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <path d="M ${x + 38} ${y + 44} C ${x + 50} ${y + 44}, ${x + 50} ${y + 62}, ${x + 38} ${y + 62} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Number -->
+          <text x="${x + 19}" y="${y + 41}" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
+          ${occupied ? `<circle cx="${x + 36}" cy="${y + 2}" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />` : ''}
+          ${tData.assignedWaiter ? `<text x="${x + 19}" y="${y + 83}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
+        </g>
       `;
     }
-    // 4. Round 6-Seater Table (Table 16: 84x84)
+    // 4. ROUND 6-SEATER TABLE (TABLE 16 WITH 6 RADIAL CHAIRS)
     else if (type === "round-6") {
-      svgContent = `
-        <svg width="84" height="84" viewBox="0 0 76 76" class="drop-shadow-xs">
-          <circle cx="38" cy="8" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <circle cx="64" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <circle cx="64" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <circle cx="38" cy="68" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <circle cx="12" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <circle cx="12" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <circle cx="38" cy="38" r="22" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <text x="38" y="44" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
-        </svg>
+      const cx = x;
+      const cy = y;
+      shapes = `
+        <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="linkTableToPos('${no}')">
+          <!-- 6 Circular Chairs at 60 degree intervals -->
+          <circle cx="${cx}" cy="${cy - 28}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <circle cx="${cx + 25}" cy="${cy - 14}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <circle cx="${cx + 25}" cy="${cy + 14}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <circle cx="${cx}" cy="${cy + 28}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <circle cx="${cx - 25}" cy="${cy + 14}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <circle cx="${cx - 25}" cy="${cy - 14}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Center Round Table Surface -->
+          <circle cx="${cx}" cy="${cy}" r="21" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <!-- Number -->
+          <text x="${cx}" y="${cy + 5}" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
+          ${occupied ? `<circle cx="${cx + 17}" cy="${cy - 16}" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />` : ''}
+          ${tData.assignedWaiter ? `<text x="${cx}" y="${cy + 43}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
+        </g>
       `;
     }
-    // 5. Cross 4-Seater Square Tables (74x74 - ZERO OVERLAP)
+    // 5. VERTICAL RECTANGLE CROSS 4-SEATER (TABLE 30)
+    else if (type === "rect-4") {
+      shapes = `
+        <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="linkTableToPos('${no}')">
+          <!-- Top Chair -->
+          <path d="M ${x + 6} ${y} C ${x + 6} ${y - 12}, ${x + 24} ${y - 12}, ${x + 24} ${y} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Bottom Chair -->
+          <path d="M ${x + 6} ${y + 44} C ${x + 6} ${y + 56}, ${x + 24} ${y + 56}, ${x + 24} ${y + 44} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Left Chair -->
+          <path d="M ${x} ${y + 13} C ${x - 12} ${y + 13}, ${x - 12} ${y + 31}, ${x} ${y + 31} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Right Chair -->
+          <path d="M ${x + 30} ${y + 13} C ${x + 42} ${y + 13}, ${x + 42} ${y + 31}, ${x + 30} ${y + 31} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Vertical Table Rectangle -->
+          <rect x="${x}" y="${y}" width="30" height="44" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <!-- Number -->
+          <text x="${x + 15}" y="${y + 27}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
+          ${occupied ? `<circle cx="${x + 28}" cy="${y + 2}" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />` : ''}
+          ${tData.assignedWaiter ? `<text x="${x + 15}" y="${y + 67}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
+        </g>
+      `;
+    }
+    // 6. SQUARE CROSS 4-SEATER (TABLES 21-28, 29, 31, 32, 33-36)
     else {
-      svgContent = `
-        <svg width="74" height="74" viewBox="0 0 68 68" class="drop-shadow-xs">
-          <path d="M22,14 C22,5 46,5 46,14 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <path d="M22,54 C22,63 46,63 46,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <path d="M14,22 C5,22 5,46 14,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <path d="M54,22 C63,22 63,46 54,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="2" />
-          <rect x="16" y="16" width="36" height="36" rx="5" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
-          <text x="34" y="40" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
-        </svg>
+      shapes = `
+        <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="linkTableToPos('${no}')">
+          <!-- Top Chair -->
+          <path d="M ${x + 8} ${y} C ${x + 8} ${y - 12}, ${x + 28} ${y - 12}, ${x + 28} ${y} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Bottom Chair -->
+          <path d="M ${x + 8} ${y + 36} C ${x + 8} ${y + 48}, ${x + 28} ${y + 48}, ${x + 28} ${y + 36} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Left Chair -->
+          <path d="M ${x} ${y + 8} C ${x - 12} ${y + 8}, ${x - 12} ${y + 28}, ${x} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Right Chair -->
+          <path d="M ${x + 36} ${y + 8} C ${x + 48} ${y + 8}, ${x + 48} ${y + 28}, ${x + 36} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
+          <!-- Center Square Table -->
+          <rect x="${x}" y="${y}" width="36" height="36" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <!-- Number -->
+          <text x="${x + 18}" y="${y + 23}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
+          ${occupied ? `<circle cx="${x + 34}" cy="${y + 2}" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />` : ''}
+          ${tData.assignedWaiter ? `<text x="${x + 18}" y="${y + 57}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
+        </g>
       `;
     }
 
-    wrap.innerHTML = `
-      ${svgContent}
-      ${
-        occupied
-          ? `<span class="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-               <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-600"></span>
-             </span>`
-          : ''
-      }
-      <div class="h-4 flex items-center justify-center">
-        ${
-          tData.assignedWaiter
-            ? `<span class="text-[9.5px] font-bold text-gray-600 truncate max-w-[68px] block bg-white/90 px-1 rounded border border-gray-200" title="${tData.assignedWaiter}">${tData.assignedWaiter}</span>`
-            : ''
-        }
-      </div>
-    `;
-
-    return wrap;
+    return shapes;
   }
 
-  // 🏗️ BALANCED FLOOR PLAN CONTAINER (NON-COLLAPSING SECTIONS)
+  // 🖼️ RENDER ALL 36 TABLES DIRECTLY INTO THE UNIFIED VECTOR CANVAS
+  let allSvgElements = "";
+  tableLayoutConfig.forEach(cfg => {
+    const tData = getTableData(cfg.no);
+    const occupied = isTableOccupied(tData);
+    const matchesArea = (currentAreaFilter === "ALL" || (tData.area && tData.area === currentAreaFilter));
+    allSvgElements += generateTableSvg(cfg, tData, occupied, matchesArea);
+  });
+
   const floorPlanWrapper = document.createElement("div");
-  floorPlanWrapper.className = "w-full bg-slate-50 border-2 border-slate-300 rounded-3xl p-5 sm:p-6 shadow-inner overflow-x-auto";
+  floorPlanWrapper.className = "w-full bg-slate-50 border-2 border-slate-300 rounded-3xl p-4 sm:p-6 shadow-inner flex flex-col justify-between";
 
   floorPlanWrapper.innerHTML = `
-    <!-- MAIN BLUEPRINT GRID: 3 DISTINCT NON-COLLAPSING COLUMNS -->
-    <div class="flex items-start justify-between gap-4 lg:gap-8 min-w-fit">
-
-      <!-- ================= SECTION 1: LEFT BOOTHS & SPECIAL TABLES ================= -->
-      <div class="flex-shrink-0 flex flex-col gap-5">
-        
-        <!-- TOP: 01-06 (3 Cols) and 17-20 (2 Cols) -->
-        <div class="flex items-start gap-4">
-          <!-- Columns 01, 02, 03 & 04, 05, 06 -->
-          <div class="grid grid-cols-3 gap-x-2.5 gap-y-4">
-            <div id="tp-01"></div>
-            <div id="tp-02"></div>
-            <div id="tp-03"></div>
-            <div id="tp-04"></div>
-            <div id="tp-05"></div>
-            <div id="tp-06"></div>
-          </div>
-
-          <!-- Columns 17, 18 & 19, 20 -->
-          <div class="grid grid-cols-2 gap-x-2.5 gap-y-4 pl-1">
-            <div id="tp-17"></div>
-            <div id="tp-18"></div>
-            <div id="tp-19"></div>
-            <div id="tp-20"></div>
-          </div>
-        </div>
-
-        <!-- BOTTOM: 07-12 (3 Cols), 13/14, and 16 (Round) -->
-        <div class="flex items-end gap-4 pt-4 border-t-2 border-dashed border-slate-200">
-          <!-- Columns 07, 08, 09 & 10, 11, 12 -->
-          <div class="grid grid-cols-3 gap-x-2.5 gap-y-4">
-            <div id="tp-07"></div>
-            <div id="tp-08"></div>
-            <div id="tp-09"></div>
-            <div id="tp-10"></div>
-            <div id="tp-11"></div>
-            <div id="tp-12"></div>
-          </div>
-
-          <!-- Tables 13 (Horizontal) & 14 (Family Rect) -->
-          <div class="flex flex-col items-center justify-end gap-3 pl-1">
-            <div id="tp-13"></div>
-            <div id="tp-14"></div>
-          </div>
-
-          <!-- Table 16 (Large Round Table) -->
-          <div class="flex items-center justify-center pl-1 pb-1">
-            <div id="tp-16"></div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ================= SECTION 2: CENTER DINING HALL (NON-COLLAPSING 4x3 GRID) ================= -->
-      <div class="flex-shrink-0 flex flex-col items-center justify-center px-4 lg:px-8 border-l-2 border-r-2 border-dashed border-slate-200">
-        <div class="grid grid-cols-4 gap-x-3 sm:gap-x-4 lg:gap-x-6 gap-y-5 lg:gap-y-6">
-          <!-- Row 1: 25, 26, 27, 28 -->
-          <div id="tp-25"></div>
-          <div id="tp-26"></div>
-          <div id="tp-27"></div>
-          <div id="tp-28"></div>
-
-          <!-- Row 2: 21, 22, 23, 24 -->
-          <div id="tp-21"></div>
-          <div id="tp-22"></div>
-          <div id="tp-23"></div>
-          <div id="tp-24"></div>
-
-          <!-- Row 3: 29, 30, 31, 32 -->
-          <div id="tp-29"></div>
-          <div id="tp-30"></div>
-          <div id="tp-31"></div>
-          <div id="tp-32"></div>
-        </div>
-      </div>
-
-      <!-- ================= SECTION 3: RIGHT WALL / TERRACE (COLUMN) ================= -->
-      <div class="flex-shrink-0 flex flex-col items-center justify-between gap-5 pl-1">
-        <div id="tp-33"></div>
-        <div id="tp-34"></div>
-        <div id="tp-35"></div>
-        <div id="tp-36"></div>
-      </div>
-
+    <!-- UNIFIED RESPONSIVE BLUEPRINT SVG (NEVER OVERFLOWS & NEVER CROPS 33-36) -->
+    <div class="w-full flex items-center justify-center overflow-hidden">
+      <svg viewBox="0 0 940 480" class="w-full h-auto max-h-[72vh] select-none">
+        ${allSvgElements}
+      </svg>
     </div>
 
     <!-- BOTTOM LEGEND & FLOOR SUMMARY -->
-    <div class="mt-6 pt-3.5 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs font-bold text-slate-500">
+    <div class="mt-4 pt-3 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs font-bold text-slate-500">
       <div class="flex items-center gap-5">
         <div class="flex items-center gap-1.5">
-          <span class="w-3.5 h-3.5 bg-white border-2 border-slate-700 rounded-sm"></span>
+          <span class="w-3.5 h-3.5 bg-white border-2 border-blue-900 rounded-sm"></span>
           <span>Available (හිස් මේස)</span>
         </div>
         <div class="flex items-center gap-1.5">
@@ -503,32 +515,6 @@ export function renderTablesFloorGrid() {
   `;
 
   container.appendChild(floorPlanWrapper);
-
-  const mountMap = {
-    "01": "vertical-2", "02": "vertical-2", "03": "vertical-2",
-    "04": "vertical-2", "05": "vertical-2", "06": "vertical-2",
-    "17": "vertical-2", "18": "vertical-2",
-    "19": "vertical-2", "20": "vertical-2",
-
-    "07": "vertical-2", "08": "vertical-2", "09": "vertical-2",
-    "10": "vertical-2", "11": "vertical-2", "12": "vertical-2",
-    "13": "horizontal-2",
-    "14": "rect-large",
-    "16": "round-6",
-
-    "25": "cross-4", "26": "cross-4", "27": "cross-4", "28": "cross-4",
-    "21": "cross-4", "22": "cross-4", "23": "cross-4", "24": "cross-4",
-    "29": "cross-4", "30": "cross-4", "31": "cross-4", "32": "cross-4",
-
-    "33": "cross-4", "34": "cross-4", "35": "cross-4", "36": "cross-4"
-  };
-
-  Object.entries(mountMap).forEach(([numStr, type]) => {
-    const slot = document.getElementById(`tp-${numStr}`);
-    if (slot) {
-      slot.appendChild(renderTableElement(numStr, type));
-    }
-  });
 }
 
 // ==========================================================================
