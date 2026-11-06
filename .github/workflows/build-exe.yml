@@ -60,6 +60,9 @@ jobs:
           cp customer-display.html dist-mobile/ 2>/dev/null || true
           cp *.js dist-mobile/ 2>/dev/null || true
           cp -r vendor dist-mobile/
+          # 🚀 AUTO-INJECT PACKAGE.JSON VERSION INTO APP.JS (PERMANENT FIX)
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i "s/const CURRENT_MOBILE_VERSION = .*/const CURRENT_MOBILE_VERSION = \"$VERSION\";/g" dist-mobile/app.js
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
 
       - name: 🤖 Initialize Android Project & Sync
