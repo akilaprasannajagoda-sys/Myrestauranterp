@@ -1,5 +1,7 @@
 // ==========================================================================
 // MODULE 04: TABLE & FLOOR PLAN MANAGEMENT ENGINE (100% UNFREEZE & REAL-TIME)
+// 🎨 ARCHITECTURAL RESTAURANT FLOOR PLAN ENGINE (EXACT CLIENT PHOTO REPLICA)
+// 100% COMPATIBLE WITH EXISTING POS, BILLING & REALTIME FIREBASE LOGIC
 // ==========================================================================
 
 import { erpState, currentTenant, currentAreaFilter, setCurrentAreaFilter, setActiveBillId } from './state.js';
@@ -25,7 +27,10 @@ export function initTablesContext(dbRefInst, pushM, updateM, removeM, setM, swit
   syncActiveBillFn = syncBill;
 }
 
-// 1. FLOOR AREAS
+// ==========================================================================
+// 1. FLOOR AREAS MANAGEMENT
+// ==========================================================================
+
 export function openAreaModal() {
   document.getElementById("areaModal")?.classList.remove("hidden");
   setTimeout(() => document.getElementById("newAreaName")?.focus(), 50);
@@ -155,7 +160,10 @@ export function populateTableWaiterDropdown() {
   });
 }
 
-// 2. TABLES MANAGEMENT
+// ==========================================================================
+// 2. TABLES MANAGEMENT & MODALS
+// ==========================================================================
+
 export function openTableModal(mode, tableId = null) {
   const modal = document.getElementById("tableModal");
   const form = document.getElementById("tableForm");
@@ -234,76 +242,339 @@ export async function handleTableSubmit(e) {
   }
 }
 
-// 🔒 DYNAMIC AUTO-CALCULATED OCCUPIED STATUS (OFFLINE RESILIENT)
+// ==========================================================================
+// 3. ARCHITECTURAL FLOOR PLAN GRID (EXACT SAMBAPOS REPLICA: TABLES 01 - 36)
+// ==========================================================================
+
 export function renderTablesFloorGrid() {
   const container = document.getElementById("tablesGrid");
   if (!container) return;
   container.innerHTML = "";
-  
-  const list = Object.entries(erpState.tables || {}).filter(([id, t]) => {
-    return currentAreaFilter === "ALL" || t.area === currentAreaFilter;
-  });
-  
-  if (list.length === 0) {
-    container.innerHTML = `<div class="col-span-full py-16 text-center text-xs text-gray-400 bg-white rounded-2xl border border-gray-200">මේස කිසිවක් නැත... (+ Add Table ඔබන්න)</div>`;
-    return;
-  }
-  
+
   const activeBills = erpState.activeBills || {};
+  const tablesObj = erpState.tables || {};
 
-  list.forEach(([id, table]) => {
-    const matchedBill = Object.values(activeBills).find(b => b.tableNo === table.tableNo);
+  // 🛡️ Helper: Finds table data from state matching "01", "1", "T-01" etc.
+  function getTableData(numStr) {
+    const cleanNum = parseInt(numStr, 10);
+    const foundEntry = Object.entries(tablesObj).find(([id, t]) => {
+      const tNo = String(t.tableNo || '').trim();
+      return tNo === numStr || parseInt(tNo, 10) === cleanNum || tNo === `T-${numStr}`;
+    });
+
+    if (foundEntry) {
+      return { id: foundEntry[0], ...foundEntry[1] };
+    }
+    return {
+      id: null,
+      tableNo: numStr,
+      status: "Available",
+      assignedWaiter: "",
+      capacity: 4,
+      area: "Main Hall"
+    };
+  }
+
+  // 🛡️ Check table occupancy based on active orders & DB status
+  function isTableOccupied(tableData) {
+    const matchedBill = Object.values(activeBills).find(b => {
+      const bNo = String(b.tableNo || '').trim();
+      return bNo === tableData.tableNo || parseInt(bNo, 10) === parseInt(tableData.tableNo, 10);
+    });
     const hasActiveOrders = matchedBill && matchedBill.cart && matchedBill.cart.length > 0;
-    const isOccupied = table.status === "Occupied" || hasActiveOrders;
+    return tableData.status === "Occupied" || hasActiveOrders;
+  }
 
-    const card = document.createElement("div");
-    card.className = `p-4 rounded-2xl border-2 transition shadow-sm flex flex-col justify-between cursor-pointer active:scale-95 ${
-      isOccupied 
-        ? "bg-red-50 border-red-300 text-red-900" 
-        : "bg-white border-gray-200 hover:border-blue-500 text-gray-800"
+  // 🪑 SVG CHAIR & TABLE RENDERERS (BLUEPRINT ARCHITECTURAL VECTOR STYLE)
+  function renderTableElement(numStr, type = "cross-4") {
+    const tData = getTableData(numStr);
+    const occupied = isTableOccupied(tData);
+
+    // Filter by Area if active (dims non-matching areas without breaking floor layout)
+    const matchesArea = (currentAreaFilter === "ALL" || (tData.area && tData.area === currentAreaFilter));
+
+    const wrap = document.createElement("div");
+    wrap.className = `relative flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-150 transform hover:scale-105 active:scale-95 ${
+      !matchesArea ? 'opacity-30 grayscale' : 'opacity-100'
     }`;
-    
-    card.onclick = () => linkTableToPos(table.tableNo);
-    
-    card.innerHTML = `
-      <div>
-        <div class="flex justify-between items-start">
-          <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-            isOccupied ? "bg-red-200 text-red-800 animate-pulse" : "bg-green-100 text-green-800"
-          }">${isOccupied ? 'Occupied (පිරිලා)' : 'Available (හිස්)'}</span>
-          <div class="space-x-1" onclick="event.stopPropagation()">
-            <button onclick="openTableModal('edit', '${id}')" class="text-gray-400 hover:text-blue-600 p-1 cursor-pointer"><i class="fa-solid fa-pen text-xs"></i></button>
-            <button onclick="deleteTable('${id}')" class="text-gray-400 hover:text-red-600 p-1 cursor-pointer"><i class="fa-solid fa-trash text-xs"></i></button>
-          </div>
-        </div>
+    wrap.onclick = () => linkTableToPos(tData.tableNo);
 
-        <div class="text-center my-3">
-          <div class="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center text-xl font-black mb-1 ${
-            isOccupied ? "bg-red-500 text-white shadow-md" : "bg-blue-600 text-white shadow-md"
-          }">
-            <i class="fa-solid fa-utensils"></i>
-          </div>
-          <h4 class="font-black text-base">${table.tableNo}</h4>
-          <span class="text-[10px] text-gray-500 font-bold block">${table.area || 'Main Hall'} (${table.capacity || 4} Seats)</span>
-        </div>
-      </div>
+    // Styling: Clean White & Dark Slate when Available, Glowing Red when Occupied
+    const tableBg = occupied ? "#ef4444" : "#ffffff";
+    const tableBorder = occupied ? "#b91c1c" : "#1e293b";
+    const chairFill = occupied ? "#fca5a5" : "#e2e8f0";
+    const chairBorder = occupied ? "#ef4444" : "#475569";
+    const textColor = occupied ? "#ffffff" : "#0f172a";
 
-      <div class="pt-2 border-t ${isOccupied ? 'border-red-200' : 'border-gray-100'} text-[10px] flex justify-between items-center">
-        <span class="truncate font-semibold text-gray-600">
-          <i class="fa-solid fa-user-tie text-blue-600 mr-0.5"></i> ${table.assignedWaiter || 'No Waiter'}
-        </span>
-        <span class="font-bold text-blue-600 hover:underline">Open Bill &rarr;</span>
-      </div>
+    let svgContent = "";
+
+    // 1. Vertical 2-Seater Booth (Tables 01-12, 17-20)
+    if (type === "vertical-2") {
+      svgContent = `
+        <svg width="48" height="66" viewBox="0 0 48 66" class="drop-shadow-xs">
+          <!-- Top Chair -->
+          <path d="M12,12 C12,4 36,4 36,12 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Table Surface -->
+          <rect x="6" y="14" width="36" height="38" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
+          <!-- Bottom Chair -->
+          <path d="M12,54 C12,62 36,62 36,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Table Number -->
+          <text x="24" y="38" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        </svg>
+      `;
+    }
+    // 2. Horizontal 2-Seater (Table 13)
+    else if (type === "horizontal-2") {
+      svgContent = `
+        <svg width="68" height="46" viewBox="0 0 68 46" class="drop-shadow-xs">
+          <!-- Left Chair -->
+          <path d="M14,11 C6,11 6,35 14,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Table Surface -->
+          <rect x="16" y="7" width="36" height="32" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
+          <!-- Right Chair -->
+          <path d="M54,11 C62,11 62,35 54,35 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Table Number -->
+          <text x="34" y="28" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        </svg>
+      `;
+    }
+    // 3. Large Vertical Family Table (Table 14 - 6 Seats)
+    else if (type === "rect-large") {
+      svgContent = `
+        <svg width="66" height="88" viewBox="0 0 66 88" class="drop-shadow-xs">
+          <!-- Left Chairs -->
+          <path d="M14,16 C6,16 6,34 14,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <path d="M14,54 C6,54 6,72 14,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Table Surface -->
+          <rect x="16" y="8" width="34" height="72" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
+          <!-- Right Chairs -->
+          <path d="M52,16 C60,16 60,34 52,34 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <path d="M52,54 C60,54 60,72 52,72 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Table Number -->
+          <text x="33" y="49" font-size="16" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        </svg>
+      `;
+    }
+    // 4. Round Table with 6 Circular Chairs (Table 16)
+    else if (type === "round-6") {
+      svgContent = `
+        <svg width="76" height="76" viewBox="0 0 76 76" class="drop-shadow-xs">
+          <!-- 6 Radial Circular Chairs -->
+          <circle cx="38" cy="8" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <circle cx="64" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <circle cx="64" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <circle cx="38" cy="68" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <circle cx="12" cy="53" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <circle cx="12" cy="23" r="7" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Center Round Table Surface -->
+          <circle cx="38" cy="38" r="22" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
+          <!-- Table Number -->
+          <text x="38" y="44" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        </svg>
+      `;
+    }
+    // 5. Cross 4-Seater Square Tables (Tables 21-28, 29, 30, 31-36)
+    else {
+      svgContent = `
+        <svg width="68" height="68" viewBox="0 0 68 68" class="drop-shadow-xs">
+          <!-- Top Chair -->
+          <path d="M22,14 C22,5 46,5 46,14 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Bottom Chair -->
+          <path d="M22,54 C22,63 46,63 46,54 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Left Chair -->
+          <path d="M14,22 C5,22 5,46 14,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Right Chair -->
+          <path d="M54,22 C63,22 63,46 54,46 Z" fill="${chairFill}" stroke="${chairBorder}" stroke-width="1.8" />
+          <!-- Center Square Table Surface -->
+          <rect x="16" y="16" width="36" height="36" rx="4" fill="${tableBg}" stroke="${tableBorder}" stroke-width="2.2" />
+          <!-- Table Number -->
+          <text x="34" y="40" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${numStr}</text>
+        </svg>
+      `;
+    }
+
+    wrap.innerHTML = `
+      ${svgContent}
+      ${
+        occupied
+          ? `<span class="absolute -top-1 -right-1 flex h-3 w-3">
+               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+               <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+             </span>`
+          : ''
+      }
+      ${
+        tData.assignedWaiter
+          ? `<span class="text-[9px] font-bold text-gray-500 truncate max-w-[60px] block mt-0.5" title="${tData.assignedWaiter}">${tData.assignedWaiter}</span>`
+          : ''
+      }
     `;
-    container.appendChild(card);
+
+    return wrap;
+  }
+
+  // 🏗️ BUILD THE ARCHITECTURAL FLOOR PLAN CONTAINER
+  const floorPlanWrapper = document.createElement("div");
+  floorPlanWrapper.className = "w-full bg-slate-50 border-2 border-slate-300 rounded-3xl p-6 sm:p-8 shadow-inner overflow-x-auto min-w-[960px]";
+
+  floorPlanWrapper.innerHTML = `
+    <!-- ARCHITECTURAL FLOOR PLAN GRID MATCHING SAMBAPOS PHOTO -->
+    <div class="flex items-start justify-between gap-6">
+
+      <!-- ================= SECTION 1: LEFT BOOTHS & SPECIAL TABLES ================= -->
+      <div class="flex flex-col gap-6">
+        
+        <!-- TOP SECTION: 01-06 (3 Columns) and 17-20 (2 Columns) -->
+        <div class="flex items-start gap-6">
+          
+          <!-- Columns 01, 02, 03 & 04, 05, 06 -->
+          <div class="grid grid-cols-3 gap-3">
+            <div id="tp-01"></div>
+            <div id="tp-02"></div>
+            <div id="tp-03"></div>
+            <div id="tp-04"></div>
+            <div id="tp-05"></div>
+            <div id="tp-06"></div>
+          </div>
+
+          <!-- Columns 17, 18 & 19, 20 -->
+          <div class="grid grid-cols-2 gap-3 pl-2">
+            <div id="tp-17"></div>
+            <div id="tp-18"></div>
+            <div id="tp-19"></div>
+            <div id="tp-20"></div>
+          </div>
+
+        </div>
+
+        <!-- BOTTOM SECTION: 07-12 (3 Columns), 13/14, and 16 (Round) -->
+        <div class="flex items-end gap-6 pt-3 border-t-2 border-dashed border-slate-200">
+          
+          <!-- Columns 07, 08, 09 & 10, 11, 12 -->
+          <div class="grid grid-cols-3 gap-3">
+            <div id="tp-07"></div>
+            <div id="tp-08"></div>
+            <div id="tp-09"></div>
+            <div id="tp-10"></div>
+            <div id="tp-11"></div>
+            <div id="tp-12"></div>
+          </div>
+
+          <!-- Tables 13 (Horizontal) & 14 (Family Rect) -->
+          <div class="flex flex-col items-center justify-end gap-3 pl-1">
+            <div id="tp-13"></div>
+            <div id="tp-14"></div>
+          </div>
+
+          <!-- Table 16 (Large Round Table) -->
+          <div class="flex items-center justify-center pl-1 pb-2">
+            <div id="tp-16"></div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ================= SECTION 2: CENTER DINING HALL (4 x 3 GRID) ================= -->
+      <div class="flex-1 flex flex-col items-center justify-center px-4 border-l-2 border-r-2 border-dashed border-slate-200">
+        <div class="grid grid-cols-4 gap-x-5 gap-y-7">
+          <!-- Row 1: 25, 26, 27, 28 -->
+          <div id="tp-25"></div>
+          <div id="tp-26"></div>
+          <div id="tp-27"></div>
+          <div id="tp-28"></div>
+
+          <!-- Row 2: 21, 22, 23, 24 -->
+          <div id="tp-21"></div>
+          <div id="tp-22"></div>
+          <div id="tp-23"></div>
+          <div id="tp-24"></div>
+
+          <!-- Row 3: 29, 30, 31, 32 -->
+          <div id="tp-29"></div>
+          <div id="tp-30"></div>
+          <div id="tp-31"></div>
+          <div id="tp-32"></div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 3: RIGHT WALL / TERRACE (COLUMN) ================= -->
+      <div class="flex flex-col items-center justify-between gap-5 pl-2">
+        <div id="tp-33"></div>
+        <div id="tp-34"></div>
+        <div id="tp-35"></div>
+        <div id="tp-36"></div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM LEGEND & FLOOR SUMMARY -->
+    <div class="mt-8 pt-4 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs font-bold text-slate-500">
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-1.5">
+          <span class="w-3.5 h-3.5 bg-white border-2 border-slate-700 rounded-sm"></span>
+          <span>Available (හිස් මේස)</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3.5 h-3.5 bg-red-500 border-2 border-red-700 rounded-sm animate-pulse"></span>
+          <span class="text-red-700 font-extrabold">Occupied (කෑම ඇණවුම් සහිත)</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="button" onclick="openMergeTableModal()" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl transition shadow-xs cursor-pointer">
+          <i class="fa-solid fa-object-group text-blue-600 mr-1"></i> Merge Tables
+        </button>
+        <span>Total: 36 Blueprint Tables</span>
+      </div>
+    </div>
+  `;
+
+  container.appendChild(floorPlanWrapper);
+
+  // 🔌 MOUNT EACH TABLE INTO ITS CORRESPONDING BLUEPRINT SLOT
+  const mountMap = {
+    // Left Booths Top
+    "01": "vertical-2", "02": "vertical-2", "03": "vertical-2",
+    "04": "vertical-2", "05": "vertical-2", "06": "vertical-2",
+    "17": "vertical-2", "18": "vertical-2",
+    "19": "vertical-2", "20": "vertical-2",
+
+    // Left Booths Bottom & Specials
+    "07": "vertical-2", "08": "vertical-2", "09": "vertical-2",
+    "10": "vertical-2", "11": "vertical-2", "12": "vertical-2",
+    "13": "horizontal-2",
+    "14": "rect-large",
+    "16": "round-6",
+
+    // Center Cross Tables
+    "25": "cross-4", "26": "cross-4", "27": "cross-4", "28": "cross-4",
+    "21": "cross-4", "22": "cross-4", "23": "cross-4", "24": "cross-4",
+    "29": "cross-4", "30": "cross-4", "31": "cross-4", "32": "cross-4",
+
+    // Right Column
+    "33": "cross-4", "34": "cross-4", "35": "cross-4", "36": "cross-4"
+  };
+
+  Object.entries(mountMap).forEach(([numStr, type]) => {
+    const slot = document.getElementById(`tp-${numStr}`);
+    if (slot) {
+      slot.appendChild(renderTableElement(numStr, type));
+    }
   });
 }
 
-// ⚡ 100% OFFLINE-SAFE INSTANT TABLE-TO-POS LINK ENGINE
+// ==========================================================================
+// 4. INSTANT TABLE-TO-POS LINK & ACTIONS ENGINE
+// ==========================================================================
+
 export function linkTableToPos(tableNo) {
   if (!erpState.activeBills) erpState.activeBills = {};
   
-  let matchedBillKey = Object.keys(erpState.activeBills).find(k => erpState.activeBills[k].tableNo === tableNo);
+  // Find if an active bill already belongs to this table number
+  let matchedBillKey = Object.keys(erpState.activeBills).find(k => {
+    const bNo = String(erpState.activeBills[k].tableNo || '').trim();
+    return bNo === tableNo || parseInt(bNo, 10) === parseInt(tableNo, 10);
+  });
   
   if (!matchedBillKey) {
     matchedBillKey = "bill_" + Date.now();
@@ -320,7 +591,11 @@ export function linkTableToPos(tableNo) {
       updatedAt: new Date().toISOString()
     };
 
-    const tObj = Object.values(erpState.tables || {}).find(t => t.tableNo === tableNo);
+    const tObj = Object.values(erpState.tables || {}).find(t => {
+      const tNo = String(t.tableNo || '').trim();
+      return tNo === tableNo || parseInt(tNo, 10) === parseInt(tableNo, 10);
+    });
+
     if (tObj && tObj.assignedWaiter) {
       newBillPayload.waiterName = tObj.assignedWaiter;
     }
@@ -332,7 +607,11 @@ export function linkTableToPos(tableNo) {
     }
   }
 
-  const matchedTableEntry = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tableNo);
+  const matchedTableEntry = Object.entries(erpState.tables || {}).find(([id, t]) => {
+    const tNo = String(t.tableNo || '').trim();
+    return tNo === tableNo || parseInt(tNo, 10) === parseInt(tableNo, 10);
+  });
+
   if (matchedTableEntry) {
     matchedTableEntry[1].status = "Occupied";
     if (navigator.onLine && dbRef && updateFn && currentTenant) {
@@ -360,7 +639,10 @@ export async function deleteTable(id) {
   }
 }
 
-// 3. MERGE TABLES ENGINE (WITH NON-BLOCKING TOASTS)
+// ==========================================================================
+// 5. MERGE TABLES ENGINE
+// ==========================================================================
+
 export function openMergeTableModal() {
   const srcSel = document.getElementById("mergeSourceTableSelect");
   const tgtSel = document.getElementById("mergeTargetTableSelect");
@@ -369,11 +651,21 @@ export function openMergeTableModal() {
   srcSel.innerHTML = `<option value="">-- Source Table (අස්කරන මේසය) --</option>`;
   tgtSel.innerHTML = `<option value="">-- Target Table (එකතු වන මේසය) --</option>`;
 
-  const allTables = Object.values(erpState.tables || {});
+  // Mount 01 to 36 or registered tables
+  const allTablesList = [];
+  for (let i = 1; i <= 36; i++) {
+    const num = i < 10 ? `0${i}` : `${i}`;
+    allTablesList.push(num);
+  }
 
-  allTables.forEach(t => {
-    srcSel.innerHTML += `<option value="${t.tableNo}">Table ${t.tableNo} (${t.status})</option>`;
-    tgtSel.innerHTML += `<option value="${t.tableNo}">Table ${t.tableNo} (${t.status})</option>`;
+  allTablesList.forEach(tNo => {
+    const tData = erpState.tables?.[`tbl_${tNo}`] || Object.values(erpState.tables || {}).find(t => String(t.tableNo) === tNo) || { tableNo: tNo };
+    const bill = Object.values(erpState.activeBills || {}).find(b => String(b.tableNo) === tNo);
+    const hasOrder = bill && bill.cart && bill.cart.length > 0;
+    const label = `Table ${tNo} ${hasOrder ? '(Active Orders)' : ''}`;
+
+    srcSel.innerHTML += `<option value="${tNo}">${label}</option>`;
+    tgtSel.innerHTML += `<option value="${tNo}">${label}</option>`;
   });
 
   document.getElementById("mergeTableModal")?.classList.remove("hidden");
@@ -399,8 +691,8 @@ export async function handleMergeTables(e) {
   }
 
   const activeBills = erpState.activeBills || {};
-  const srcBillKey = Object.keys(activeBills).find(k => activeBills[k].tableNo === srcTableNo);
-  let tgtBillKey = Object.keys(activeBills).find(k => activeBills[k].tableNo === tgtTableNo);
+  const srcBillKey = Object.keys(activeBills).find(k => String(activeBills[k].tableNo) === srcTableNo);
+  let tgtBillKey = Object.keys(activeBills).find(k => String(activeBills[k].tableNo) === tgtTableNo);
 
   const srcCart = (srcBillKey && activeBills[srcBillKey].cart) ? [...activeBills[srcBillKey].cart] : [];
 
@@ -447,8 +739,8 @@ export async function handleMergeTables(e) {
       delete erpState.activeBills[srcBillKey];
     }
 
-    const srcTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === srcTableNo);
-    const tgtTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tgtTableNo);
+    const srcTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => String(t.tableNo) === srcTableNo);
+    const tgtTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => String(t.tableNo) === tgtTableNo);
 
     if (srcTableObj) srcTableObj[1].status = "Available";
     if (tgtTableObj) tgtTableObj[1].status = "Occupied";
@@ -473,7 +765,9 @@ export async function handleMergeTables(e) {
   }
 }
 
-// Global Window Exports
+// ==========================================================================
+// 6. GLOBAL WINDOW EXPORTS
+// ==========================================================================
 window.openAreaModal = openAreaModal;
 window.closeAreaModal = closeAreaModal;
 window.handleAddAreaSubmit = handleAddAreaSubmit;
