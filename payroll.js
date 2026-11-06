@@ -3,7 +3,7 @@
 // 5-YEAR ZERO-FREEZE HARDENED ARCHITECTURE (100% ALERT-FREE & TOAST-SAFE)
 // ==========================================================================
 
-import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans } from './state.js';
+import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans, sharedOfflineDB } from './state.js';
 import { showLiveToast, downloadCSVFile, getLocalDateString, hashPin, verifyPin } from './utils.js';
 import { printThermalPayslip } from './printer.js';
 
@@ -13,17 +13,6 @@ let updateFn = null;
 let removeFn = null;
 let createAuthUserFn = null;
 let wakeLockSentinel = null;
-
-// Offline Attendance Dexie Instance
-let offlineAttDb = null;
-if (typeof Dexie !== 'undefined') {
-  offlineAttDb = new Dexie("RestaurantERP_OfflineDB");
-  offlineAttDb.version(1).stores({
-    offlineInvoices: '++id, invoiceNumber, createdAt, synced',
-    offlinePettyCash: '++id, timestamp, synced',
-    offlineAttendance: '++id, date, synced'
-  });
-}
 
 // Stores current active payslip payload for instant 80mm thermal reprint
 export let activePayslipData = null;
@@ -210,9 +199,9 @@ export async function submitKioskAttendance(mode) {
         if (!erpState.attendance) erpState.attendance = {};
         erpState.attendance[attRef.key] = newRecord;
         showLiveToast("🟢 Check-In Successful", `${emp.name} (${emp.role}) පැමිණීම සටහන් විය.`, "success", "fa-circle-check");
-      } else if (offlineAttDb) {
+      } else if (sharedOfflineDB) {
         const tempKey = "offline_att_" + Date.now();
-        await offlineAttDb.offlineAttendance.add({ ...newRecord, synced: 0 });
+        await sharedOfflineDB.offlineAttendance.add({ ...newRecord, synced: 0 });
         if (!erpState.attendance) erpState.attendance = {};
         erpState.attendance[tempKey] = newRecord;
         showLiveToast("⚠️ Check-In Saved Offline", `${emp.name} පැමිණීම Offline සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
@@ -247,8 +236,8 @@ export async function submitKioskAttendance(mode) {
           Object.assign(erpState.attendance[existingAttKey], updateData);
         }
         showLiveToast("🔴 Check-Out Successful", `${emp.name} පිටවීම සටහන් විය. (${workedHours.toFixed(1)} hrs worked)`, "success", "fa-door-open");
-      } else if (offlineAttDb) {
-        await offlineAttDb.offlineAttendance.add({
+      } else if (sharedOfflineDB) {
+        await sharedOfflineDB.offlineAttendance.add({
           ...attRec,
           ...updateData,
           synced: 0
@@ -281,15 +270,15 @@ export async function submitKioskAttendance(mode) {
 }
 
 export async function syncOfflineAttendanceToCloud() {
-  if (!navigator.onLine || !offlineAttDb || !dbRef || !pushFn || !currentTenant) return;
+  if (!navigator.onLine || !sharedOfflineDB || !dbRef || !pushFn || !currentTenant) return;
   try {
-    const unsynced = await offlineAttDb.offlineAttendance.where("synced").equals(0).toArray();
+    const unsynced = await sharedOfflineDB.offlineAttendance.where("synced").equals(0).toArray();
     for (const rec of unsynced) {
       const cleanRec = { ...rec };
       delete cleanRec.id;
       delete cleanRec.synced;
       await pushFn(dbRef(`tenants/${currentTenant}/attendance`), cleanRec);
-      await offlineAttDb.offlineAttendance.delete(rec.id);
+      await sharedOfflineDB.offlineAttendance.delete(rec.id);
     }
   } catch (e) {}
 }
