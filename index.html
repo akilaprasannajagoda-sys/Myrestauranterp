@@ -22,7 +22,7 @@
     @media print {
       @page {
         margin: 0 !important;
-        size: 80mm auto !important;
+        size: auto !important;
       }
       body {
         margin: 0 !important;
@@ -42,14 +42,14 @@
         position: absolute !important; 
         left: 0 !important; 
         top: 0 !important; 
-        width: 72mm !important;
-        max-width: 72mm !important;
+        width: 100% !important;
+        max-width: 100% !important;
         min-height: auto !important;
         overflow: visible !important;
-        padding: 1mm 2mm !important; 
+        padding: 0.5mm 1mm !important; 
         margin: 0 !important; 
-        font-family: 'Courier New', Courier, monospace, sans-serif !important;
-        color: #000 !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Courier New", Courier, monospace, sans-serif !important;
+        color: #000000 !important;
         font-size: 11px !important;
         line-height: 1.35 !important;
         display: block !important;
@@ -254,26 +254,35 @@
         </nav>
       </div>
 
-      <!-- Bottom User Profile & Logout with systems.lk Branding -->
-      <div class="p-3 border-t border-gray-800 bg-gray-950">
-        <div class="flex items-center justify-between p-2 rounded-xl bg-gray-800">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg bg-gray-700 text-gray-200 flex items-center justify-center font-bold text-xs">
-              <i class="fa-solid fa-user"></i>
-            </div>
-            <div class="truncate w-28">
-              <p id="sideUserName" class="text-xs font-bold text-gray-200 truncate leading-tight">User Name</p>
-              <p id="sideTenantId" class="text-[9px] text-gray-400 font-mono">Tenant ID</p>
-            </div>
-          </div>
-          <button onclick="logout()" title="Logout" class="w-8 h-8 rounded-lg text-red-400 hover:bg-red-500 hover:bg-opacity-20 flex items-center justify-center transition cursor-pointer">
-            <i class="fa-solid fa-arrow-right-from-bracket text-sm"></i>
-          </button>
-        </div>
-        <p class="text-[9px] text-gray-500 text-center mt-2 font-mono">
-          Powered by <span class="text-gray-300 font-bold">systems.lk</span> (0760672029)
-        </p>
+   <!-- Bottom User Profile, Terminal Lock & Full Logout (systems.lk Branded) -->
+<div class="p-3 border-t border-gray-800 bg-gray-950">
+  <div class="flex items-center justify-between p-2 rounded-xl bg-gray-800">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-gray-700 text-gray-200 flex items-center justify-center font-bold text-xs flex-shrink-0">
+        <i class="fa-solid fa-user"></i>
       </div>
+      <div class="truncate w-24">
+        <p id="sideUserName" class="text-xs font-bold text-gray-200 truncate leading-tight">User Name</p>
+        <p id="sideTenantId" class="text-[9px] text-gray-400 font-mono">Tenant ID</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-1">
+      <!-- 🔒 1. Cashier Lock Button (Firebase Session එක නොකඩා තිරය Lock කරයි) -->
+      <button type="button" onclick="lockTerminal()" title="Lock Counter / Switch Cashier (කවුන්ටරය අගුළු ලෑම)" class="w-7 h-7 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-black flex items-center justify-center transition cursor-pointer border border-yellow-500/30">
+        <i class="fa-solid fa-lock text-xs"></i>
+      </button>
+      
+      <!-- 🚪 2. Owner Full Sign-Out Button (පරිගණකය සම්පූර්ණයෙන්ම Unpair කිරීමට) -->
+      <button type="button" onclick="logout()" title="Full Sign Out (Owner Only - පද්ධතියෙන් ඉවත් වීම)" class="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white flex items-center justify-center transition cursor-pointer border border-red-500/30">
+        <i class="fa-solid fa-power-off text-xs"></i>
+      </button>
+    </div>
+  </div>
+  <p class="text-[9px] text-gray-500 text-center mt-2 font-mono">
+    Powered by <span class="text-gray-300 font-bold">systems.lk</span> (0760672029)
+  </p>
+</div>
 
     </aside>
 
@@ -598,30 +607,35 @@
           </div>
         </div>
 
-        <!-- VIEW 2: TABLE MANAGEMENT ENGINE -->
-        <div id="viewTables" class="hidden space-y-5 max-w-6xl mx-auto">
-          <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-                <i class="fa-solid fa-chair text-blue-600"></i> Floor Plan & Table Management
-              </h3>
-              <p class="text-xs text-gray-400">මේස වල සජීවී තත්ත්වය, Area කලාප සහ වේටර්වරු පාලනය</p>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button onclick="openAreaModal()" class="bg-gray-800 hover:bg-gray-900 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer">
-                <i class="fa-solid fa-layer-group text-blue-400"></i> Manage Areas
-              </button>
-              <button onclick="openTableModal('add')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-md flex items-center gap-2 transition cursor-pointer">
-                <i class="fa-solid fa-plus"></i> + Add Table
-              </button>
-            </div>
-          </div>
-
-          <div id="tableAreaFilters" class="flex gap-2 overflow-x-auto pb-1 text-xs font-bold no-scrollbar"></div>
-          <div id="tablesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5"></div>
-        </div>
-
+      <!-- VIEW 2: TABLE MANAGEMENT ENGINE (ARCHITECTURAL FLOOR PLAN) -->
+<div id="viewTables" class="hidden space-y-4 max-w-7xl mx-auto">
+  <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+    <div>
+      <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
+        <i class="fa-solid fa-chair text-blue-600"></i> Floor Plan & Table Layout (බ්ලූප්‍රින්ට් සැලැස්ම)
+      </h3>
+      <p class="text-xs text-gray-400">මේස වල සජීවී තත්ත්වය, කලාප (Areas) සහ වේටර්වරු පාලනය</p>
+    </div>
+    
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" onclick="openMergeTableModal()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer" title="Merge Two Tables">
+        <i class="fa-solid fa-object-group"></i> Merge Tables
+      </button>
+      <button type="button" onclick="openAreaModal()" class="bg-gray-800 hover:bg-gray-900 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer">
+        <i class="fa-solid fa-layer-group text-blue-400"></i> Manage Areas
+      </button>
+      <button type="button" onclick="openTableModal('add')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-md flex items-center gap-1.5 transition cursor-pointer">
+        <i class="fa-solid fa-plus"></i> + Add / Edit Table
+      </button>
+    </div>
+  </div>
+  
+  <!-- Area Filter Buttons (Rooftop, VIP, Dining etc.) -->
+  <div id="tableAreaFilters" class="flex gap-2 overflow-x-auto pb-1 text-xs font-bold no-scrollbar"></div>
+  
+  <!-- Architectural Blueprint Canvas Mount Point -->
+  <div id="tablesGrid" class="w-full overflow-hidden"></div>
+</div>
         <!-- VIEW 3: LIVE KITCHEN DISPLAY SYSTEM (KDS) -->
         <div id="viewKitchen" class="hidden space-y-4 max-w-6xl mx-auto">
           <div class="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
@@ -1916,16 +1930,28 @@
             
             <form id="printerRoutingForm" class="space-y-4 text-xs font-bold">
               
-              <div class="p-3 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <input type="checkbox" id="silentPrintEnabled" checked class="w-5 h-5 text-indigo-600 rounded cursor-pointer">
-                  <div>
-                    <label for="silentPrintEnabled" class="text-xs font-black text-indigo-950 cursor-pointer">Direct Silent Printing (.exe / Hardware Mode)</label>
-                    <p class="text-[10px] text-gray-500 font-normal">ක්‍රියාත්මක කළ විට Browser Dialog නැතිව කෙලින්ම Print වේ.</p>
-                  </div>
-                </div>
-                <span class="text-[9px] bg-green-100 text-green-800 font-extrabold px-2 py-0.5 rounded uppercase">Active</span>
-              </div>
+          <div class="p-3 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center justify-between">
+  <div class="flex items-center gap-2.5">
+    <input type="checkbox" id="silentPrintEnabled" checked class="w-5 h-5 text-indigo-600 rounded cursor-pointer">
+    <div>
+      <label for="silentPrintEnabled" class="text-xs font-black text-indigo-950 cursor-pointer">Direct Silent Printing (.exe / Hardware Mode)</label>
+      <p class="text-[10px] text-gray-500 font-normal">ක්‍රියාත්මක කළ විට Browser Dialog නැතිව කෙලින්ම Print වේ.</p>
+    </div>
+  </div>
+  <span class="text-[9px] bg-green-100 text-green-800 font-extrabold px-2 py-0.5 rounded uppercase">Active</span>
+</div>
+
+<!-- 🛡️ DUAL PAPER WIDTH SELECTOR (80mm vs 58mm) -->
+<div class="p-3 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+  <div>
+    <label for="setPaperWidth" class="text-xs font-black text-gray-800">Thermal Receipt Paper Width (මුද්‍රණ කඩදාසි පළල)</label>
+    <p class="text-[10px] text-gray-500 font-normal">ඔබ භාවිත කරන Thermal Printer එකේ ප්‍රමාණය තෝරන්න (අයින කැපීම වැළැක්වීමට).</p>
+  </div>
+  <select id="setPaperWidth" class="p-2 border border-indigo-300 rounded-xl text-xs font-bold bg-white outline-none text-indigo-900 cursor-pointer">
+    <option value="80mm">80mm (Standard 3-Inch - ලොකු රෝල්)</option>
+    <option value="58mm">58mm (Compact 2-Inch - පොඩි රෝල්)</option>
+  </select>
+</div>
               
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 
@@ -2567,13 +2593,12 @@
     <div style="border-bottom: 1.5px solid #000000; margin: 3px 0;"></div>
   </div>
   
-  <!-- 2. Items Table Header -->
-  <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 900; border-bottom: 1.5px solid #000000; padding: 2px 0 3px 0; margin-bottom: 3px; color: #000000;">
-    <span style="width: 48%;">ITEM / QTY</span>
-    <span style="width: 25%; text-align: right;">PRICE</span>
-    <span style="width: 27%; text-align: right;">TOTAL</span>
-  </div>
-  
+  <!-- 2. Items Table Header (Adaptive Flexbox for 58mm & 80mm) -->
+<div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 900; border-bottom: 1.5px solid #000000; padding: 2px 0 3px 0; margin-bottom: 3px; color: #000000; width: 100%;">
+  <span style="flex: 1.8; text-align: left; padding-right: 2px;">ITEM / QTY</span>
+  <span style="flex: 1.1; text-align: right;">PRICE</span>
+  <span style="flex: 1.2; text-align: right;">TOTAL</span>
+</div>
   <!-- 3. Dynamic Items List -->
   <div id="receiptItems" style="font-size: 10.5px; color: #000000;"></div>
   
