@@ -1,5 +1,6 @@
 // ==========================================================================
 // MODULE 12: UNIVERSAL SILENT DIRECT HARDWARE PRINTER DRIVER (KOT & BOT COMPLIANT)
+// 🛡️ DUAL PAPER WIDTH ADAPTIVE ENGINE (80MM & 58MM AUTO-SCALED ZERO-CLIPPING)
 // ==========================================================================
 
 import { erpState, currentTenantInfo } from './state.js';
@@ -17,7 +18,7 @@ const CMD_CENTER = ESC + "a\x01";
 const CMD_LEFT = ESC + "a\x00";
 const CMD_RIGHT = ESC + "a\x02";
 
-// 1. FORMAT RAW TEXT RECEIPT (80MM ESC/POS)
+// 1. FORMAT RAW TEXT RECEIPT (ADAPTIVE 80MM / 58MM ESC/POS)
 export function formatReceiptRawText(inv, stationLabel = "") {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const addr = currentTenantInfo?.address || "";
@@ -25,6 +26,12 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   const tax = currentTenantInfo?.taxNo ? `TIN/VAT: ${currentTenantInfo.taxNo}` : "";
   const footer = currentTenantInfo?.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
   const dateStr = new Date(inv.createdAt || Date.now()).toLocaleString();
+  
+  // 🛡️ 80mm (48 chars) vs 58mm (32 chars) Dynamic Width Setup
+  const is58 = (erpState.settings?.paperWidth === "58mm");
+  const lineWidth = is58 ? 32 : 48;
+  const divider = "-".repeat(lineWidth) + "\n";
+  const doubleDivider = "=".repeat(lineWidth) + "\n";
   
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `${hName}\n` + CMD_BOLD_OFF;
@@ -36,26 +43,38 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   text += `Invoice #${inv.invoiceNumber}\n`;
   text += `Date: ${dateStr}\n`;
   text += `Type: ${inv.orderType} (Table: ${inv.tableNo || 'N/A'})\n`;
-  text += CMD_LEFT + "------------------------------------------------\n";
-  text += "ITEM / QTY                      PRICE      TOTAL\n";
-  text += "------------------------------------------------\n";
+  text += CMD_LEFT + divider;
   
+  if (is58) {
+    text += "ITEM / QTY          PRICE  TOTAL\n";
+  } else {
+    text += "ITEM / QTY                      PRICE      TOTAL\n";
+  }
+  text += divider;
+  
+  const nameLen = is58 ? 16 : 28;
+  const priceLen = is58 ? 7 : 9;
+  const totLen = is58 ? 7 : 9;
+
   (inv.items || []).forEach(i => {
-    const namePart = (i.name + " x" + i.qty).padEnd(28, " ").substring(0, 28);
-    const pricePart = parseFloat(i.price).toFixed(2).padStart(9, " ");
-    const totPart = (i.price * i.qty).toFixed(2).padStart(9, " ");
+    const namePart = (i.name + " x" + i.qty).padEnd(nameLen, " ").substring(0, nameLen);
+    const pricePart = parseFloat(i.price).toFixed(2).padStart(priceLen, " ");
+    const totPart = (i.price * i.qty).toFixed(2).padStart(totLen, " ");
     text += `${namePart} ${pricePart} ${totPart}\n`;
     if (i.note) {
       text += `  * Note: ${i.note}\n`;
     }
   });
   
-  text += "------------------------------------------------\n";
+  text += divider;
   text += CMD_RIGHT;
   text += `Subtotal: Rs. ${parseFloat(inv.subtotal || 0).toFixed(2)}\n`;
   
   if (parseFloat(inv.discountAmount || 0) > 0) {
     text += `Discount: -Rs. ${parseFloat(inv.discountAmount).toFixed(2)}\n`;
+  }
+  if (parseFloat(inv.loyaltyDiscount || 0) > 0) {
+    text += `Points Disc: -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)}\n`;
   }
   if (parseFloat(inv.scAmount || 0) > 0) {
     text += `Service Charge: Rs. ${parseFloat(inv.scAmount).toFixed(2)}\n`;
@@ -68,7 +87,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   }
   
   text += CMD_BOLD_ON + `NET TOTAL: Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}\n` + CMD_BOLD_OFF;
-  text += "------------------------------------------------\n";
+  text += divider;
   
   const p = inv.payment || { method: "cash" };
   if (p.method === "split") {
@@ -79,6 +98,11 @@ export function formatReceiptRawText(inv, stationLabel = "") {
       text += `Tendered: Rs. ${parseFloat(p.cashTendered).toFixed(2)} | Change: Rs. ${parseFloat(p.change || 0).toFixed(2)}\n`;
     }
   }
+
+  if (inv.loyaltyPointsEarned > 0) {
+    text += divider;
+    text += `⭐ Points Earned: +${inv.loyaltyPointsEarned} Pts\n`;
+  }
   
   text += CMD_CENTER + "\n" + footer + "\n";
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
@@ -88,11 +112,15 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   return text;
 }
 
-// 2. DYNAMIC KOT & BOT STATION ORDER TICKET FORMATTER (ESC/POS)
+// 2. DYNAMIC KOT & BOT STATION ORDER TICKET FORMATTER (ADAPTIVE 80MM / 58MM ESC/POS)
 export function formatStationOrderTicket(ticket, stationType = "KOT") {
   const isBar = (stationType || "").toUpperCase() === "BOT";
   const title = isBar ? "*** BAR ORDER TICKET (BOT) ***" : "*** KITCHEN ORDER TICKET (KOT) ***";
   const tagline = isBar ? "SERVE CHILLED & FRESH\n" : "PREPARE FRESH & QUICK\n";
+  
+  const is58 = (erpState.settings?.paperWidth === "58mm");
+  const lineWidth = is58 ? 32 : 48;
+  const doubleDivider = "=".repeat(lineWidth) + "\n";
   
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
@@ -101,21 +129,29 @@ export function formatStationOrderTicket(ticket, stationType = "KOT") {
   if (ticket.waiterName) {
     text += `Waiter: ${ticket.waiterName}\n`;
   }
-  text += CMD_LEFT + "================================================\n";
-  text += CMD_BOLD_ON + "ITEM NAME                                    QTY\n" + CMD_BOLD_OFF;
-  text += "================================================\n";
+  text += CMD_LEFT + doubleDivider;
   
+  if (is58) {
+    text += CMD_BOLD_ON + "ITEM NAME                    QTY\n" + CMD_BOLD_OFF;
+  } else {
+    text += CMD_BOLD_ON + "ITEM NAME                                    QTY\n" + CMD_BOLD_OFF;
+  }
+  text += doubleDivider;
+  
+  const nameWidth = is58 ? 24 : 38;
+  const qtyWidth = is58 ? 6 : 8;
+
   (ticket.items || []).forEach(i => {
-    const tag = i.isAddOn ? " (➕ ADD-ON)" : "";
-    const nameStr = (i.name + tag).padEnd(38, " ").substring(0, 38);
-    const qtyStr = ("x" + i.qty).padStart(8, " ");
+    const tag = i.isAddOn ? " (+ADD)" : "";
+    const nameStr = (i.name + tag).padEnd(nameWidth, " ").substring(0, nameWidth);
+    const qtyStr = ("x" + i.qty).padStart(qtyWidth, " ");
     text += CMD_BOLD_ON + `${nameStr} ${qtyStr}\n` + CMD_BOLD_OFF;
     if (i.note) {
       text += `  >> NOTE: ${i.note}\n`;
     }
   });
   
-  text += "================================================\n";
+  text += doubleDivider;
   text += CMD_CENTER + tagline;
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
@@ -129,48 +165,61 @@ export function formatKOTRawText(kot, stationLabel = "") {
   return formatStationOrderTicket(kot, stationType);
 }
 
-// 3. 80MM DEDICATED THERMAL PAYSLIP FORMATTER
+// 3. 80MM / 58MM DEDICATED THERMAL PAYSLIP FORMATTER
 export function formatPayslipRawText(p) {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   
+  const is58 = (erpState.settings?.paperWidth === "58mm");
+  const lineWidth = is58 ? 32 : 48;
+  const divider = "-".repeat(lineWidth) + "\n";
+
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `${hName}\n` + CMD_BOLD_OFF;
   text += `*** EMPLOYEE SALARY PAYSLIP ***\n`;
   text += `Month: ${p.monthStr || 'N/A'}\n`;
-  text += CMD_LEFT + "------------------------------------------------\n";
+  text += CMD_LEFT + divider;
   text += CMD_BOLD_ON + `Emp ID : ${p.empId || 'EMP'}\n` + CMD_BOLD_OFF;
   text += `Name   : ${p.empName || 'Staff'}\n`;
   text += `Role   : ${p.empRole || 'Staff'}\n`;
   text += `Days Worked : ${p.daysWorked || 0} Days\n`;
-  text += "------------------------------------------------\n";
+  text += divider;
   text += CMD_RIGHT;
   text += `Basic Salary: Rs. ${parseFloat(p.basic || 0).toFixed(2)}\n`;
   text += `OT (${p.otHours || 0}h @ Rs.${p.otRate || 0}): +Rs. ${parseFloat(p.otAmount || 0).toFixed(2)}\n`;
   text += `Gross Earnings: Rs. ${(parseFloat(p.basic || 0) + parseFloat(p.otAmount || 0)).toFixed(2)}\n`;
   text += `Advances Deducted: -Rs. ${parseFloat(p.advances || 0).toFixed(2)}\n`;
-  text += "------------------------------------------------\n";
+  text += divider;
   text += CMD_BOLD_ON + `NET SALARY: Rs. ${parseFloat(p.netSalary || 0).toFixed(2)}\n` + CMD_BOLD_OFF;
-  text += "------------------------------------------------\n\n";
+  text += divider + "\n";
   text += CMD_CENTER;
-  text += `....................        ....................\n`;
-  text += ` Employer Signature          Employee Signature\n\n`;
+  
+  if (is58) {
+    text += `.................   .................\n`;
+    text += `  Employer Sign       Employee Sign  \n\n`;
+  } else {
+    text += `....................        ....................\n`;
+    text += ` Employer Signature          Employee Signature\n\n`;
+  }
+  
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
   
   return text;
 }
 
-// 4. SILENT DIRECT PRINT DISPATCHER (ZERO BLANK FEED + ELECTRON DISPATCH)
+// 4. SILENT DIRECT PRINT DISPATCHER (WITH 80MM / 58MM PAPER PROFILE DISPATCH)
 export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlElementId = "") {
   const el = htmlElementId ? document.getElementById(htmlElementId) : null;
   const contentToPrint = el ? el.innerHTML : rawContent;
+  const paperWidth = erpState.settings?.paperWidth || "80mm";
   
   // 1. Electron Desktop App (.exe) Environment
   if (window.electronAPI && window.electronAPI.printSilent) {
     try {
       const res = await window.electronAPI.printSilent({
         printerName: targetDeviceName,
-        htmlContent: contentToPrint
+        htmlContent: contentToPrint,
+        paperWidth: paperWidth // 🛡️ 80mm හෝ 58mm අගය Electron Driver වෙත යවයි
       });
       if (res && res.success) {
         return true;
@@ -200,7 +249,7 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
   return true;
 }
 
-// 5. PRINT THERMAL 80MM PAYSLIP DISPATCHER
+// 5. PRINT THERMAL 80MM / 58MM PAYSLIP DISPATCHER
 export async function printThermalPayslip(payslipData) {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const pHotel = document.getElementById("payslipThermalHotel");
