@@ -1,10 +1,11 @@
 // ==========================================================================
 // MODULE 13: CUSTOMER DIRECTORY, CRM & LOYALTY POINTS ENGINE (UNFREEZE READY)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (DOM SLICED & DEBOUNCED ZERO-LAG)
+// 🛡️ XSS & SPECIAL CHARACTER SAFE DIRECTORY ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
+import { showLiveToast, downloadCSVFile, getLocalDateString, escapeHTML } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -153,7 +154,7 @@ export function onCustomerSearchInput() {
   }, 120);
 }
 
-// 4. HIGH-PERFORMANCE DOM-SLICED CUSTOMERS DIRECTORY TABLE
+// 4. HIGH-PERFORMANCE DOM-SLICED CUSTOMERS DIRECTORY TABLE (XSS IMMUNE)
 export function renderCustomersTable() {
   const tbody = document.getElementById("customersTableBody");
   const badge = document.getElementById("customerCountBadge");
@@ -176,7 +177,7 @@ export function renderCustomersTable() {
 
   if (totalMatchingCount === 0) {
     if (query) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">"${query}" නමින් පාරිභෝගිකයින් හමු නොවීය...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">"${escapeHTML(query)}" නමින් පාරිභෝගිකයින් හමු නොවීය...</td></tr>`;
     } else {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">පාරිභෝගිකයින් තවම ලියාපදිංචි කර නැත... (+ Add Customer ඔබන්න)</td></tr>`;
     }
@@ -198,10 +199,10 @@ export function renderCustomersTable() {
     tr.className = "hover:bg-gray-50 border-b border-gray-100";
     tr.innerHTML = `
       <td class="p-3.5">
-        <span class="font-extrabold text-gray-900 block">${c.name}</span>
-        <span class="text-[10px] text-gray-400 font-semibold">${c.address || 'No Address'}</span>
+        <span class="font-extrabold text-gray-900 block">${escapeHTML(c.name)}</span>
+        <span class="text-[10px] text-gray-400 font-semibold">${escapeHTML(c.address || 'No Address')}</span>
       </td>
-      <td class="p-3.5 font-mono font-bold text-blue-600">${c.phone || '-'}</td>
+      <td class="p-3.5 font-mono font-bold text-blue-600">${escapeHTML(c.phone || '-')}</td>
       <td class="p-3.5 text-center font-bold text-gray-700">${visits} Visits</td>
       <td class="p-3.5 font-bold text-gray-900">Rs. ${spend.toFixed(2)}</td>
       <td class="p-3.5">
@@ -211,7 +212,7 @@ export function renderCustomersTable() {
           ⭐ ${points} Pts
         </span>
       </td>
-      <td class="p-3.5 text-gray-500 text-[11px] truncate max-w-xs">${c.notes || '-'}</td>
+      <td class="p-3.5 text-gray-500 text-[11px] truncate max-w-xs">${escapeHTML(c.notes || '-')}</td>
       <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
         <button onclick="openLoyaltyAdjustModal('${id}')" title="Adjust Points" class="bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200 px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer">
           <i class="fa-solid fa-star-half-stroke mr-0.5"></i> Points
@@ -329,7 +330,7 @@ export async function submitLoyaltyAdjustment(e) {
   }
 }
 
-// 7. POS CUSTOMER SELECTION & ATTACHMENT
+// 7. POS CUSTOMER SELECTION & ATTACHMENT (XSS IMMUNE)
 export function onPosCustomerSearch(input) {
   const query = (input?.value || "").toLowerCase().trim();
   const dropdown = document.getElementById("posCustomerSearchResults");
@@ -361,8 +362,8 @@ export function onPosCustomerSearch(input) {
   dropdown.innerHTML = list.slice(0, 6).map(([id, c]) => `
     <div onclick="selectCustomerForCurrentBill('${id}')" class="p-2 hover:bg-blue-50 border-b border-gray-100 cursor-pointer flex justify-between items-center transition select-none">
       <div>
-        <span class="font-extrabold text-xs text-gray-900 block">${c.name}</span>
-        <span class="text-[10px] text-gray-500 font-mono">${c.phone}</span>
+        <span class="font-extrabold text-xs text-gray-900 block">${escapeHTML(c.name)}</span>
+        <span class="text-[10px] text-gray-500 font-mono">${escapeHTML(c.phone)}</span>
       </div>
       <span class="text-[10px] font-black bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">⭐ ${c.loyaltyPoints || 0} Pts</span>
     </div>
@@ -453,7 +454,7 @@ export function exportCustomersToCSV() {
 
   let csv = "Customer Name,Phone Number,Email,Address,Total Visits,Total Spent (Rs.),Loyalty Points,Notes\n";
   list.forEach(c => {
-    csv += `"${c.name || ''}","${c.phone || ''}","${c.email || ''}","${c.address || ''}","${c.totalVisits || 0}","${parseFloat(c.totalSpend || 0).toFixed(2)}","${c.loyaltyPoints || 0}","${c.notes || ''}"\n`;
+    csv += `"${(c.name || '').replace(/"/g, '""')}","${c.phone || ''}","${c.email || ''}","${(c.address || '').replace(/"/g, '""')}","${c.totalVisits || 0}","${parseFloat(c.totalSpend || 0).toFixed(2)}","${c.loyaltyPoints || 0}","${(c.notes || '').replace(/"/g, '""')}"\n`;
   });
 
   downloadCSVFile(csv, `Customer_Directory_${getLocalDateString()}.csv`);
