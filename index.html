@@ -69,33 +69,83 @@ to { transform: translateY(0); opacity: 1; }
 }
 .toast-animate { animation: slideInDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
-/* 🛡️ 100% ZERO-SCROLL DESKTOP POS LOCK */
-    html, body {
-      height: 100vh !important;
-      max-height: 100vh !important;
-      overflow: hidden !important;
+/* ==========================================================================
+       🖥️ 1. DESKTOP & CASHIER TOUCH PC (.EXE) - 100% ZERO-SCROLL LOCKED
+       (තිරය පළල් පරිගණක සඳහා පැරණි කිසිදු වෙනසක් සිදු නොවේ)
+       ========================================================================== */
+    @media (min-width: 1024px) {
+      html, body {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+      }
+
+      #mainApp, main {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+      }
+
+      #viewPos {
+        height: calc(100vh - 68px) !important;
+        max-height: calc(100vh - 68px) !important;
+        overflow: hidden !important;
+      }
+
+      #viewTables, #viewKitchen, #viewMenu, #viewInventory, 
+      #viewSuppliersGrn, #viewCustomers, #viewPettyCash, 
+      #viewFaceScan, #viewEmployees, #viewReports, #viewSettings {
+        max-height: calc(100vh - 68px) !important;
+        overflow-y: auto !important;
+        padding-bottom: 2.5rem !important;
+      }
     }
 
-    #mainApp, main {
-      height: 100vh !important;
-      max-height: 100vh !important;
-      overflow: hidden !important;
-    }
+    /* ==========================================================================
+       📱 2. MOBILE APK & SMARTPHONE ONLY (PORTRAIT TOUCH OPTIMIZED)
+       (ස්මාර්ට් ෆෝන් වලදී පමණක් පහළට Scroll වීමට ඉඩ දී Buttons උඩට ගනී)
+       ========================================================================== */
+    @media (max-width: 1023px) {
+      html, body {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
 
-    /* POS View strictly locked to exact viewport without bottom cutoff */
-#viewPos {
-  height: calc(100vh - 68px) !important;
-  max-height: calc(100vh - 68px) !important;
-  overflow: hidden !important;
-}
+      #mainApp, main {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+        overflow-x: hidden !important;
+      }
 
-    /* අනෙක් Views (Reports, Inventory, Menu) සඳහා පමණක් Scrollbar එක ක්‍රියාත්මක කිරීම */
-    #viewTables, #viewKitchen, #viewMenu, #viewInventory, 
-    #viewSuppliersGrn, #viewCustomers, #viewPettyCash, 
-    #viewFaceScan, #viewEmployees, #viewReports, #viewSettings {
-      max-height: calc(100vh - 54px) !important;
-      overflow-y: auto !important;
-      padding-bottom: 2.5rem !important;
+      /* Mobile එකේදී POS View එක ඇඟිල්ලෙන් පහළට Scroll කළ හැක */
+      #viewPos {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding-bottom: 6rem !important; /* Phone එකේ යට Navigation Bar එකට උඩින් Buttons තබයි */
+      }
+
+      /* අනෙක් Views සඳහාද Phone එකේ පහළ Buttons නොකැපෙන සේ Padding එකතු කිරීම */
+      #viewTables, #viewKitchen, #viewMenu, #viewInventory, 
+      #viewSuppliersGrn, #viewCustomers, #viewPettyCash, 
+      #viewFaceScan, #viewEmployees, #viewReports, #viewSettings {
+        max-height: none !important;
+        overflow-y: visible !important;
+        padding-bottom: 6rem !important;
+      }
+
+      /* Mobile Day-End Modal එක Keyboard එක ආ විටත් උඩට Scroll වීමට සැකසීම */
+      #dayEndModal > div {
+        max-height: 92vh !important;
+        overflow-y: auto !important;
+      }
     }
 </style>
 </head>
