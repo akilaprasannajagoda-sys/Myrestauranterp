@@ -1,5 +1,6 @@
 // ==========================================================================
 // MODULE 05: RAW MATERIALS, PRODUCT INVENTORY, STORE ISSUE & WASTAGE ENGINE
+// 📦 CATEGORY FILTERING & ADVANCED SEARCH READY
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
@@ -11,6 +12,9 @@ let updateFn = null;
 let removeFn = null;
 let transactionFn = null;
 let storeIssueSearchDebounceTimer = null;
+
+// 📦 RAW MATERIAL CATEGORY FILTER STATE
+export let currentRawCategoryFilter = "ALL";
 
 export function initInventoryContext(dbRefInstance, pushMethod, updateMethod, removeMethod, runTransactionMethod = null) {
   dbRef = dbRefInstance;
@@ -65,6 +69,7 @@ export function switchInventorySubTab(tabName) {
     if (stockBtn) {
       stockBtn.className = "px-4 py-2 rounded-xl bg-indigo-600 text-white shadow-sm font-bold cursor-pointer transition";
     }
+    renderRawCategoryFilterUI();
     renderRawStockTable();
   }
 }
@@ -94,6 +99,7 @@ export async function handleAddRawCategorySubmit(e) {
   await pushFn(dbRef(`tenants/${currentTenant}/rawCategories`), { name });
   if (input) input.value = "";
   showLiveToast("📦 Category Added", `"${name}" Category එක සාර්ථකව එකතු විය.`, "success", "fa-tags");
+  renderRawCategoryFilterUI();
 }
 
 export function renderRawCategoryListUI() {
@@ -109,6 +115,7 @@ export function renderRawCategoryListUI() {
     `;
     container.appendChild(row);
   });
+  renderRawCategoryFilterUI();
 }
 
 export async function deleteRawCategory(id) {
@@ -116,6 +123,7 @@ export async function deleteRawCategory(id) {
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/rawCategories/${id}`));
       showLiveToast("🗑️ Category Removed", "Category එක සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
+      renderRawCategoryFilterUI();
     }
   }
 }
@@ -197,9 +205,48 @@ export async function handleRawItemSubmit(e) {
     }
   }
   closeRawItemModal();
+  renderRawCategoryFilterUI();
 }
 
-// 🔍 SEARCHABLE RAW STOCK TABLE ENGINE
+// 📦 3. CATEGORY FILTER UI & SEARCHABLE RAW STOCK TABLE ENGINE
+export function filterRawByCategory(catName) {
+  currentRawCategoryFilter = catName || "ALL";
+  renderRawCategoryFilterUI();
+  renderRawStockTable();
+}
+
+export function renderRawCategoryFilterUI() {
+  const container = document.getElementById("rawCategoryFilterPills");
+  if (!container) return;
+  container.innerHTML = "";
+
+  // 1. "All Materials" Button
+  const allBtn = document.createElement("button");
+  allBtn.type = "button";
+  allBtn.className = `px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold transition text-xs cursor-pointer ${
+    currentRawCategoryFilter === "ALL" 
+      ? "bg-gray-900 text-white shadow-sm font-black" 
+      : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+  }`;
+  allBtn.innerText = "All Materials (සියල්ල)";
+  allBtn.onclick = () => filterRawByCategory("ALL");
+  container.appendChild(allBtn);
+
+  // 2. Dynamic Categories Buttons
+  Object.entries(erpState.rawCategories || {}).forEach(([id, cat]) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold transition text-xs cursor-pointer ${
+      currentRawCategoryFilter === cat.name 
+        ? "bg-indigo-600 text-white shadow-sm font-black" 
+        : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+    }`;
+    btn.innerText = cat.name;
+    btn.onclick = () => filterRawByCategory(cat.name);
+    container.appendChild(btn);
+  });
+}
+
 export function onRawSearchInput() {
   renderRawStockTable();
 }
@@ -210,9 +257,21 @@ export function renderRawStockTable() {
   const searchInput = document.getElementById("rawSearchInput");
   const query = (searchInput?.value || "").toLowerCase().trim();
   if (!tbody) return;
+
+  // පළමු වරට Load වන විට Category Buttons පෙන්වීම තහවුරු කරයි
+  const pillsContainer = document.getElementById("rawCategoryFilterPills");
+  if (pillsContainer && pillsContainer.children.length === 0) {
+    renderRawCategoryFilterUI();
+  }
   
   let list = Object.entries(erpState.rawItems || {});
+
+  // 📦 Category අනුව Filter කිරීම
+  if (currentRawCategoryFilter && currentRawCategoryFilter !== "ALL") {
+    list = list.filter(([id, raw]) => (raw.category || "General") === currentRawCategoryFilter);
+  }
   
+  // Search Query අනුව Filter කිරීම
   if (query) {
     list = list.filter(([id, raw]) => {
       const name = (raw.name || "").toLowerCase();
@@ -224,8 +283,8 @@ export function renderRawStockTable() {
   if (badge) badge.innerText = `${list.length} Items`;
   
   if (list.length === 0) {
-    if (query) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-400">"${query}" නමින් අමුද්‍රව්‍ය හමු නොවීය...</td></tr>`;
+    if (query || currentRawCategoryFilter !== "ALL") {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-400">තෝරාගත් Category හෝ සෙවුමට අදාළ අමුද්‍රව්‍ය හමු නොවීය...</td></tr>`;
     } else {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-400">අමුද්‍රව්‍ය තවම ඇතුළත් කර නැත...</td></tr>`;
     }
@@ -271,7 +330,7 @@ export async function deleteRawItem(id) {
   }
 }
 
-// 3. MULTI-DEPARTMENT STORE ISSUE ENGINE (WITH INSTANT SEARCH)
+// 4. MULTI-DEPARTMENT STORE ISSUE ENGINE (WITH INSTANT SEARCH)
 export function openStoreIssueModal() {
   document.getElementById("storeIssueForm")?.reset();
   const dIn = document.getElementById("issueDate");
@@ -441,7 +500,7 @@ export async function handleStoreIssueSubmit(e) {
   }
 }
 
-// 4. STORE ISSUE HISTORY TABLE & FILTER ENGINE
+// 5. STORE ISSUE HISTORY TABLE & FILTER ENGINE
 export function renderStoreIssueHistoryTable() {
   const tbody = document.getElementById("storeIssueHistoryTableBody");
   const countBadge = document.getElementById("storeIssueCountBadge");
@@ -512,7 +571,7 @@ export function renderStoreIssueHistoryTable() {
   });
 }
 
-// 5. VIEW STORE ISSUE DETAIL MODAL
+// 6. VIEW STORE ISSUE DETAIL MODAL
 export function viewStoreIssueDetail(id) {
   const iss = erpState.storeIssues?.[id];
   if (!iss) return;
@@ -554,7 +613,7 @@ export function closeStoreIssueDetailModal() {
   document.getElementById("storeIssueDetailModal")?.classList.add("hidden");
 }
 
-// 6. EXPORT STORE ISSUES TO CSV
+// 7. EXPORT STORE ISSUES TO CSV
 export function exportStoreIssuesToCSV() {
   const fromDate = document.getElementById("storeIssueFilterFromDate")?.value;
   const toDate = document.getElementById("storeIssueFilterToDate")?.value;
@@ -580,7 +639,7 @@ export function exportStoreIssuesToCSV() {
   downloadCSVFile(csv, `Store_Issues_${deptFilter}_${getLocalDateString()}.csv`);
 }
 
-// 7. MULTI-ITEM KITCHEN WASTAGE ENGINE
+// 8. MULTI-ITEM KITCHEN WASTAGE ENGINE
 export function openWastageModal() {
   document.getElementById("wastageForm")?.reset();
   const dIn = document.getElementById("wastageDate");
@@ -713,6 +772,8 @@ window.openRawItemModal = openRawItemModal;
 window.closeRawItemModal = closeRawItemModal;
 window.handleRawItemSubmit = handleRawItemSubmit;
 window.deleteRawItem = deleteRawItem;
+window.filterRawByCategory = filterRawByCategory;
+window.renderRawCategoryFilterUI = renderRawCategoryFilterUI;
 window.onRawSearchInput = onRawSearchInput;
 window.openStoreIssueModal = openStoreIssueModal;
 window.closeStoreIssueModal = closeStoreIssueModal;
