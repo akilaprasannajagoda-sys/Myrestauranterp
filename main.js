@@ -1,9 +1,13 @@
-const { app, BrowserWindow, ipcMain, dialog, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen, shell, Menu } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
+
+// 🛡️ CRITICAL FIX 1: Electron Application Menu එක සම්පූර්ණයෙන්ම ඉවත් කිරීම
+// Windows OS හි Alt key එක එබූ විට menu bar එකට focus වී textboxes freeze වීම 100% වළකයි
+Menu.setApplicationMenu(null);
 
 let mainWindow = null;
 let customerWindow = null;
@@ -133,6 +137,7 @@ if (!gotTheLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+      mainWindow.webContents.focus();
     }
   });
   
@@ -162,6 +167,7 @@ function initPrintWorkerWindow() {
         backgroundThrottling: false
       }
     });
+    printWorkerWindow.setMenu(null);
   }
   return printWorkerWindow;
 }
@@ -194,6 +200,7 @@ function createOrUpdateCustomerDisplay() {
           }
         });
 
+        customerWindow.setMenu(null);
         customerWindow.loadFile('customer-display.html');
 
         customerWindow.on('closed', () => {
@@ -237,6 +244,9 @@ function createWindow() {
     }
   });
   
+  // 🛡️ CRITICAL FIX 2: Window මට්ටමින් Menu Bar එක සම්පූර්ණයෙන්ම ඉවත් කිරීම
+  mainWindow.setMenu(null);
+  
   mainWindow.maximize();
   mainWindow.loadFile('index.html');
 
@@ -244,6 +254,7 @@ function createWindow() {
   mainWindow.on('restore', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.focus();
+      mainWindow.webContents.focus();
     }
   });
   
@@ -251,6 +262,7 @@ function createWindow() {
     mainWindow.webContents.closeDevTools();
   });
   
+  // 🛡️ CRITICAL FIX 3: Alt key එකෙන් Windows native menu navigation loop එක activate වීම වැළැක්වීම
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (
       input.key === 'F12' ||
@@ -258,6 +270,10 @@ function createWindow() {
       input.key === 'F5' ||
       (input.control && input.key.toLowerCase() === 'r')
     ) {
+      event.preventDefault();
+    }
+    // Alt key එක තනිව එබූ විට OS menu එකට Focus යාම නවත්වයි
+    if (input.key === 'Alt') {
       event.preventDefault();
     }
   });
@@ -371,9 +387,9 @@ ipcMain.handle('print-silent', async (event, printArgs) => {
       } catch (err) {
         resolve({ success: false, error: err.message || "Print execution failed" });
       } finally {
-        // 🛡️ CRITICAL UNFREEZE: Restore native OS keyboard focus back to Main Window immediately
+        // 🛡️ CRITICAL UNFREEZE: Print එකෙන් පසු WebContents Focus එක නැවත සක්‍රීය කිරීම
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.focus();
+          mainWindow.webContents.focus();
         }
       }
     });
