@@ -4,6 +4,7 @@
 // 🛡️ RE-AUTHENTICATION & PERMISSION-DENIED SECURE AUTO-RECOVERY ENGINE
 // 📡 OFFLINE LOCAL LAN AUTO-PRINT KOT/BOT INTEGRATED
 // 🚀 MOBILE APK IN-APP GITHUB AUTO-UPDATE SYNC ENGINE
+// 💰 FIREBASE DATA DOWNLOAD COST OPTIMIZED (ON-DEMAND QUERYING & BOUNDED STREAMS)
 // ==========================================================================
 
 // 🛡️ 1. OFFLINE STANDALONE FIREBASE BUNDLE IMPORT (NO CDN DEPENDENCY)
@@ -240,9 +241,7 @@ async function triggerBackgroundTerminalAuth() {
 
   if (savedEmail && savedPass) {
     try {
-      console.log("🔄 Background Terminal Re-authenticating with Firebase...");
       await signInWithEmailAndPassword(authInstance, savedEmail, savedPass);
-      console.log("✅ Terminal Background Re-Authentication Successful.");
       if (currentTenant) {
         initializeRealtimeDataStreams(currentTenant);
       }
@@ -423,7 +422,7 @@ document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e
   }
 });
 
-// PRINTER ROUTING (WITH PAPER WIDTH FIX)
+// PRINTER ROUTING (WITH DEDICATED SLOT 5 PAYSLIP PRINTER)
 document.getElementById("printerRoutingForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
@@ -435,7 +434,8 @@ document.getElementById("printerRoutingForm")?.addEventListener("submit", async 
     p1: { name: document.getElementById("p1_name")?.value.trim() || "Main Cashier 1", device: document.getElementById("p1_device")?.value.trim() || "POS-80", bill: document.getElementById("p1_bill")?.checked || false, kot: document.getElementById("p1_kot")?.checked || false },
     p2: { name: document.getElementById("p2_name")?.value.trim() || "Hot Kitchen KOT", device: document.getElementById("p2_device")?.value.trim() || "POS80-Kitchen", bill: document.getElementById("p2_bill")?.checked || false, kot: document.getElementById("p2_kot")?.checked || false },
     p3: { name: document.getElementById("p3_name")?.value.trim() || "Juice & Bar BOT", device: document.getElementById("p3_device")?.value.trim() || "POS80-Bar", bill: document.getElementById("p3_bill")?.checked || false, kot: document.getElementById("p3_kot")?.checked || false },
-    p4: { name: document.getElementById("p4_name")?.value.trim() || "Cashier 2 / Accounts", device: document.getElementById("p4_device")?.value.trim() || "POS80-Accounts", bill: document.getElementById("p4_bill")?.checked || false, kot: document.getElementById("p4_kot")?.checked || false }
+    p4: { name: document.getElementById("p4_name")?.value.trim() || "Cashier 2 / Accounts", device: document.getElementById("p4_device")?.value.trim() || "POS80-Accounts", bill: document.getElementById("p4_bill")?.checked || false, kot: document.getElementById("p4_kot")?.checked || false },
+    p5: { name: document.getElementById("p5_name")?.value.trim() || "Accounts Payslip Printer", device: document.getElementById("p5_device")?.value.trim() || "", bill: false, kot: false, payslip: document.getElementById("p5_payslip")?.checked ?? true }
   };
 
   try {
@@ -581,7 +581,7 @@ export async function handleRestoreBackupFile(event) {
 }
 window.handleRestoreBackupFile = handleRestoreBackupFile;
 
-// 🛡️ INACTIVITY AUTO PIN-LOCK ENGINE (FOCUS SAFE)
+// 🛡️ INACTIVITY AUTO PIN-LOCK ENGINE
 let inactivityTimer = null;
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
@@ -644,7 +644,6 @@ window.submitCounterUnlock = async function() {
     resetInactivityTimer();
     showLiveToast("🔓 Terminal Unlocked", "කවුන්ටරය සාර්ථකව Unlock කරන ලදී.", "success", "fa-unlock");
     
-    // 🛡️ Return focus back to POS Search input upon unlock
     setTimeout(() => {
       const posInput = document.getElementById("posSearchInput");
       if (posInput && !posInput.closest(".hidden")) {
@@ -921,7 +920,10 @@ window.logout = function() {
   }
 };
 
-// 🔒 BOUNDED REALTIME DATA LISTENERS
+// ==========================================================================
+// 💰 5. FIREBASE BANDWIDTH-OPTIMIZED REALTIME DATA STREAMS
+// (POS IS REALTIME; LARGE HISTORICAL LISTS ARE BOUNDED TO CONSERVE DATA)
+// ==========================================================================
 function initializeRealtimeDataStreams(tenantId) {
   clearAllFirebaseStreams();
   const basePath = `tenants/${tenantId}`;
@@ -953,7 +955,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubProfile);
 
-  // 2. Settings & Taxes
+  // 2. Settings & Taxes (includes p1 to p5 printers)
   const unsubSettings = onValue(ref(dbInstance, `${basePath}/settings`), (snapshot) => {
     if (snapshot.exists()) {
       erpState.settings = Object.assign({ 
@@ -1015,8 +1017,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubRawItems);
 
-  // 6.1 Store Issues
-  const recentStoreIssuesQuery = query(ref(dbInstance, `${basePath}/storeIssues`), limitToLast(120));
+  // 6.1 Store Issues (Optimized limit: 30)
+  const recentStoreIssuesQuery = query(ref(dbInstance, `${basePath}/storeIssues`), limitToLast(30));
   const unsubStoreIssues = onValue(recentStoreIssuesQuery, (snapshot) => {
     erpState.storeIssues = snapshot.val() || {};
     Inventory.renderStoreIssueHistoryTable();
@@ -1039,8 +1041,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubTables);
 
-  // 9. Kitchen Orders (Optimized limitToLast: 35)
-  const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(35));
+  // 9. Kitchen Orders (Optimized limitToLast: 25)
+  const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(25));
   const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
     const prevOrders = erpState.kitchenOrders || {};
     erpState.kitchenOrders = snapshot.val() || {};
@@ -1087,16 +1089,16 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubCustomers);
 
-  // 11. Supplier Payments
-  const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(40));
+  // 11. Supplier Payments (Optimized limit: 30)
+  const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(30));
   const unsubSupPay = onValue(recentSupPayQuery, (snapshot) => {
     erpState.supplierPayments = snapshot.val() || {};
     Suppliers.renderSuppliersDirectoryTable();
   });
   activeFirebaseUnsubscribers.push(unsubSupPay);
 
-  // 12. GRNs
-  const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(40));
+  // 12. GRNs (Optimized limit: 25)
+  const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(25));
   const unsubGrns = onValue(recentGrnQuery, (snapshot) => {
     erpState.grns = snapshot.val() || {};
     Suppliers.renderGRNHistoryTable();
@@ -1104,8 +1106,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubGrns);
 
-  // 13. Invoices
-  const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(35));
+  // 13. Invoices (Initial load bounded to recent 30 to minimize bandwidth)
+  const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(30));
   const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
     const fromVal = document.getElementById("repFromDate")?.value;
     const toVal = document.getElementById("repToDate")?.value;
@@ -1136,8 +1138,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubCredits);
 
-  // 15. Petty Cash
-  const recentPettyQuery = query(ref(dbInstance, `${basePath}/pettyCash`), limitToLast(100));
+  // 15. Petty Cash (Optimized limit: 40)
+  const recentPettyQuery = query(ref(dbInstance, `${basePath}/pettyCash`), limitToLast(40));
   const unsubPetty = onValue(recentPettyQuery, (snapshot) => {
     erpState.pettyCash = snapshot.val() || {};
     PettyCash.renderPettyCashTable();
@@ -1147,7 +1149,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubPetty);
 
-  // 16. Employees
+  // 16. Employees & Roles
   const unsubEmployees = onValue(ref(dbInstance, `${basePath}/employees`), (snapshot) => {
     erpState.employees = snapshot.val() || {};
     try {
@@ -1172,8 +1174,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubEmployees);
 
-  // 17. Attendance Logs
-  const recentAttQuery = query(ref(dbInstance, `${basePath}/attendance`), limitToLast(100));
+  // 17. Attendance Logs (Optimized limit: 50)
+  const recentAttQuery = query(ref(dbInstance, `${basePath}/attendance`), limitToLast(50));
   const unsubAtt = onValue(recentAttQuery, (snapshot) => {
     erpState.attendance = snapshot.val() || {};
     Payroll.renderAttendanceLogsTable();
@@ -1181,8 +1183,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubAtt);
 
-  // 18. Salary Advances
-  const recentAdvQuery = query(ref(dbInstance, `${basePath}/salaryAdvances`), limitToLast(80));
+  // 18. Salary Advances (Optimized limit: 30)
+  const recentAdvQuery = query(ref(dbInstance, `${basePath}/salaryAdvances`), limitToLast(30));
   const unsubAdvances = onValue(recentAdvQuery, (snapshot) => {
     erpState.salaryAdvances = snapshot.val() || {};
     Payroll.renderMonthlyPayrollSheet();
@@ -1282,8 +1284,8 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubNotice);
 
-  // 21. Day-End Reports
-  const recentDayEndQuery = query(ref(dbInstance, `${basePath}/dayEndReports`), limitToLast(40));
+  // 21. Day-End Reports (Optimized limit: 20)
+  const recentDayEndQuery = query(ref(dbInstance, `${basePath}/dayEndReports`), limitToLast(20));
   const unsubDayEnd = onValue(recentDayEndQuery, (snapshot) => {
     erpState.dayEndReports = snapshot.val() || {};
   });
@@ -1364,6 +1366,14 @@ export function switchView(viewName) {
     Payroll.stopKioskCameraStream();
   }
 
+  if (viewName === "tables") {
+    setTimeout(Tables.renderTablesFloorGrid, 60);
+  }
+
+  if (viewName === "reports") {
+    Reports.renderInvoiceReportsList();
+  }
+
   if (viewName === "settings") {
     loadInstalledPrintersToUI();
     if (window.electronAPI && window.electronAPI.getLocalServerInfo) {
@@ -1393,6 +1403,7 @@ function startLiveClockWidget() {
   }, 1000);
 }
 
+// 🖨️ SYNC SETTINGS UI (SUPPORTS SLOTS p1 TO p5)
 function syncSettingsUI() {
   const setPaper = document.getElementById("setPaperWidth");
   if (setPaper) setPaper.value = erpState.settings?.paperWidth || "80mm";
@@ -1433,17 +1444,19 @@ function syncSettingsUI() {
   if (setSilent) setSilent.checked = erpState.settings?.silentPrintEnabled ?? true;
 
   const pr = erpState.settings?.printers || {};
-  ['p1', 'p2', 'p3', 'p4'].forEach(k => {
+  ['p1', 'p2', 'p3', 'p4', 'p5'].forEach(k => {
     const p = pr[k];
     if (p) {
       const nameIn = document.getElementById(`${k}_name`);
       const devIn = document.getElementById(`${k}_device`);
       const billCb = document.getElementById(`${k}_bill`);
       const kotCb = document.getElementById(`${k}_kot`);
+      const payslipCb = document.getElementById(`${k}_payslip`);
       if (nameIn) nameIn.value = p.name || '';
       if (devIn) devIn.value = p.device || '';
       if (billCb) billCb.checked = !!p.bill;
       if (kotCb) kotCb.checked = !!p.kot;
+      if (payslipCb) payslipCb.checked = !!p.payslip;
     }
   });
 }
@@ -1453,8 +1466,6 @@ function syncSettingsUI() {
 // ==========================================================================
 if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
   window.electronAPI.onLanOrderReceived((orderData) => {
-    console.log("📥 [LAN] Local Offline Order received from Mobile:", orderData);
-
     triggerAudioAlert("newOrder");
     showLiveToast(
       "📱 Mobile Order (Offline Wi-Fi)",
@@ -1581,6 +1592,8 @@ window.deletePettyCash = PettyCash.deletePettyCash;
 window.exportPettyCashToCSV = PettyCash.exportPettyCashToCSV;
 window.completeKitchenOrder = KDS.completeKitchenOrder;
 window.toggleKDSItemPrepared = KDS.toggleKDSItemPrepared;
+
+// Tables
 window.openAreaModal = Tables.openAreaModal;
 window.closeAreaModal = Tables.closeAreaModal;
 window.deleteArea = Tables.deleteArea;
@@ -1592,6 +1605,10 @@ window.linkTableToPos = Tables.linkTableToPos;
 window.openMergeTableModal = Tables.openMergeTableModal;
 window.closeMergeTableModal = Tables.closeMergeTableModal;
 window.handleMergeTables = Tables.handleMergeTables;
+window.renderTablesFloorGrid = Tables.renderTablesFloorGrid;
+window.handleTableClick = Tables.handleTableClick;
+window.editTableByNumber = Tables.editTableByNumber;
+window.setFloorPlanMode = Tables.setFloorPlanMode;
 
 // Inventory
 window.openRawCategoryModal = Inventory.openRawCategoryModal;
@@ -1634,6 +1651,9 @@ window.openSupplierModal = Suppliers.openSupplierModal;
 window.closeSupplierModal = Suppliers.closeSupplierModal;
 window.openSupplierLedgerModal = Suppliers.openSupplierLedgerModal;
 window.closeSupplierLedgerModal = Suppliers.closeSupplierLedgerModal;
+window.filterSupplierLedgerByDate = Suppliers.filterSupplierLedgerByDate;
+window.resetSupplierLedgerDateFilter = Suppliers.resetSupplierLedgerDateFilter;
+window.renderSupplierLedgerTable = Suppliers.renderSupplierLedgerTable;
 window.openSupPayFromLedger = Suppliers.openSupPayFromLedger;
 window.exportSupplierLedgerToCSV = Suppliers.exportSupplierLedgerToCSV;
 window.addGrnItemRow = Suppliers.addGrnItemRow;
@@ -1695,6 +1715,7 @@ window.exportPayrollToCSV = Payroll.exportPayrollToCSV;
 window.switchReportTab = Reports.switchReportTab;
 window.setReportPeriodPreset = Reports.setReportPeriodPreset;
 window.applyReportDateFilter = Reports.applyReportDateFilter;
+window.changeInvoicesPage = Reports.changeInvoicesPage;
 window.reprintInvoice = Reports.reprintInvoice;
 window.shareWhatsAppInvoice = Reports.shareWhatsAppInvoice;
 window.settleCustomerCredit = Reports.settleCustomerCredit;
