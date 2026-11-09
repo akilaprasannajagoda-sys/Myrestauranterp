@@ -4,6 +4,7 @@
 // 🛡️ DUAL PAPER WIDTH (80MM / 58MM) & ZERO PERMISSION-DENIED SYNC ENGINE
 // 🛡️ DUAL-LAYER MULTI-DEVICE KOT/BOT DE-DUPLICATION ENGINE
 // 🔒 DYNAMIC TABLE-ORDER CHECKOUT HIDING GUARD (METHOD 01)
+// 💳 MULTI-CARD (VISA/MASTER/AMEX/FRIMI) RECONCILIATION READY
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
@@ -39,8 +40,8 @@ export function updateCheckoutButtonsVisibility() {
   if (!noticeEl && checkoutRow?.parentElement) {
     noticeEl = document.createElement("div");
     noticeEl.id = "posTableOrderModeNotice";
-    noticeEl.className = "hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900 font-bold shadow-xs";
-    noticeEl.innerHTML = `<i class="fa-solid fa-bell-concierge mr-1 text-amber-600"></i> <span>Order Taking Mode: කෑම තෝරා "Send to Kitchen & Bar" ඔබන්න. (බිල Settle කිරීම Cashier කවුන්ටරයෙන් පමණි)</span>`;
+    noticeEl.className = "hidden p-2 rounded-xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900 font-bold shadow-xs";
+    noticeEl.innerHTML = `<i class="fa-solid fa-bell-concierge mr-1 text-amber-600"></i> <span>Order Taking Mode: කෑම තෝරා "Send Kitchen" ඔබන්න. (බිල Settle කිරීම Cashier කවුන්ටරයෙන් පමණි)</span>`;
     checkoutRow.parentElement.appendChild(noticeEl);
   }
 
@@ -238,7 +239,7 @@ export async function persistActiveBillToCloud(updatedObj) {
 }
 
 export async function addNewBillTab() {
-  setTableOrderMode(false); // New Tab සාදන විට Cashier Checkout Mode එක ක්‍රියාත්මක වේ
+  setTableOrderMode(false);
   const keys = Object.keys(erpState.activeBills || {});
   const nextNum = keys.length + 1;
   const newKey = "bill_" + Date.now();
@@ -273,7 +274,7 @@ export async function addNewBillTab() {
 }
 
 export function switchBillTab(key) {
-  setTableOrderMode(false); // Cashier ටැබ් මාරු කරද්දී Print Bill / WhatsApp Bill පෙනේ
+  setTableOrderMode(false);
   setActiveBillId(key);
   renderBillTabsBar();
   syncActiveBillToFormUI();
@@ -357,7 +358,7 @@ export function renderBillTabsBar() {
     const isMergedBill = Array.isArray(billObj.mergedTables) && billObj.mergedTables.length > 0;
     
     const tabBtn = document.createElement("div");
-    tabBtn.className = `px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-2 border select-none transition ${
+    tabBtn.className = `px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 border select-none transition ${
       isCurrent 
         ? isMergedBill ? "bg-purple-700 text-white border-purple-700 shadow-sm" : "bg-blue-600 text-white border-blue-600 shadow-sm" 
         : isMergedBill
@@ -374,12 +375,12 @@ export function renderBillTabsBar() {
     }
     
     tabBtn.innerHTML = `
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center gap-1">
         ${hasActiveOrders ? `<span class="w-2 h-2 rounded-full ${isCurrent ? 'bg-white' : isMergedBill ? 'bg-purple-600' : 'bg-yellow-500'} animate-pulse"></span>` : ''}
         <span>${label}</span>
       </div>
-      <span class="text-[10px] px-1.5 py-0.2 rounded-full font-black ${isCurrent ? 'bg-black/30 text-white' : 'bg-gray-200 text-gray-800'}">${itemCount}</span>
-      ${allActiveBills.length > 1 ? `<i class="fa-solid fa-xmark hover:text-red-400 text-xs ml-1 p-0.5 cursor-pointer" onclick="closeBillTab('${key}', event)"></i>` : ""}
+      <span class="text-[9px] px-1.5 py-0.2 rounded-full font-black ${isCurrent ? 'bg-black/30 text-white' : 'bg-gray-200 text-gray-800'}">${itemCount}</span>
+      ${allActiveBills.length > 1 ? `<i class="fa-solid fa-xmark hover:text-red-400 text-xs ml-0.5 p-0.5 cursor-pointer" onclick="closeBillTab('${key}', event)"></i>` : ""}
     `;
     container.appendChild(tabBtn);
   });
@@ -450,7 +451,6 @@ export async function updateCurrentBillSettings() {
     }
   }
   
-  // 🛡️ FIX: මේස අංකය ගැසූ සැණින් දකුණු පැත්තේ Title & Subtitle එක ක්ෂණිකව Refresh කිරීම
   const bTitle = document.getElementById("currentBillTitle");
   const bSub = document.getElementById("currentBillSubtitle");
   const label = tableNo ? `Table ${tableNo}` : (getActiveBillData().name || "Bill #1");
@@ -476,6 +476,7 @@ export async function updateCurrentBillSettings() {
   renderBillTabsBar();
   recalculateCartTotalsUI();
 }
+
 export function onPosSearchInput() {
   renderPOSDishesGrid();
 }
@@ -492,7 +493,7 @@ export function renderDishCategoriesFilterUI() {
   container.innerHTML = "";
 
   const allButton = document.createElement("button");
-  allButton.className = `px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition cursor-pointer ${
+  allButton.className = `px-2.5 py-1 rounded-xl whitespace-nowrap font-bold transition cursor-pointer text-xs ${
     currentCategoryFilter === "ALL" ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200"
   }`;
   allButton.innerText = "All Items";
@@ -501,7 +502,7 @@ export function renderDishCategoriesFilterUI() {
 
   Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
     const b = document.createElement("button");
-    b.className = `px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition cursor-pointer ${
+    b.className = `px-2.5 py-1 rounded-xl whitespace-nowrap font-bold transition cursor-pointer text-xs ${
       currentCategoryFilter === cat.name ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200"
     }`;
     b.innerText = cat.name;
@@ -566,8 +567,6 @@ export function renderPOSDishesGrid() {
   }
 
   const dishesList = Object.entries(dishesObj).filter(([id, dish]) => {
-    // 🛡️ FIX: Search Query එකක් ඇති විට Category එක කුමක් වුවත් සියලුම Dishes අතර Search කරයි!
-    // Search එක හිස්ව ඇති විට පමණක් Category Filter එක ක්‍රියාත්මක වේ.
     const matchesCategory = searchQuery 
       ? true 
       : (currentCategoryFilter === "ALL" || (dish.category || "").toLowerCase().trim() === currentCategoryFilter.toLowerCase().trim());
@@ -592,7 +591,7 @@ export function renderPOSDishesGrid() {
     const isBar = station === "bar";
 
     const cardElem = document.createElement("div");
-    cardElem.className = `p-3 rounded-2xl border transition select-none flex flex-col justify-between ${
+    cardElem.className = `p-2.5 rounded-2xl border transition select-none flex flex-col justify-between ${
       isOut 
         ? "bg-gray-100 border-red-200 opacity-60 cursor-not-allowed" 
         : "bg-white border-gray-200 hover:border-blue-500 shadow-sm cursor-pointer active:scale-95"
@@ -609,22 +608,22 @@ export function renderPOSDishesGrid() {
     cardElem.innerHTML = `
       <div>
         <div class="flex justify-between items-start gap-1">
-          <span class="text-[9px] ${isBar ? 'bg-purple-100 text-purple-800' : 'bg-blue-50 text-blue-700'} font-bold px-1.5 py-0.5 rounded-md uppercase">
+          <span class="text-[9px] ${isBar ? 'bg-purple-100 text-purple-800' : 'bg-blue-50 text-blue-700'} font-bold px-1.5 py-0.2 rounded-md uppercase">
             ${isBar ? '🍹 Bar' : dish.category || 'Kitchen'}
           </span>
           ${
             isOut 
-              ? `<span class="text-[9px] bg-red-500 text-white font-black px-1.5 py-0.5 rounded-md uppercase animate-pulse">Out of Stock</span>`
+              ? `<span class="text-[8.5px] bg-red-500 text-white font-black px-1 py-0.2 rounded uppercase animate-pulse">Out of Stock</span>`
               : isLow 
-                ? `<span class="text-[9px] bg-yellow-100 text-yellow-800 font-bold px-1.5 py-0.5 rounded-md uppercase">${stockInfo.portionsLeft} Left</span>`
+                ? `<span class="text-[8.5px] bg-yellow-100 text-yellow-800 font-bold px-1 py-0.2 rounded uppercase">${stockInfo.portionsLeft} Left</span>`
                 : ''
           }
         </div>
-        <h4 class="font-bold text-xs text-gray-800 mt-1.5 line-clamp-2 leading-tight">${dish.name}</h4>
+        <h4 class="font-bold text-xs text-gray-800 mt-1 line-clamp-2 leading-tight">${dish.name}</h4>
       </div>
-      <div class="mt-3 flex items-center justify-between">
+      <div class="mt-2 flex items-center justify-between">
         <span class="font-extrabold text-xs text-blue-600">Rs. ${parseFloat(dish.price).toFixed(2)}</span>
-        <div class="w-6 h-6 rounded-lg ${isOut ? 'bg-gray-300 text-gray-500' : 'bg-blue-50 text-blue-600'} flex items-center justify-center text-xs">
+        <div class="w-5 h-5 rounded-md ${isOut ? 'bg-gray-300 text-gray-500' : 'bg-blue-50 text-blue-600'} flex items-center justify-center text-[10px]">
           <i class="fa-solid ${isOut ? 'fa-ban' : 'fa-plus'}"></i>
         </div>
       </div>
@@ -748,7 +747,7 @@ export function renderCartItemsUI() {
   let hasUnsentDelta = false;
 
   if (cartList.length === 0) {
-    container.innerHTML = `<p class="text-center text-gray-400 py-6">Cart එක හිස්ය. කෑම වර්ගයක් තෝරන්න.</p>`;
+    container.innerHTML = `<p class="text-center text-gray-400 py-3 text-[11px]">Cart එක හිස්ය. කෑම වර්ගයක් තෝරන්න.</p>`;
     if (btnKOT) btnKOT.disabled = true;
     if (btnPrintKOT) btnPrintKOT.disabled = true;
     if (btnPrePrint) btnPrePrint.disabled = true;
@@ -767,28 +766,28 @@ export function renderCartItemsUI() {
       const isBar = station === "bar";
 
       const rowElem = document.createElement("div");
-      rowElem.className = "p-2 rounded-xl bg-gray-50 border border-gray-100 space-y-1";
+      rowElem.className = "p-1.5 rounded-xl bg-gray-50 border border-gray-100 space-y-0.5";
       rowElem.innerHTML = `
         <div class="flex items-center justify-between">
           <div class="truncate w-36">
-            <p class="font-bold text-gray-800 truncate">${item.name}</p>
-            <div class="flex items-center gap-1 text-[10px]">
+            <p class="font-bold text-gray-800 truncate text-[11px]">${item.name}</p>
+            <div class="flex items-center gap-1 text-[9.5px]">
               <span class="text-gray-400">Rs. ${item.price.toFixed(2)}</span>
-              <span class="text-[8.5px] px-1 rounded font-extrabold ${isBar ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">${isBar ? 'BOT' : 'KOT'}</span>
+              <span class="text-[8px] px-1 rounded font-extrabold ${isBar ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">${isBar ? 'BOT' : 'KOT'}</span>
               ${sent > 0 ? `<span class="text-green-700 bg-green-100 px-1 rounded font-bold">Sent: ${sent}</span>` : ''}
-              ${diff > 0 ? `<span class="text-yellow-800 bg-yellow-100 px-1 rounded font-bold animate-pulse">New: +${diff}</span>` : ''}
+              ${diff > 0 ? `<span class="text-yellow-800 bg-yellow-100 px-1 rounded font-bold animate-pulse">+${diff}</span>` : ''}
             </div>
           </div>
-          <div class="flex items-center gap-1.5">
-            <button onclick="changeCartQty('${item.dishId}', -1)" class="w-5 h-5 rounded-md bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-xs cursor-pointer">-</button>
+          <div class="flex items-center gap-1">
+            <button onclick="changeCartQty('${item.dishId}', -1)" class="w-4 h-4 rounded bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-[10px] cursor-pointer">-</button>
             <span class="font-black text-xs w-4 text-center">${q}</span>
-            <button onclick="changeCartQty('${item.dishId}', 1)" class="w-5 h-5 rounded-md bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-xs cursor-pointer">+</button>
+            <button onclick="changeCartQty('${item.dishId}', 1)" class="w-4 h-4 rounded bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-[10px] cursor-pointer">+</button>
           </div>
-          <div class="font-black text-gray-800 text-xs text-right w-16">
+          <div class="font-black text-gray-800 text-[11px] text-right w-16">
             Rs. ${(item.price * q).toFixed(2)}
           </div>
         </div>
-        <div class="flex items-center justify-between text-[10px] text-gray-500 pt-0.5 border-t border-gray-200">
+        <div class="flex items-center justify-between text-[9.5px] text-gray-500 pt-0.5 border-t border-gray-200">
           <span class="italic text-purple-700 font-semibold truncate w-40">${item.note ? '📝 ' + item.note : 'No notes'}</span>
           <button onclick="updateCartItemNote('${item.dishId}')" class="text-blue-600 font-bold hover:underline cursor-pointer">
             <i class="fa-solid fa-pen-to-square"></i> Note
@@ -961,9 +960,9 @@ export function selectPayMethod(method, syncCloud = true) {
     const field = document.getElementById(`payFields-${m}`);
     if (tab) {
       if (m === method) {
-        tab.className = "pay-method-tab py-1.5 px-0.5 rounded-lg border border-blue-600 bg-blue-50 text-blue-700 font-bold text-[9px] flex flex-col items-center cursor-pointer";
+        tab.className = "pay-method-tab py-0.5 rounded border border-blue-600 bg-blue-50 text-blue-700 font-bold text-[9px] flex flex-col items-center cursor-pointer";
       } else {
-        tab.className = "pay-method-tab py-1.5 px-0.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer";
+        tab.className = "pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer";
       }
     }
     if (field) {
@@ -1050,7 +1049,7 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
-// 🖨️ KOT & BOT DYNAMIC SLIP DISPATCHER (ZERO CLIPPING ON 58MM & 80MM)
+// 🖨️ KOT & BOT DYNAMIC SLIP DISPATCHER
 async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   const modalContainer = document.getElementById("kotPrintModal");
   if (!modalContainer) return;
@@ -1088,7 +1087,7 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ SMART DELTA, OFFLINE-SAFE & LOCAL LAN STATION ORDER SENDER (DUAL-LAYER DE-DUPLICATED)
+// 🖨️ SMART DELTA, OFFLINE-SAFE & LOCAL LAN STATION ORDER SENDER
 export async function sendOrderToKitchen(forceReprintAll = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -1167,7 +1166,7 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       
       let sentViaLan = false;
 
-      // 📡 1. MOBILE APK OFFLINE LOCAL LAN DIRECT PRINT (INTERNET නැතත් PRINTER එකට කෙලින්ම යැවීම)
+      // 📡 1. MOBILE APK OFFLINE LOCAL LAN DIRECT PRINT
       if (!isDesktopPrinterHost) {
         const targetCashierIp = localStorage.getItem("cashier_lan_ip") || "192.168.8.100";
         if (targetCashierIp) {
@@ -1184,7 +1183,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
 
             if (res.ok) {
               sentViaLan = true;
-              console.log("✅ Offline Order Sent via Local Wi-Fi successfully");
               showLiveToast("🖨️ Wi-Fi Print Sent", `Table ${kotTicket.tableNo} ඇණවුම Cashier Printer එකට Local Wi-Fi හරහා යවන ලදී.`, "kitchen", "fa-print");
             }
           } catch (err) {
@@ -1193,7 +1191,7 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
         }
       }
       
-      // ☁️ 2. CLOUD FIREBASE SYNC (INTERNET ඇති විට CLOUD එකටත් SAVE වේ)
+      // ☁️ 2. CLOUD FIREBASE SYNC
       if (navigator.onLine && dbRef && currentTenant && isAuthReady()) {
         const cloudKotTicket = {
           ...kotTicket,
@@ -1222,7 +1220,7 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       return;
     }
     
-    // 🖥️ 3. DESKTOP LOCAL SILENT PRINT QUEUE (CASHIER PC එකේදී PRINT වීම)
+    // 🖥️ 3. DESKTOP LOCAL SILENT PRINT QUEUE
     enqueuePrintJob(async () => {
       const pr = erpState.settings?.printers || {};
       const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
@@ -1271,7 +1269,7 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
   }
 }
 
-// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS (DUAL-LAYER DE-DUPLICATION)
+// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS
 const recentlyPrintedOrderSignatures = new Set();
 
 export function handleIncomingCloudPrint(orderId, orderData) {
@@ -1280,7 +1278,6 @@ export function handleIncomingCloudPrint(orderId, orderData) {
 
   const orderSig = `${orderData.tableNo || 'NA'}_${(orderData.items || []).map(i => `${i.name}_${i.qty}`).join('|')}_${orderData.timestamp || ''}`;
   if (recentlyPrintedOrderSignatures.has(orderSig)) {
-    console.log("🛡️ Duplicate order print prevented by signature cache:", orderSig);
     return;
   }
   recentlyPrintedOrderSignatures.add(orderSig);
@@ -1412,14 +1409,10 @@ export async function processOrder(sendWhatsApp = false) {
     payDetails.cashTendered = tendered;
     payDetails.change = Math.max(0, tendered - netTotal);
   } else if (payMethod === "card") {
-    const cardType = document.getElementById("cardType")?.value;
+    const cardType = document.getElementById("cardType")?.value || "Visa";
     const cardIn = document.getElementById("cardLast4");
-    const cardLast4 = cardIn?.value.trim();
-    if (!cardLast4) {
-      showLiveToast("⚠️ Card Details", "කරුණාකර කාඩ්පතේ අවසන් ඉලක්කම් 4 ඇතුළත් කරන්න.", "warning", "fa-credit-card");
-      if (cardIn) cardIn.focus();
-      return;
-    }
+    const cardLast4 = cardIn?.value.trim() || "";
+    
     payDetails.cardType = cardType;
     payDetails.last4 = cardLast4;
   } else if (payMethod === "transfer") {
@@ -1440,6 +1433,7 @@ export async function processOrder(sendWhatsApp = false) {
     }
     payDetails.splitCash = sCash;
     payDetails.splitCard = sCard;
+    payDetails.cardType = "Visa";
   } else if (payMethod === "credit") {
     const nameIn = document.getElementById("creditCustomerName");
     const phoneIn = document.getElementById("creditCustomerPhone");
@@ -1509,6 +1503,7 @@ export async function processOrder(sendWhatsApp = false) {
   // Clear inputs immediately
   const cashIn = document.getElementById("cashTendered");
   const cardIn = document.getElementById("cardLast4");
+  const cardTypeSel = document.getElementById("cardType");
   const transIn = document.getElementById("transferRef");
   const splitC = document.getElementById("splitPayCash");
   const splitCard = document.getElementById("splitPayCard");
@@ -1518,6 +1513,7 @@ export async function processOrder(sendWhatsApp = false) {
   if (redeemIn) redeemIn.value = "";
   if (cashIn) cashIn.value = "";
   if (cardIn) cardIn.value = "";
+  if (cardTypeSel) cardTypeSel.value = "Visa";
   if (transIn) transIn.value = "";
   if (splitC) splitC.value = "";
   if (splitCard) splitCard.value = "";
@@ -1539,7 +1535,7 @@ export async function processOrder(sendWhatsApp = false) {
 
   showLiveToast("✅ Bill Settled", `Invoice #${invoiceNumber} (Rs. ${netTotal.toFixed(2)}) නිකුත් විය.`, "success", "fa-circle-check");
 
-  // 🚀 2. NON-BLOCKING BACKGROUND SYNC (WITH OFFLINE STOCK & TABLE FIX)
+  // 🚀 2. NON-BLOCKING BACKGROUND SYNC
   (async () => {
     try {
       if (navigator.onLine && dbRef && pushFn && currentTenant && isAuthReady()) {
@@ -1578,7 +1574,6 @@ export async function processOrder(sendWhatsApp = false) {
           });
         }
         
-        // 🛡️ BATCH INVENTORY UPDATE: සියලුම අමුද්‍රව්‍ය තනි Request එකකින් යවා 90% ක Data නාස්තිය නවතයි
         const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
         if (isRecipeMode) {
           const rawDeductions = {};
@@ -1693,7 +1688,7 @@ export async function processOrder(sendWhatsApp = false) {
   })();
 }
 
-// 🖨️ XPRINTER, EPSON & CHINESE THERMAL RECEIPT PRINT ENGINE (DUAL 80MM / 58MM ADAPTIVE)
+// 🖨️ THERMAL RECEIPT PRINT ENGINE (DUAL 80MM / 58MM ADAPTIVE)
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const p1Dev = (pr.p1?.device || "").trim();
@@ -1739,7 +1734,7 @@ export async function printThermalReceipt(inv) {
       const row = document.createElement("div");
       row.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; padding: 2px 0; font-size: inherit; font-weight: 700; color: #000000; width: 100%; box-sizing: border-box;";
       row.innerHTML = `
-        <span style="flex: 1.8; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 2px; color: #000000;">${i.name} x${i.qty}</span>
+        <span style="flex: 1.8; font-weight: 800; white-space: normal; word-break: break-word; padding-right: 4px; color: #000000;">${i.name} x${i.qty}</span>
         <span style="flex: 1.1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: #000000;">${parseFloat(i.price).toFixed(2)}</span>
         <span style="flex: 1.2; text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; color: #000000;">${(i.price * i.qty).toFixed(2)}</span>
       `;
@@ -1819,7 +1814,7 @@ export async function printThermalReceipt(inv) {
       payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Cash Tendered:</span><span style="font-weight: 800;">Rs. ${parseFloat(p.cashTendered || inv.netTotal).toFixed(2)}</span></div>`;
       payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; color: #000000;"><span>Cash Change:</span><span style="font-weight: 900;">Rs. ${parseFloat(p.change || 0).toFixed(2)}</span></div>`;
     } else if (p.method === "card") {
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Card:</span><span style="font-weight: 800;">${p.cardType || 'Card'} (**** ${p.last4 || '****'})</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Card:</span><span style="font-weight: 800;">${p.cardType || 'Card'}${p.last4 ? ' (**** ' + p.last4 + ')' : ''}</span></div>`;
     } else if (p.method === "transfer") {
       payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Ref / TXN ID:</span><span style="font-weight: 800;">${p.refNo || '-'}</span></div>`;
     } else if (p.method === "split") {
