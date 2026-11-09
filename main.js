@@ -229,13 +229,15 @@ app.whenReady().then(() => {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1366,
-    height: 768,
-    minWidth: 1024,
-    minHeight: 700,
-    title: "Restaurant ERP - SME Enterprise Edition",
-    autoHideMenuBar: true,
-    webPreferences: {
+      width: 1366,
+      height: 768,
+      minWidth: 1024,
+      minHeight: 700,
+      title: "Restaurant ERP - SME Enterprise Edition",
+      frame: false, // 🛡️ Windows Title Bar & Borders සම්පූර්ණයෙන්ම ඉවත් කරයි
+      fullscreen: true, // 🛡️ මුළු තිරය පුරාම Full Screen ධාවනය කරයි
+      autoHideMenuBar: true,
+      webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
@@ -638,5 +640,11 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  }
+});
+// 🚪 Custom Exit Button Handler
+ipcMain.handle('close-app', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
   }
 });
