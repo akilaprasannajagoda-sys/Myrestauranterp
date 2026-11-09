@@ -102,18 +102,20 @@ export function kioskKeypadBackspace() {
   if (input) input.value = input.value.slice(0, -1);
 }
 
-// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE
+// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE (ZERO-BANDWIDTH OPTIMIZED)
 export function captureInstantCameraSnapshot() {
   const videoEl = document.getElementById("kioskCameraVideo");
   const canvasEl = document.getElementById("kioskSnapshotCanvas");
-  if (!videoEl || !canvasEl || !videoEl.videoWidth) return "";
-
+  // 🛡️ කැමරා Stream එක සක්‍රීයව පවතින විට පමණක් දත්ත ලබාගනී
+  if (!videoEl || !canvasEl || !videoEl.videoWidth || !videoEl.srcObject) return "";
+  
   try {
-    canvasEl.width = 64;
-    canvasEl.height = 48;
+    // 🛡️ UI එකේ Thumbnail ප්‍රමාණයටම (28px) ගැලපෙන සේ 36x28 ලෙස සකසා 80% ක Data නාස්තිය වළකයි
+    canvasEl.width = 36;
+    canvasEl.height = 28;
     const ctx = canvasEl.getContext("2d");
-    ctx.drawImage(videoEl, 0, 0, 64, 48);
-    return canvasEl.toDataURL("image/jpeg", 0.25);
+    ctx.drawImage(videoEl, 0, 0, 36, 28);
+    return canvasEl.toDataURL("image/jpeg", 0.15);
   } catch (e) {
     return "";
   }
