@@ -85,17 +85,19 @@ export function clearAllFirebaseStreams() {
 }
 window.clearAllFirebaseStreams = clearAllFirebaseStreams;
 
-// 🛡️ PRE-LOAD LOCAL CACHED DATA ON APPLICATION STARTUP (TRUE OFFLINE BOOT)
+// 🛡️ PRE-LOAD LOCAL CACHED DATA ON APPLICATION STARTUP (TRUE OFFLINE BOOT - ZERO BANDWIDTH)
 try {
   const cachedDishes = localStorage.getItem("cached_erp_dishes");
   const cachedCats = localStorage.getItem("cached_erp_dishCategories");
   const cachedEmps = localStorage.getItem("cached_erp_employees");
   const cachedSettings = localStorage.getItem("cached_erp_settings");
-
+  const cachedCustomers = localStorage.getItem("cached_erp_customers");
+  
   if (cachedDishes) erpState.dishes = JSON.parse(cachedDishes);
   if (cachedCats) erpState.dishCategories = JSON.parse(cachedCats);
   if (cachedEmps) erpState.employees = JSON.parse(cachedEmps);
   if (cachedSettings) erpState.settings = JSON.parse(cachedSettings);
+  if (cachedCustomers) erpState.customers = JSON.parse(cachedCustomers);
 } catch (e) {}
 
 // Store logged in staff member's specific permissions
@@ -1023,92 +1025,95 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubTables);
 
-  // 9. Kitchen Orders (Central Print Hub)
-  const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(100));
-  const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
-    const prevOrders = erpState.kitchenOrders || {};
-    erpState.kitchenOrders = snapshot.val() || {};
-    KDS.renderKDSOrdersGrid();
-
-    const currentOrders = erpState.kitchenOrders;
-    
-    if (Object.keys(currentOrders).length > Object.keys(prevOrders).length) {
-      triggerAudioAlert("newOrder");
-    }
-
-    if (window.electronAPI && window.electronAPI.printSilent) {
-      Object.entries(currentOrders).forEach(([orderId, orderData]) => {
-        if (orderData && orderData.status === "Cooking" && orderData.isPrinted === false) {
-          POS.handleIncomingCloudPrint(orderId, orderData);
-        }
-      });
-    }
-
-    Object.keys(currentOrders).forEach(k => {
-      if (currentOrders[k].status === "Ready" && prevOrders[k] && prevOrders[k].status === "Cooking") {
-        triggerAudioAlert("kitchen");
-        showLiveToast("🛎️ Order Ready!", `Table ${currentOrders[k].tableNo} කෑම පිළියෙල කර අවසන්!`, "kitchen", "fa-bell-concierge");
+  // 9. Kitchen Orders (Optimized limitToLast: 35) - KDS සහ Auto-Print සඳහා ප්‍රමාණවත්ය
+const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(35));
+const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
+  const prevOrders = erpState.kitchenOrders || {};
+  erpState.kitchenOrders = snapshot.val() || {};
+  KDS.renderKDSOrdersGrid();
+  
+  const currentOrders = erpState.kitchenOrders;
+  
+  if (Object.keys(currentOrders).length > Object.keys(prevOrders).length) {
+    triggerAudioAlert("newOrder");
+  }
+  
+  if (window.electronAPI && window.electronAPI.printSilent) {
+    Object.entries(currentOrders).forEach(([orderId, orderData]) => {
+      if (orderData && orderData.status === "Cooking" && orderData.isPrinted === false) {
+        POS.handleIncomingCloudPrint(orderId, orderData);
       }
     });
-  });
-  activeFirebaseUnsubscribers.push(unsubKitchen);
-
-  // 10. Suppliers Directory
-  const unsubSuppliers = onValue(ref(dbInstance, `${basePath}/suppliers`), (snapshot) => {
-    erpState.suppliers = snapshot.val() || {};
-    Suppliers.renderSuppliersDirectoryTable();
-    Suppliers.populateGRNSupplierDropdown();
-  });
-  activeFirebaseUnsubscribers.push(unsubSuppliers);
-
-  // 10.1 Registered Customers & Loyalty CRM
-  const unsubCustomers = onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
-    erpState.customers = snapshot.val() || {};
-    Customers.renderCustomersTable();
-  });
-  activeFirebaseUnsubscribers.push(unsubCustomers);
-
-  // 11. Supplier Payments
-  const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(80));
-  const unsubSupPay = onValue(recentSupPayQuery, (snapshot) => {
-    erpState.supplierPayments = snapshot.val() || {};
-    Suppliers.renderSuppliersDirectoryTable();
-  });
-  activeFirebaseUnsubscribers.push(unsubSupPay);
-
-  // 12. GRNs
-  const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(80));
-  const unsubGrns = onValue(recentGrnQuery, (snapshot) => {
-    erpState.grns = snapshot.val() || {};
-    Suppliers.renderGRNHistoryTable();
-    Suppliers.renderSuppliersDirectoryTable();
-  });
-  activeFirebaseUnsubscribers.push(unsubGrns);
-
-  // 13. Invoices
-  const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(100));
-  const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
-    const fromVal = document.getElementById("repFromDate")?.value;
-    const toVal = document.getElementById("repToDate")?.value;
-    
-    if (!fromVal && !toVal) {
-      erpState.invoices = snapshot.val() || {};
-      if (Reports.activeReportTabName === "pnl") {
-        Reports.renderPnLStatement();
-      } else if (Reports.activeReportTabName === "hourly") {
-        Reports.renderHourlyVelocityReport();
-      } else if (Reports.activeReportTabName === "waiters") {
-        Reports.renderWaiterSalesReport();
-      } else if (Reports.activeReportTabName === "items") {
-        Reports.renderItemWiseSalesSummary();
-      } else if (Reports.activeReportTabName === "credits") {
-        Reports.renderCustomerCreditsLedger();
-      } else {
-        Reports.renderInvoiceReportsList();
-      }
+  }
+  
+  Object.keys(currentOrders).forEach(k => {
+    if (currentOrders[k].status === "Ready" && prevOrders[k] && prevOrders[k].status === "Cooking") {
+      triggerAudioAlert("kitchen");
+      showLiveToast("🛎️ Order Ready!", `Table ${currentOrders[k].tableNo} කෑම පිළියෙල කර අවසන්!`, "kitchen", "fa-bell-concierge");
     }
   });
-  activeFirebaseUnsubscribers.push(unsubInvoices);
+});
+activeFirebaseUnsubscribers.push(unsubKitchen);
+
+// 10. Suppliers Directory
+const unsubSuppliers = onValue(ref(dbInstance, `${basePath}/suppliers`), (snapshot) => {
+  erpState.suppliers = snapshot.val() || {};
+  Suppliers.renderSuppliersDirectoryTable();
+  Suppliers.populateGRNSupplierDropdown();
+});
+activeFirebaseUnsubscribers.push(unsubSuppliers);
+
+// 10.1 Registered Customers & Loyalty CRM (Auto-Cached Locally)
+const unsubCustomers = onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
+  erpState.customers = snapshot.val() || {};
+  try {
+    localStorage.setItem("cached_erp_customers", JSON.stringify(erpState.customers));
+  } catch (e) {}
+  Customers.renderCustomersTable();
+});
+activeFirebaseUnsubscribers.push(unsubCustomers);
+
+// 11. Supplier Payments (Optimized limitToLast: 40)
+const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(40));
+const unsubSupPay = onValue(recentSupPayQuery, (snapshot) => {
+  erpState.supplierPayments = snapshot.val() || {};
+  Suppliers.renderSuppliersDirectoryTable();
+});
+activeFirebaseUnsubscribers.push(unsubSupPay);
+
+// 12. GRNs (Optimized limitToLast: 40)
+const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(40));
+const unsubGrns = onValue(recentGrnQuery, (snapshot) => {
+  erpState.grns = snapshot.val() || {};
+  Suppliers.renderGRNHistoryTable();
+  Suppliers.renderSuppliersDirectoryTable();
+});
+activeFirebaseUnsubscribers.push(unsubGrns);
+
+// 13. Invoices (Optimized limitToLast: 35 for POS Counter View)
+const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(35));
+const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
+  const fromVal = document.getElementById("repFromDate")?.value;
+  const toVal = document.getElementById("repToDate")?.value;
+  
+  if (!fromVal && !toVal) {
+    erpState.invoices = snapshot.val() || {};
+    if (Reports.activeReportTabName === "pnl") {
+      Reports.renderPnLStatement();
+    } else if (Reports.activeReportTabName === "hourly") {
+      Reports.renderHourlyVelocityReport();
+    } else if (Reports.activeReportTabName === "waiters") {
+      Reports.renderWaiterSalesReport();
+    } else if (Reports.activeReportTabName === "items") {
+      Reports.renderItemWiseSalesSummary();
+    } else if (Reports.activeReportTabName === "credits") {
+      Reports.renderCustomerCreditsLedger();
+    } else {
+      Reports.renderInvoiceReportsList();
+    }
+  }
+});
+activeFirebaseUnsubscribers.push(unsubInvoices);
 
   // 14. Customer Credits
   const unsubCredits = onValue(ref(dbInstance, `${basePath}/customerCredits`), (snapshot) => {
@@ -1199,41 +1204,38 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubActiveBills);
 
-  // 20. Heartbeat & SaaS Subscription
-  const sendHeartbeat = () => {
-    if (currentTenant && dbRef && navigator.onLine) {
-      update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
-        lastHeartbeat: new Date().toISOString()
-      }).catch(() => {});
+  // 20. Heartbeat & SaaS Subscription (Zero-Bandwidth Optimized)
+const sendHeartbeat = () => {
+  if (currentTenant && dbRef && navigator.onLine) {
+    update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
+      lastHeartbeat: new Date().toISOString()
+    }).catch(() => {});
+  }
+};
+sendHeartbeat();
+// 🛡️ තත්පර 45 වෙනුවට විනාඩි 3 කට වරක් Ping යැවීමෙන් දත්ත නාස්තිය අවම කෙරේ
+setInterval(sendHeartbeat, 180000);
+
+if (!erpState.subscription) erpState.subscription = {};
+
+// 1. Status පමණක් Live බලයි (Heartbeat write නිසා Download නොවීමට)
+const unsubStatus = onValue(ref(dbInstance, `${basePath}/subscription/status`), (snapshot) => {
+  const status = snapshot.val() || "active";
+  erpState.subscription.status = status;
+  
+  if (status === "suspended") {
+    document.getElementById("mainApp")?.classList.add("hidden");
+    document.getElementById("authScreen")?.classList.add("hidden");
+    
+    let lockScreen = document.getElementById("saasLockoutScreen");
+    if (!lockScreen) {
+      lockScreen = document.createElement("div");
+      lockScreen.id = "saasLockoutScreen";
+      lockScreen.className = "fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-6 text-center text-white";
+      document.body.appendChild(lockScreen);
     }
-  };
-  sendHeartbeat();
-  setInterval(sendHeartbeat, 45000);
-
-  const unsubSub = onValue(ref(dbInstance, `${basePath}/subscription`), (snapshot) => {
-    const sub = snapshot.val() || {};
-    erpState.subscription = sub;
-
-    if (sub.broadcastNotice && sub.broadcastNotice.trim()) {
-      showLiveToast("📢 Notice", sub.broadcastNotice, "info", "fa-bullhorn");
-    }
-
-    applyRoleBasedUI(currentUserRole, currentStaffPermissions);
-
-    if (sub.status === "suspended") {
-      document.getElementById("mainApp")?.classList.add("hidden");
-      document.getElementById("authScreen")?.classList.add("hidden");
-      
-      let lockScreen = document.getElementById("saasLockoutScreen");
-      if (!lockScreen) {
-        lockScreen = document.createElement("div");
-        lockScreen.id = "saasLockoutScreen";
-        lockScreen.className = "fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-6 text-center text-white";
-        document.body.appendChild(lockScreen);
-      }
-      
-      lockScreen.classList.remove("hidden");
-      lockScreen.innerHTML = `
+    lockScreen.classList.remove("hidden");
+    lockScreen.innerHTML = `
         <div class="bg-gray-900 border border-red-500/30 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-4">
           <div class="w-16 h-16 rounded-2xl bg-red-600/20 text-red-500 border border-red-500/40 flex items-center justify-center mx-auto text-3xl">
             <i class="fa-solid fa-lock"></i>
@@ -1244,15 +1246,31 @@ function initializeRealtimeDataStreams(tenantId) {
           </p>
         </div>
       `;
-    } else {
-      const lockScreen = document.getElementById("saasLockoutScreen");
-      if (lockScreen) lockScreen.classList.add("hidden");
-      if (authInstance.currentUser || currentTenant) {
-        document.getElementById("mainApp")?.classList.remove("hidden");
-      }
+  } else {
+    const lockScreen = document.getElementById("saasLockoutScreen");
+    if (lockScreen) lockScreen.classList.add("hidden");
+    if (authInstance.currentUser || currentTenant) {
+      document.getElementById("mainApp")?.classList.remove("hidden");
     }
-  });
-  activeFirebaseUnsubscribers.push(unsubSub);
+  }
+});
+activeFirebaseUnsubscribers.push(unsubStatus);
+
+// 2. Features පමණක් වෙනස් වන විට අදාළ UI සකසයි
+const unsubFeatures = onValue(ref(dbInstance, `${basePath}/subscription/features`), (snapshot) => {
+  erpState.subscription.features = snapshot.val() || {};
+  applyRoleBasedUI(currentUserRole, currentStaffPermissions);
+});
+activeFirebaseUnsubscribers.push(unsubFeatures);
+
+// 3. Broadcast Notice එකක් දැමූ විට පමණක් Live දැනුම් දෙයි
+const unsubNotice = onValue(ref(dbInstance, `${basePath}/subscription/broadcastNotice`), (snapshot) => {
+  const notice = snapshot.val();
+  if (notice && String(notice).trim()) {
+    showLiveToast("📢 Notice", String(notice).trim(), "info", "fa-bullhorn");
+  }
+});
+activeFirebaseUnsubscribers.push(unsubNotice);
 
   // 21. Day-End Reports
   const recentDayEndQuery = query(ref(dbInstance, `${basePath}/dayEndReports`), limitToLast(40));
