@@ -3,6 +3,7 @@
 // 🎨 ARCHITECTURAL RESTAURANT FLOOR PLAN ENGINE (EXACT CLIENT PHOTO REPLICA)
 // 100% COMPATIBLE WITH EXISTING POS, BILLING & REALTIME FIREBASE LOGIC
 // 🔴 100% REAL-TIME OCCUPIED RED HIGHLIGHT + TOUCH SCREEN & MOUSE EDIT ENGINE
+// 🔒 DYNAMIC TABLE ORDER MODE ACTIVATION (METHOD 01)
 // ==========================================================================
 
 import { erpState, currentTenant, currentAreaFilter, setCurrentAreaFilter, setActiveBillId } from './state.js';
@@ -330,6 +331,40 @@ export function renderTablesFloorGrid() {
     };
   }
 
+  // 🔗 MERGE STATUS DETECTOR
+  function getTableMergeInfo(tableData) {
+    const targetNum = extractTableNum(tableData.tableNo);
+    if (targetNum === null) return { isMergedSource: false, isMergedTarget: false, mergedInto: "", mergedWith: [] };
+
+    // 1. Check if this table was merged INTO another table (Source)
+    if (tableData.status === "Merged" && tableData.mergedInto) {
+      return { isMergedSource: true, isMergedTarget: false, mergedInto: tableData.mergedInto, mergedWith: [] };
+    }
+    for (const b of Object.values(activeBills)) {
+      if (b.mergedTables && Array.isArray(b.mergedTables) && b.mergedTables.some(m => extractTableNum(m) === targetNum)) {
+        return { isMergedSource: true, isMergedTarget: false, mergedInto: b.tableNo, mergedWith: [] };
+      }
+    }
+    for (const t of Object.values(tablesObj)) {
+      if (t.mergedWith && Array.isArray(t.mergedWith) && t.mergedWith.some(m => extractTableNum(m) === targetNum)) {
+        return { isMergedSource: true, isMergedTarget: false, mergedInto: t.tableNo, mergedWith: [] };
+      }
+    }
+
+    // 2. Check if this table HAS other tables merged into it (Target / Host)
+    if (tableData.mergedWith && Array.isArray(tableData.mergedWith) && tableData.mergedWith.length > 0) {
+      return { isMergedSource: false, isMergedTarget: true, mergedInto: "", mergedWith: tableData.mergedWith };
+    }
+    for (const b of Object.values(activeBills)) {
+      const bNum = extractTableNum(b.tableNo);
+      if (bNum === targetNum && b.mergedTables && Array.isArray(b.mergedTables) && b.mergedTables.length > 0) {
+        return { isMergedSource: false, isMergedTarget: true, mergedInto: "", mergedWith: b.mergedTables };
+      }
+    }
+
+    return { isMergedSource: false, isMergedTarget: false, mergedInto: "", mergedWith: [] };
+  }
+
   // 🔴 100% BULLETPROOF REAL-TIME OCCUPANCY CHECK
   function isTableOccupied(tableData) {
     const targetNum = extractTableNum(tableData.tableNo);
@@ -412,28 +447,59 @@ export function renderTablesFloorGrid() {
     { no: "36", type: "cross-4", x: 805, y: 395 }
   ];
 
-  // 🪑 GENERATE SVG SHAPE (VIVID RED ON OCCUPIED + RIGHT CLICK EDIT)
-  function generateTableSvg(tCfg, tData, occupied, matchesArea) {
+  // 🪑 GENERATE SVG SHAPE (HIGHLIGHTS MERGED PURPLE & OCCUPIED RED)
+  function generateTableSvg(tCfg, tData, occupied, matchesArea, mergeInfo) {
     const { no, type, x, y } = tCfg;
+    const { isMergedSource, isMergedTarget, mergedInto, mergedWith } = mergeInfo;
 
-    const tableBg = occupied ? "#ef4444" : "#ffffff";
-    const tableStroke = occupied ? "#b91c1c" : "#1e3a8a";
-    const chairFill = occupied ? "#fca5a5" : "#e2e8f0";
-    const chairStroke = occupied ? "#ef4444" : "#3b82f6";
-    const textColor = occupied ? "#ffffff" : "#0f172a";
+    const tableBg = isMergedSource 
+      ? "#8b5cf6" 
+      : occupied 
+        ? "#ef4444" 
+        : "#ffffff";
+
+    const tableStroke = isMergedSource 
+      ? "#6d28d9" 
+      : isMergedTarget 
+        ? "#7c3aed" 
+        : occupied 
+          ? "#b91c1c" 
+          : "#1e3a8a";
+
+    const chairFill = isMergedSource 
+      ? "#ddd6fe" 
+      : occupied 
+        ? "#fca5a5" 
+        : "#e2e8f0";
+
+    const chairStroke = isMergedSource 
+      ? "#8b5cf6" 
+      : occupied 
+        ? "#ef4444" 
+        : "#3b82f6";
+
+    const textColor = (isMergedSource || occupied) ? "#ffffff" : "#0f172a";
     const opacityAttr = matchesArea ? "1" : "0.3";
+
+    // 🔗 Visual Merge Indicator Badge
+    const mergeBadgeText = isMergedSource 
+      ? `🔗 T-${mergedInto}` 
+      : isMergedTarget 
+        ? `🔗 +${mergedWith.join(',')}` 
+        : "";
 
     let shapes = "";
 
-    // 1. BOOTH (VERTICAL 2-SEATER WITH TOP/BOTTOM ARCH CHAIRS)
+    // 1. BOOTH (VERTICAL 2-SEATER)
     if (type === "booth") {
       shapes = `
         <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="handleTableClick('${no}')" oncontextmenu="event.preventDefault(); editTableByNumber('${no}')">
           <path d="M ${x + 6} ${y} C ${x + 6} ${y - 12}, ${x + 26} ${y - 12}, ${x + 26} ${y} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
-          <rect x="${x}" y="${y}" width="32" height="38" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <rect x="${x}" y="${y}" width="32" height="38" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="${isMergedTarget ? '2.8' : '2'}" />
           <path d="M ${x + 6} ${y + 38} C ${x + 6} ${y + 50}, ${x + 26} ${y + 50}, ${x + 26} ${y + 38} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <text x="${x + 16}" y="${y + 24}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
-          ${occupied ? `<circle cx="${x + 30}" cy="${y + 2}" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${occupied || isMergedSource ? `<circle cx="${x + 30}" cy="${y + 2}" r="5" fill="${isMergedSource ? '#8b5cf6' : '#ef4444'}" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${mergeBadgeText ? `<text x="${x + 16}" y="${y - 14}" font-size="8.5" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#7c3aed">${mergeBadgeText}</text>` : ''}
           ${tData.assignedWaiter ? `<text x="${x + 16}" y="${y + 58}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
         </g>
       `;
@@ -443,30 +509,32 @@ export function renderTablesFloorGrid() {
       shapes = `
         <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="handleTableClick('${no}')" oncontextmenu="event.preventDefault(); editTableByNumber('${no}')">
           <path d="M ${x} ${y + 5} C ${x - 11} ${y + 5}, ${x - 11} ${y + 23}, ${x} ${y + 23} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
-          <rect x="${x}" y="${y}" width="38" height="28" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <rect x="${x}" y="${y}" width="38" height="28" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="${isMergedTarget ? '2.8' : '2'}" />
           <path d="M ${x + 38} ${y + 5} C ${x + 49} ${y + 5}, ${x + 49} ${y + 23}, ${x + 38} ${y + 23} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <text x="${x + 19}" y="${y + 19}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
-          ${occupied ? `<circle cx="${x + 36}" cy="${y + 2}" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${occupied || isMergedSource ? `<circle cx="${x + 36}" cy="${y + 2}" r="5" fill="${isMergedSource ? '#8b5cf6' : '#ef4444'}" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${mergeBadgeText ? `<text x="${x + 19}" y="${y - 3}" font-size="8.5" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#7c3aed">${mergeBadgeText}</text>` : ''}
           ${tData.assignedWaiter ? `<text x="${x + 19}" y="${y + 39}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
         </g>
       `;
     }
-    // 3. FAMILY TABLE (TABLE 14: VERTICAL RECTANGLE WITH EXACT 4 CHAIRS - 2 LEFT, 2 RIGHT)
+    // 3. FAMILY TABLE (TABLE 14)
     else if (type === "family-4") {
       shapes = `
         <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="handleTableClick('${no}')" oncontextmenu="event.preventDefault(); editTableByNumber('${no}')">
           <path d="M ${x} ${y + 10} C ${x - 12} ${y + 10}, ${x - 12} ${y + 28}, ${x} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <path d="M ${x} ${y + 44} C ${x - 12} ${y + 44}, ${x - 12} ${y + 62}, ${x} ${y + 62} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
-          <rect x="${x}" y="${y}" width="38" height="72" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <rect x="${x}" y="${y}" width="38" height="72" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="${isMergedTarget ? '2.8' : '2'}" />
           <path d="M ${x + 38} ${y + 10} C ${x + 50} ${y + 10}, ${x + 50} ${y + 28}, ${x + 38} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <path d="M ${x + 38} ${y + 44} C ${x + 50} ${y + 44}, ${x + 50} ${y + 62}, ${x + 38} ${y + 62} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <text x="${x + 19}" y="${y + 41}" font-size="15" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
-          ${occupied ? `<circle cx="${x + 36}" cy="${y + 2}" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${occupied || isMergedSource ? `<circle cx="${x + 36}" cy="${y + 2}" r="5" fill="${isMergedSource ? '#8b5cf6' : '#ef4444'}" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${mergeBadgeText ? `<text x="${x + 19}" y="${y - 3}" font-size="8.5" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#7c3aed">${mergeBadgeText}</text>` : ''}
           ${tData.assignedWaiter ? `<text x="${x + 19}" y="${y + 83}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
         </g>
       `;
     }
-    // 4. ROUND 6-SEATER TABLE (TABLE 16 WITH 6 RADIAL CHAIRS)
+    // 4. ROUND 6-SEATER TABLE (TABLE 16)
     else if (type === "round-6") {
       const cx = x;
       const cy = y;
@@ -478,9 +546,10 @@ export function renderTablesFloorGrid() {
           <circle cx="${cx}" cy="${cy + 28}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <circle cx="${cx - 25}" cy="${cy + 14}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <circle cx="${cx - 25}" cy="${cy - 14}" r="6.5" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
-          <circle cx="${cx}" cy="${cy}" r="21" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <circle cx="${cx}" cy="${cy}" r="21" fill="${tableBg}" stroke="${tableStroke}" stroke-width="${isMergedTarget ? '2.8' : '2'}" />
           <text x="${cx}" y="${cy + 5}" font-size="14" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
-          ${occupied ? `<circle cx="${cx + 17}" cy="${cy - 16}" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${occupied || isMergedSource ? `<circle cx="${cx + 17}" cy="${cy - 16}" r="5" fill="${isMergedSource ? '#8b5cf6' : '#ef4444'}" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${mergeBadgeText ? `<text x="${cx}" y="${cy - 36}" font-size="8.5" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#7c3aed">${mergeBadgeText}</text>` : ''}
           ${tData.assignedWaiter ? `<text x="${cx}" y="${cy + 43}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
         </g>
       `;
@@ -493,14 +562,15 @@ export function renderTablesFloorGrid() {
           <path d="M ${x + 6} ${y + 44} C ${x + 6} ${y + 56}, ${x + 24} ${y + 56}, ${x + 24} ${y + 44} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <path d="M ${x} ${y + 13} C ${x - 12} ${y + 13}, ${x - 12} ${y + 31}, ${x} ${y + 31} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <path d="M ${x + 30} ${y + 13} C ${x + 42} ${y + 13}, ${x + 42} ${y + 31}, ${x + 30} ${y + 31} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
-          <rect x="${x}" y="${y}" width="30" height="44" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <rect x="${x}" y="${y}" width="30" height="44" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="${isMergedTarget ? '2.8' : '2'}" />
           <text x="${x + 15}" y="${y + 27}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
-          ${occupied ? `<circle cx="${x + 28}" cy="${y + 2}" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${occupied || isMergedSource ? `<circle cx="${x + 28}" cy="${y + 2}" r="5" fill="${isMergedSource ? '#8b5cf6' : '#ef4444'}" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${mergeBadgeText ? `<text x="${x + 15}" y="${y - 14}" font-size="8.5" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#7c3aed">${mergeBadgeText}</text>` : ''}
           ${tData.assignedWaiter ? `<text x="${x + 15}" y="${y + 67}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
         </g>
       `;
     }
-    // 6. SQUARE CROSS 4-SEATER (TABLES 21-28, 29, 31, 32, 33-36)
+    // 6. SQUARE CROSS 4-SEATER
     else {
       shapes = `
         <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="handleTableClick('${no}')" oncontextmenu="event.preventDefault(); editTableByNumber('${no}')">
@@ -508,9 +578,10 @@ export function renderTablesFloorGrid() {
           <path d="M ${x + 8} ${y + 36} C ${x + 8} ${y + 48}, ${x + 28} ${y + 48}, ${x + 28} ${y + 36} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <path d="M ${x} ${y + 8} C ${x - 12} ${y + 8}, ${x - 12} ${y + 28}, ${x} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
           <path d="M ${x + 36} ${y + 8} C ${x + 48} ${y + 8}, ${x + 48} ${y + 28}, ${x + 36} ${y + 28} Z" fill="${chairFill}" stroke="${chairStroke}" stroke-width="1.8" />
-          <rect x="${x}" y="${y}" width="36" height="36" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="2" />
+          <rect x="${x}" y="${y}" width="36" height="36" rx="4" fill="${tableBg}" stroke="${tableStroke}" stroke-width="${isMergedTarget ? '2.8' : '2'}" />
           <text x="${x + 18}" y="${y + 23}" font-size="13" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="${textColor}">${no}</text>
-          ${occupied ? `<circle cx="${x + 34}" cy="${y + 2}" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${occupied || isMergedSource ? `<circle cx="${x + 34}" cy="${y + 2}" r="5" fill="${isMergedSource ? '#8b5cf6' : '#ef4444'}" stroke="#ffffff" stroke-width="1.5"><animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite"/></circle>` : ''}
+          ${mergeBadgeText ? `<text x="${x + 18}" y="${y - 14}" font-size="8.5" font-weight="900" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#7c3aed">${mergeBadgeText}</text>` : ''}
           ${tData.assignedWaiter ? `<text x="${x + 18}" y="${y + 57}" font-size="8.5" font-weight="800" font-family="-apple-system, sans-serif" text-anchor="middle" fill="#475569">${tData.assignedWaiter.split(' ')[0]}</text>` : ''}
         </g>
       `;
@@ -524,8 +595,9 @@ export function renderTablesFloorGrid() {
   tableLayoutConfig.forEach(cfg => {
     const tData = getTableData(cfg.no);
     const occupied = isTableOccupied(tData);
+    const mergeInfo = getTableMergeInfo(tData);
     const matchesArea = (currentAreaFilter === "ALL" || (tData.area && tData.area === currentAreaFilter));
-    allSvgElements += generateTableSvg(cfg, tData, occupied, matchesArea);
+    allSvgElements += generateTableSvg(cfg, tData, occupied, matchesArea, mergeInfo);
   });
 
   const floorPlanWrapper = document.createElement("div");
@@ -549,8 +621,8 @@ export function renderTablesFloorGrid() {
     <!-- BOTTOM CONTROLS & MODE TOGGLE (BILLING VS EDIT) -->
     <div class="mt-4 pt-3 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs font-bold text-slate-500 gap-3">
       
-      <!-- OCCUPANCY LEGEND -->
-      <div class="flex items-center gap-5">
+      <!-- OCCUPANCY & MERGE LEGEND -->
+      <div class="flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-1.5">
           <span class="w-3.5 h-3.5 bg-white border-2 border-blue-900 rounded-sm"></span>
           <span>Available (හිස් මේස)</span>
@@ -558,6 +630,10 @@ export function renderTablesFloorGrid() {
         <div class="flex items-center gap-1.5">
           <span class="w-3.5 h-3.5 bg-red-500 border-2 border-red-700 rounded-sm animate-pulse"></span>
           <span class="text-red-700 font-black">Occupied (කෑම ඇණවුම් සහිත)</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3.5 h-3.5 bg-purple-600 border-2 border-purple-800 rounded-sm animate-pulse"></span>
+          <span class="text-purple-700 font-black">Merged (🔗 එකතු කළ මේස)</span>
         </div>
       </div>
 
@@ -573,8 +649,8 @@ export function renderTablesFloorGrid() {
           </button>
         </div>
 
-        <button type="button" onclick="openMergeTableModal()" class="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl transition shadow-xs cursor-pointer font-bold text-xs">
-          <i class="fa-solid fa-object-group text-blue-600 mr-1"></i> Merge
+        <button type="button" onclick="openMergeTableModal()" class="px-3.5 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-300 text-purple-700 rounded-xl transition shadow-xs cursor-pointer font-bold text-xs">
+          <i class="fa-solid fa-object-group text-purple-600 mr-1"></i> Merge
         </button>
         <span class="font-bold text-slate-600 hidden sm:inline">Total: 36 Tables</span>
       </div>
@@ -593,24 +669,47 @@ if (typeof document !== "undefined") {
 }
 
 // ==========================================================================
-// 4. INSTANT TABLE-TO-POS LINK & ACTIONS ENGINE
+// 4. INSTANT TABLE-TO-POS LINK & ACTIONS ENGINE (AUTO-MERGE ROUTING)
 // ==========================================================================
 
 export function linkTableToPos(tableNo) {
+  // 🛡️ Table එකෙන් POS එකට යනවිට Print Bill / WhatsApp Bill සඟවයි (Method 01)
+  if (window.setTableOrderMode) {
+    window.setTableOrderMode(true);
+  }
+
   if (!erpState.activeBills) erpState.activeBills = {};
   const targetNum = extractTableNum(tableNo);
   
+  // 🛡️ Auto-redirect to parent table if this table was merged
+  let actualTableNo = tableNo;
+  const matchedTbl = Object.values(erpState.tables || {}).find(t => extractTableNum(t.tableNo) === targetNum);
+  if (matchedTbl && matchedTbl.status === "Merged" && matchedTbl.mergedInto) {
+    actualTableNo = matchedTbl.mergedInto;
+    showLiveToast("🔗 Merged Table", `Table ${tableNo} එක Table ${actualTableNo} සමඟ Merge කර ඇත.`, "info", "fa-object-group");
+  } else {
+    const parentBill = Object.values(erpState.activeBills).find(b => 
+      b.mergedTables && Array.isArray(b.mergedTables) && b.mergedTables.some(m => extractTableNum(m) === targetNum)
+    );
+    if (parentBill && parentBill.tableNo) {
+      actualTableNo = parentBill.tableNo;
+      showLiveToast("🔗 Merged Table", `Table ${tableNo} එක Table ${actualTableNo} සමඟ Merge කර ඇත.`, "info", "fa-object-group");
+    }
+  }
+
+  const finalTargetNum = extractTableNum(actualTableNo);
+  
   let matchedBillKey = Object.keys(erpState.activeBills).find(k => {
     const bNo = extractTableNum(erpState.activeBills[k].tableNo);
-    return bNo === targetNum;
+    return bNo === finalTargetNum;
   });
   
   if (!matchedBillKey) {
     matchedBillKey = "bill_" + Date.now();
     const newBillPayload = {
-      name: `Table ${tableNo}`,
+      name: `Table ${actualTableNo}`,
       orderType: "Dine-in",
-      tableNo: tableNo,
+      tableNo: actualTableNo,
       waiterName: "",
       cart: [],
       discountType: "fixed",
@@ -622,7 +721,7 @@ export function linkTableToPos(tableNo) {
 
     const tObj = Object.values(erpState.tables || {}).find(t => {
       const tNo = extractTableNum(t.tableNo);
-      return tNo === targetNum;
+      return tNo === finalTargetNum;
     });
 
     if (tObj && tObj.assignedWaiter) {
@@ -638,10 +737,10 @@ export function linkTableToPos(tableNo) {
 
   const matchedTableEntry = Object.entries(erpState.tables || {}).find(([id, t]) => {
     const tNo = extractTableNum(t.tableNo);
-    return tNo === targetNum;
+    return tNo === finalTargetNum;
   });
 
-  if (matchedTableEntry) {
+  if (matchedTableEntry && matchedTableEntry[1].status !== "Occupied") {
     matchedTableEntry[1].status = "Occupied";
     if (navigator.onLine && dbRef && updateFn && currentTenant) {
       updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTableEntry[0]}`), { status: "Occupied" }).catch(() => {});
@@ -669,34 +768,43 @@ export async function deleteTable(id) {
 }
 
 // ==========================================================================
-// 5. MERGE TABLES ENGINE
+// 5. MERGE TABLES ENGINE (SPECIFIC MERGE TRACKING & PERSISTENCE)
 // ==========================================================================
 
 export function openMergeTableModal() {
   const srcSel = document.getElementById("mergeSourceTableSelect");
   const tgtSel = document.getElementById("mergeTargetTableSelect");
   if (!srcSel || !tgtSel) return;
-
+  
   srcSel.innerHTML = `<option value="">-- Source Table (අස්කරන මේසය) --</option>`;
   tgtSel.innerHTML = `<option value="">-- Target Table (එකතු වන මේසය) --</option>`;
-
+  
   const allTablesList = [];
   for (let i = 1; i <= 36; i++) {
     const num = i < 10 ? `0${i}` : `${i}`;
     allTablesList.push(num);
   }
-
+  
   allTablesList.forEach(tNo => {
     const tNum = extractTableNum(tNo);
     const tData = Object.values(erpState.tables || {}).find(t => extractTableNum(t.tableNo) === tNum) || { tableNo: tNo };
     const bill = Object.values(erpState.activeBills || {}).find(b => extractTableNum(b.tableNo) === tNum);
     const hasOrder = bill && bill.cart && bill.cart.length > 0;
-    const label = `Table ${tNo} ${hasOrder ? '(Active Orders)' : ''}`;
-
+    const isMerged = tData.status === "Merged" && tData.mergedInto;
+    
+    let label = `Table ${tNo}`;
+    if (isMerged) {
+      label += ` (🔗 Merged into T-${tData.mergedInto})`;
+    } else if (tData.mergedWith && Array.isArray(tData.mergedWith) && tData.mergedWith.length > 0) {
+      label += ` (🔗 Host: +${tData.mergedWith.join(', +')})`;
+    } else if (hasOrder) {
+      label += ` (Active Orders)`;
+    }
+    
     srcSel.innerHTML += `<option value="${tNo}">${label}</option>`;
     tgtSel.innerHTML += `<option value="${tNo}">${label}</option>`;
   });
-
+  
   document.getElementById("mergeTableModal")?.classList.remove("hidden");
 }
 
@@ -708,31 +816,31 @@ export async function handleMergeTables(e) {
   if (e) e.preventDefault();
   const srcTableNo = document.getElementById("mergeSourceTableSelect")?.value;
   const tgtTableNo = document.getElementById("mergeTargetTableSelect")?.value;
-
+  
   if (!srcTableNo || !tgtTableNo) {
     showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර මේස දෙකම තෝරන්න.", "warning", "fa-object-group");
     return;
   }
-
+  
   const srcNum = extractTableNum(srcTableNo);
   const tgtNum = extractTableNum(tgtTableNo);
-
+  
   if (srcNum === tgtNum) {
     showLiveToast("⚠️ නොගැලපීමක්", "එකම මේසය තෝරාගත නොහැක. වෙනස් මේස දෙකක් තෝරන්න.", "warning", "fa-triangle-exclamation");
     return;
   }
-
+  
   const activeBills = erpState.activeBills || {};
   const srcBillKey = Object.keys(activeBills).find(k => extractTableNum(activeBills[k].tableNo) === srcNum);
   let tgtBillKey = Object.keys(activeBills).find(k => extractTableNum(activeBills[k].tableNo) === tgtNum);
-
+  
   const srcCart = (srcBillKey && activeBills[srcBillKey].cart) ? [...activeBills[srcBillKey].cart] : [];
-
+  
   if (srcCart.length === 0) {
     showLiveToast("⚠️ ඇණවුම් නැත", `Table ${srcTableNo} හි එකතු කිරීමට කෑම ඇණවුම් කිසිවක් නොමැත.`, "warning", "fa-circle-exclamation");
     return;
   }
-
+  
   try {
     if (!tgtBillKey) {
       tgtBillKey = "bill_" + Date.now();
@@ -751,10 +859,10 @@ export async function handleMergeTables(e) {
         setFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), newTgtPayload).catch(() => {});
       }
     }
-
+    
     const tgtBill = activeBills[tgtBillKey] || { cart: [] };
     const mergedCart = tgtBill.cart ? [...tgtBill.cart] : [];
-
+    
     srcCart.forEach(srcItem => {
       const existing = mergedCart.find(i => i.dishId === srcItem.dishId);
       if (existing) {
@@ -764,34 +872,67 @@ export async function handleMergeTables(e) {
         mergedCart.push(srcItem);
       }
     });
-
+    
     tgtBill.cart = mergedCart;
-
+    
+    // 🔗 Track merged tables in active bill
+    const existingMerged = Array.isArray(tgtBill.mergedTables) ? tgtBill.mergedTables : [];
+    const updatedMerged = Array.from(new Set([...existingMerged, srcTableNo]));
+    tgtBill.mergedTables = updatedMerged;
+    tgtBill.name = `Table ${tgtTableNo} (+${updatedMerged.join(', +')})`;
+    
     if (srcBillKey) {
       delete erpState.activeBills[srcBillKey];
     }
-
-    const srcTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === srcNum);
-    const tgtTableObj = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === tgtNum);
-
-    if (srcTableObj) srcTableObj[1].status = "Available";
-    if (tgtTableObj) tgtTableObj[1].status = "Occupied";
-
+    
+    let srcTableEntry = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === srcNum);
+    let tgtTableEntry = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === tgtNum);
+    
+    if (srcTableEntry) {
+      srcTableEntry[1].status = "Merged";
+      srcTableEntry[1].mergedInto = tgtTableNo;
+      delete srcTableEntry[1].mergedWith;
+    } else {
+      const newSrcId = "tbl_" + Date.now();
+      erpState.tables[newSrcId] = { tableNo: srcTableNo, status: "Merged", mergedInto: tgtTableNo };
+      srcTableEntry = [newSrcId, erpState.tables[newSrcId]];
+    }
+    
+    if (tgtTableEntry) {
+      tgtTableEntry[1].status = "Occupied";
+      tgtTableEntry[1].mergedWith = updatedMerged;
+    } else {
+      const newTgtId = "tbl_" + (Date.now() + 1);
+      erpState.tables[newTgtId] = { tableNo: tgtTableNo, status: "Occupied", mergedWith: updatedMerged };
+      tgtTableEntry = [newTgtId, erpState.tables[newTgtId]];
+    }
+    
     closeMergeTableModal();
+    renderTablesFloorGrid();
     if (setActiveBillId) setActiveBillId(tgtBillKey);
     if (switchViewFn) switchViewFn("pos");
     if (renderBillTabsFn) renderBillTabsFn();
     if (syncActiveBillFn) syncActiveBillFn();
-
+    
     if (navigator.onLine && dbRef && currentTenant) {
-      if (updateFn) updateFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), { cart: mergedCart }).catch(() => {});
+      if (updateFn) updateFn(dbRef(`tenants/${currentTenant}/activeBills/${tgtBillKey}`), {
+        cart: mergedCart,
+        mergedTables: updatedMerged,
+        name: tgtBill.name
+      }).catch(() => {});
       if (removeFn && srcBillKey) removeFn(dbRef(`tenants/${currentTenant}/activeBills/${srcBillKey}`)).catch(() => {});
-      if (updateFn && srcTableObj) updateFn(dbRef(`tenants/${currentTenant}/tables/${srcTableObj[0]}`), { status: "Available" }).catch(() => {});
-      if (updateFn && tgtTableObj) updateFn(dbRef(`tenants/${currentTenant}/tables/${tgtTableObj[0]}`), { status: "Occupied" }).catch(() => {});
+      if (updateFn && srcTableEntry) updateFn(dbRef(`tenants/${currentTenant}/tables/${srcTableEntry[0]}`), {
+        status: "Merged",
+        mergedInto: tgtTableNo
+      }).catch(() => {});
+      if (updateFn && tgtTableEntry) updateFn(dbRef(`tenants/${currentTenant}/tables/${tgtTableEntry[0]}`), {
+        status: "Occupied",
+        mergedWith: updatedMerged
+      }).catch(() => {});
     }
-
-    showLiveToast("🍽️ Tables Merged", `Table ${srcTableNo} හි ඇණවුම් සාර්ථකව Table ${tgtTableNo} වෙත එකතු විය.`, "success", "fa-object-group");
-
+    
+    showLiveToast("🍽️ Tables Merged", `Table ${srcTableNo} සාර්ථකව Table ${tgtTableNo} සමඟ Merge කරන ලදී.`, "success", "fa-object-group");
+    
   } catch (err) {
     showLiveToast("⚠️ දෝෂයකි", "Merge කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
