@@ -82,12 +82,12 @@ to { transform: translateY(0); opacity: 1; }
       overflow: hidden !important;
     }
 
-    /* POS View strictly locked to exact viewport */
-    #viewPos {
-      height: calc(100vh - 54px) !important;
-      max-height: calc(100vh - 54px) !important;
-      overflow: hidden !important;
-    }
+    /* POS View strictly locked to exact viewport without bottom cutoff */
+#viewPos {
+  height: calc(100vh - 68px) !important;
+  max-height: calc(100vh - 68px) !important;
+  overflow: hidden !important;
+}
 
     /* අනෙක් Views (Reports, Inventory, Menu) සඳහා පමණක් Scrollbar එක ක්‍රියාත්මක කිරීම */
     #viewTables, #viewKitchen, #viewMenu, #viewInventory, 
@@ -377,228 +377,230 @@ to { transform: translateY(0); opacity: 1; }
 </div>
 </header>
 
-      <!-- VIEW WRAPPER -->
-      <div class="p-4 md:p-6 flex-1">
-
-        <!-- VIEW 1: POS & MULTI-BILL BILLING SYSTEM (ZERO-SCROLL FIXED TERMINAL LAYOUT) -->
-<div id="viewPos" class="flex flex-col h-full overflow-hidden gap-2">
+    <!-- VIEW WRAPPER -->
+<div class="p-2 sm:p-2.5 flex-1 min-h-0 overflow-hidden">
   
-  <!-- Top Compact Bill Tabs Bar -->
-  <div class="bg-white p-1.5 px-3 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between gap-2 shrink-0">
-    <div id="billTabsList" class="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1"></div>
-    <button onclick="addNewBillTab()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-2xs transition flex items-center gap-1 whitespace-nowrap cursor-pointer">
-      <i class="fa-solid fa-plus text-[10px]"></i> New Bill
-    </button>
-  </div>
-  
-  <!-- Main POS Two-Column Split (100% Height Locked) -->
-  <div class="flex-1 grid grid-cols-12 gap-2.5 min-h-0 overflow-hidden">
+  <!-- VIEW 1: POS & MULTI-BILL BILLING SYSTEM (100% SCREEN VIEWPORT LOCKED - NO CUTOFF) -->
+  <div id="viewPos" class="flex flex-col h-full overflow-hidden gap-1 pb-0.5">
     
-    <!-- LEFT COLUMN: DISHES & SEARCH (8 COLS ON DESKTOP) -->
-    <div class="col-span-12 lg:col-span-7 xl:col-span-8 flex flex-col min-h-0 overflow-hidden gap-1.5">
-      
-      <!-- 🌟 1-Line Compact Bar: Order Type + Table No + Search Bar -->
-      <div class="bg-white p-2 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2 shrink-0">
-        <div class="w-36 shrink-0">
-          <select id="orderType" onchange="updateCurrentBillSettings()" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1.5 outline-none text-gray-700 cursor-pointer">
-            <option value="Dine-in">🍽️ Dine-in</option>
-            <option value="Takeaway">🥡 Takeaway</option>
-            <option value="Delivery">🛵 Delivery</option>
-          </select>
-        </div>
-        <div class="w-24 shrink-0">
-          <input type="text" id="orderTable" oninput="updateCurrentBillSettings()" placeholder="Table No" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1.5 outline-none text-center">
-        </div>
-        <div class="relative flex-1">
-          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
-          <input type="text" id="posSearchInput" oninput="onPosSearchInput()" placeholder="Search dishes (කෑම වර්ග නමෙන් සොයන්න)..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 focus:bg-white border border-gray-200 rounded-lg text-xs outline-none transition font-medium">
-        </div>
-      </div>
-      
-      <!-- Category Filter Pills Bar -->
-      <div id="categoryFilters" class="flex gap-1 overflow-x-auto pb-0.5 text-xs font-bold no-scrollbar shrink-0"></div>
-      
-      <!-- Independent Scrollable Dishes Grid -->
-      <div id="posGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 pr-1 content-start"></div>
+    <!-- Top Compact Bill Tabs Bar -->
+    <div class="bg-white p-1 px-2.5 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between gap-2 shrink-0">
+      <div id="billTabsList" class="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1"></div>
+      <button onclick="addNewBillTab()" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-2xs transition flex items-center gap-1 whitespace-nowrap cursor-pointer">
+        <i class="fa-solid fa-plus text-[10px]"></i> New Bill
+      </button>
     </div>
     
-    <!-- RIGHT COLUMN: CART & FIXED CHECKOUT ENGINE (4 COLS ON DESKTOP) -->
-    <div class="col-span-12 lg:col-span-5 xl:col-span-4 bg-white border border-gray-200 rounded-2xl shadow-sm p-3 flex flex-col min-h-0 overflow-hidden justify-between">
+    <!-- Main POS Two-Column Split (100% Height Locked) -->
+    <div class="flex-1 grid grid-cols-12 gap-1.5 min-h-0 overflow-hidden">
       
-      <!-- Top Cart Header & Customer CRM -->
-      <div class="shrink-0 space-y-1.5">
-        <div class="flex justify-between items-center border-b border-gray-100 pb-1.5">
-          <div>
-            <h3 id="currentBillTitle" class="font-black text-gray-800 text-xs sm:text-sm flex items-center gap-1.5">
-              <i class="fa-solid fa-receipt text-blue-600"></i> Bill #1
-            </h3>
-            <span id="currentBillSubtitle" class="text-[10px] text-gray-400 font-bold">Dine-in (Table: N/A)</span>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button type="button" onclick="openSplitBillModal()" title="Split Bill" class="text-[10px] bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold px-2 py-1 rounded-lg border border-purple-200 transition cursor-pointer">
-              <i class="fa-solid fa-scissors mr-0.5"></i> Split
-            </button>
-            <button type="button" onclick="clearCurrentCart()" class="text-[10px] text-red-500 font-bold hover:underline px-1 cursor-pointer">Clear</button>
-          </div>
-        </div>
+      <!-- LEFT COLUMN: DISHES & SEARCH (8 COLS ON DESKTOP) -->
+      <div class="col-span-12 lg:col-span-7 xl:col-span-8 flex flex-col min-h-0 overflow-hidden gap-1">
         
-        <!-- Compact Customer & CRM Bar -->
-        <div class="bg-gray-50 p-1.5 rounded-xl border border-gray-200 space-y-1 text-xs">
-          <div class="relative">
-            <input type="text" id="posCustomerSearchInput" oninput="onPosCustomerSearch(this)" placeholder="🔍 Search customer (Phone/Name)..." class="w-full p-1 pl-2.5 border border-gray-300 rounded-lg text-xs font-bold bg-white outline-none">
-            <div id="posCustomerSearchResults" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-36 overflow-y-auto"></div>
-          </div>
-          
-          <!-- Selected Customer Badge -->
-          <div id="posSelectedCustomerBadge" class="hidden p-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-            <input type="hidden" id="posAttachedCustomerId">
-            <div class="truncate text-[11px]">
-              <span id="posSelectedCustomerName" class="font-extrabold text-blue-900 block truncate">Customer</span>
-              <span id="posSelectedCustomerPoints" class="text-[9px] font-black text-purple-700 block">⭐ 0 Points Available</span>
-            </div>
-            <button type="button" onclick="removeCustomerFromCurrentBill()" class="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"><i class="fa-solid fa-xmark text-xs"></i></button>
-          </div>
-          
-          <!-- Loyalty Points Redemption Input -->
-          <div id="posLoyaltyRedeemBox" class="hidden flex items-center justify-between pt-0.5 border-t border-gray-200 text-[10px]">
-            <span class="font-bold text-purple-900">Redeem Points:</span>
-            <div class="flex items-center gap-1">
-              <input type="number" id="cartLoyaltyRedeemInput" min="0" placeholder="0" oninput="recalculateCartTotalsUI()" class="w-14 p-0.5 border border-purple-300 rounded text-center text-xs font-bold text-purple-700 outline-none bg-white font-mono">
-              <span id="cartLoyaltyDiscountVal" class="font-black text-purple-700">-Rs. 0.00</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 🌟 INDEPENDENT SCROLLABLE CART ITEMS LIST -->
-      <div id="cartItems" class="flex-1 overflow-y-auto space-y-1 py-1 my-1 border-y border-gray-100 text-xs min-h-[60px]">
-        <p class="text-center text-gray-400 py-3">Cart එක හිස්ය. කෑම වර්ගයක් තෝරන්න.</p>
-      </div>
-      
-      <!-- 🌟 FIXED CHECKOUT & PAYMENT CONTROLS (ALWAYS VISIBLE AT BOTTOM) -->
-      <div class="shrink-0 space-y-1.5 text-xs">
-        
-        <!-- Compact Totals & Discount Strip -->
-        <div class="space-y-0.5 text-gray-600 text-[11px] pt-0.5">
-          <div class="flex justify-between items-center">
-            <span>Items Subtotal:</span>
-            <span id="cartSubtotal" class="font-bold text-gray-800">Rs. 0.00</span>
-          </div>
-          <div id="cartDiscountRow" class="hidden flex justify-between text-purple-700 font-bold">
-            <span>Discount:</span>
-            <span id="cartDiscountTotalVal">-Rs. 0.00</span>
-          </div>
-          <div id="cartLoyaltyRow" class="hidden flex justify-between text-purple-700 font-bold">
-            <span>Loyalty Points:</span>
-            <span id="cartLoyaltyTotalVal">-Rs. 0.00</span>
-          </div>
-          <div id="cartServiceChargeRow" class="hidden flex justify-between">
-            <span id="cartServiceChargeLabel">Service Charge:</span>
-            <span id="cartServiceChargeVal" class="font-bold text-gray-800">Rs. 0.00</span>
-          </div>
-          <div id="cartVatRow" class="hidden flex justify-between">
-            <span id="cartVatLabel">VAT:</span>
-            <span id="cartVatVal" class="font-bold text-gray-800">Rs. 0.00</span>
-          </div>
-          <div id="cartCslRow" class="hidden flex justify-between">
-            <span id="cartCslLabel">SSCL:</span>
-            <span id="cartCslVal" class="font-bold text-gray-800">Rs. 0.00</span>
-          </div>
-          
-          <!-- BOLD & PROMINENT NET TOTAL -->
-          <div class="flex justify-between items-center text-sm font-black text-gray-900 pt-1 border-t border-gray-200">
-            <span class="text-xs uppercase">NET TOTAL:</span>
-            <span id="cartTotal" class="text-base text-blue-600 font-mono">Rs. 0.00</span>
-          </div>
-        </div>
-        
-        <!-- Kitchen & Pre-Bill Row -->
-        <div class="grid grid-cols-2 gap-1.5">
-          <button onclick="sendOrderToKitchen(false)" id="btnSendKitchen" disabled class="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-1.5 rounded-lg text-[11px] shadow-2xs transition flex justify-center items-center gap-1 cursor-pointer">
-            <i class="fa-solid fa-bell-concierge"></i> Send Kitchen
-          </button>
-          <button onclick="printPreBillEstimate()" id="btnPrePrintBill" disabled class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-1.5 rounded-lg text-[11px] shadow-2xs transition flex justify-center items-center gap-1 cursor-pointer">
-            <i class="fa-solid fa-file-lines"></i> Pre-Bill
-          </button>
-        </div>
-        
-        <!-- Compact Payment Methods Tabs (5 Tabs) -->
-        <div class="grid grid-cols-5 gap-1">
-          <button type="button" onclick="selectPayMethod('cash')" id="payTab-cash" class="pay-method-tab py-1 rounded-md border border-blue-600 bg-blue-50 text-blue-700 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-            Cash
-          </button>
-          <button type="button" onclick="selectPayMethod('card')" id="payTab-card" class="pay-method-tab py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-            Card
-          </button>
-          <button type="button" onclick="selectPayMethod('transfer')" id="payTab-transfer" class="pay-method-tab py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-            Transfer
-          </button>
-          <button type="button" onclick="selectPayMethod('split')" id="payTab-split" class="pay-method-tab py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-            Split
-          </button>
-          <button type="button" onclick="selectPayMethod('credit')" id="payTab-credit" class="pay-method-tab py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-            Credit
-          </button>
-        </div>
-        
-        <!-- Compact Payment Fields -->
-        <div id="paymentDetailsBox" class="bg-gray-50 p-1.5 rounded-xl border border-gray-200 space-y-1">
-          <div id="payFields-cash" class="space-y-1">
-            <div class="flex items-center justify-between gap-1">
-              <span class="text-[10px] text-gray-600 font-bold">දුන් මුදල (Cash):</span>
-              <input type="number" step="10" id="cashTendered" placeholder="0.00" oninput="calculateCashChange()" class="w-28 p-1 border border-gray-300 rounded-md text-xs font-bold text-right outline-none bg-white font-mono">
-            </div>
-            
-            <div class="grid grid-cols-4 gap-1">
-              <button type="button" onclick="setQuickCashAmount(500)" class="py-0.5 bg-white border border-gray-300 rounded text-[9px] font-black text-gray-800 shadow-2xs cursor-pointer">500</button>
-              <button type="button" onclick="setQuickCashAmount(1000)" class="py-0.5 bg-white border border-gray-300 rounded text-[9px] font-black text-gray-800 shadow-2xs cursor-pointer">1,000</button>
-              <button type="button" onclick="setQuickCashAmount(5000)" class="py-0.5 bg-white border border-gray-300 rounded text-[9px] font-black text-gray-800 shadow-2xs cursor-pointer">5,000</button>
-              <button type="button" onclick="setQuickCashAmount('exact')" class="py-0.5 bg-green-50 border border-green-300 text-green-800 rounded text-[9px] font-black shadow-2xs cursor-pointer">Exact</button>
-            </div>
-            
-            <div class="flex items-center justify-between text-[11px] pt-0.5 border-t border-gray-200">
-              <span class="text-gray-500 font-semibold">Change (ඉතිරි):</span>
-              <span id="cashChangeVal" class="font-black text-green-600">Rs. 0.00</span>
-            </div>
-          </div>
-          
-          <div id="payFields-card" class="hidden grid grid-cols-2 gap-1">
-            <select id="cardType" class="p-1 border rounded-md text-xs bg-white font-bold outline-none">
-              <option value="Visa">Visa</option>
-              <option value="MasterCard">MasterCard</option>
-              <option value="FriMi/Genie">FriMi / Genie</option>
+        <!-- 1-Line Compact Bar: Order Type + Table No + Search Bar -->
+        <div class="bg-white p-1.5 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 shrink-0">
+          <div class="w-32 shrink-0">
+            <select id="orderType" onchange="updateCurrentBillSettings()" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1 outline-none text-gray-700 cursor-pointer">
+              <option value="Dine-in">🍽️ Dine-in</option>
+              <option value="Takeaway">🥡 Takeaway</option>
+              <option value="Delivery">🛵 Delivery</option>
             </select>
-            <input type="text" maxlength="4" id="cardLast4" placeholder="Last 4 Digits" class="p-1 border rounded-md text-xs font-mono font-bold text-center bg-white outline-none">
           </div>
-          
-          <div id="payFields-transfer" class="hidden">
-            <input type="text" id="transferRef" placeholder="Transaction / Ref ID" class="w-full p-1 border rounded-md text-xs font-mono font-bold bg-white outline-none">
+          <div class="w-20 shrink-0">
+            <input type="text" id="orderTable" oninput="updateCurrentBillSettings()" placeholder="Table No" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1 outline-none text-center">
           </div>
-          
-          <div id="payFields-split" class="hidden grid grid-cols-2 gap-1 text-[10px]">
-            <input type="number" step="10" id="splitPayCash" placeholder="Cash Rs." oninput="calculateSplitPaymentBalance()" class="p-1 border rounded-md text-xs font-bold bg-white outline-none">
-            <input type="number" step="10" id="splitPayCard" placeholder="Card Rs." oninput="calculateSplitPaymentBalance()" class="p-1 border rounded-md text-xs font-bold bg-white outline-none">
-          </div>
-          
-          <div id="payFields-credit" class="hidden grid grid-cols-2 gap-1">
-            <input type="text" id="creditCustomerName" placeholder="Name" class="p-1 border rounded-md text-xs font-bold bg-white outline-none">
-            <input type="text" id="creditCustomerPhone" placeholder="Phone" class="p-1 border rounded-md text-xs font-bold bg-white outline-none">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+            <input type="text" id="posSearchInput" oninput="onPosSearchInput()" placeholder="Search dishes (කෑම වර්ග සොයන්න)..." class="w-full pl-7 pr-3 py-1 bg-gray-50 focus:bg-white border border-gray-200 rounded-lg text-xs outline-none transition font-medium">
           </div>
         </div>
         
-        <!-- Final Action Buttons: Print Bill & WhatsApp Bill -->
-        <div class="grid grid-cols-2 gap-1.5 pt-0.5">
-          <button type="button" onclick="processOrder(false)" id="btnCheckout" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2 rounded-xl text-xs shadow-md transition flex justify-center items-center gap-1.5 cursor-pointer">
-            <i class="fa-solid fa-print"></i> Print Bill
-          </button>
-          <button type="button" onclick="processOrder(true)" id="btnWhatsAppCheckout" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2 rounded-xl text-xs shadow-md transition flex justify-center items-center gap-1.5 cursor-pointer">
-            <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
-          </button>
+        <!-- Category Filter Pills Bar -->
+        <div id="categoryFilters" class="flex gap-1 overflow-x-auto pb-0.5 text-xs font-bold no-scrollbar shrink-0"></div>
+        
+        <!-- Independent Scrollable Dishes Grid -->
+        <div id="posGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5 pr-1 content-start"></div>
+      </div>
+      
+      <!-- RIGHT COLUMN: CART & FIXED CHECKOUT ENGINE (4 COLS ON DESKTOP - ZERO OVERFLOW) -->
+      <div class="col-span-12 lg:col-span-5 xl:col-span-4 bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex flex-col h-full min-h-0 overflow-hidden justify-between">
+        
+        <!-- Top Cart Header & Customer CRM -->
+        <div class="shrink-0 space-y-0.5">
+          <div class="flex justify-between items-center border-b border-gray-100 pb-1">
+            <div>
+              <h3 id="currentBillTitle" class="font-black text-gray-800 text-xs flex items-center gap-1">
+                <i class="fa-solid fa-receipt text-blue-600"></i> Bill #1
+              </h3>
+              <span id="currentBillSubtitle" class="text-[9px] text-gray-400 font-bold block leading-none">Dine-in (Table: N/A)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="openSplitBillModal()" title="Split Bill" class="text-[9px] bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold px-1.5 py-0.5 rounded border border-purple-200 transition cursor-pointer">
+                <i class="fa-solid fa-scissors mr-0.5"></i> Split
+              </button>
+              <button type="button" onclick="clearCurrentCart()" class="text-[9px] text-red-500 font-bold hover:underline px-1 cursor-pointer">Clear</button>
+            </div>
+          </div>
+          
+          <!-- Compact Customer CRM Bar -->
+          <div class="bg-gray-50 p-1 rounded-lg border border-gray-200 space-y-0.5 text-xs">
+            <div class="relative">
+              <input type="text" id="posCustomerSearchInput" oninput="onPosCustomerSearch(this)" placeholder="🔍 Search customer (Phone/Name)..." class="w-full p-0.5 pl-2 border border-gray-300 rounded text-[10px] font-bold bg-white outline-none">
+              <div id="posCustomerSearchResults" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-32 overflow-y-auto"></div>
+            </div>
+            
+            <!-- Selected Customer Badge -->
+            <div id="posSelectedCustomerBadge" class="hidden p-0.5 bg-blue-50 border border-blue-200 rounded flex items-center justify-between">
+              <input type="hidden" id="posAttachedCustomerId">
+              <div class="truncate text-[9.5px]">
+                <span id="posSelectedCustomerName" class="font-extrabold text-blue-900 block truncate">Customer</span>
+                <span id="posSelectedCustomerPoints" class="text-[8.5px] font-black text-purple-700 block">⭐ 0 Points Available</span>
+              </div>
+              <button type="button" onclick="removeCustomerFromCurrentBill()" class="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"><i class="fa-solid fa-xmark text-xs"></i></button>
+            </div>
+            
+            <!-- Loyalty Points Redemption -->
+            <div id="posLoyaltyRedeemBox" class="hidden flex items-center justify-between pt-0.5 border-t border-gray-200 text-[9px]">
+              <span class="font-bold text-purple-900">Redeem Points:</span>
+              <div class="flex items-center gap-1">
+                <input type="number" id="cartLoyaltyRedeemInput" min="0" placeholder="0" oninput="recalculateCartTotalsUI()" class="w-12 p-0.5 border border-purple-300 rounded text-center text-[10px] font-bold text-purple-700 outline-none bg-white font-mono">
+                <span id="cartLoyaltyDiscountVal" class="font-black text-purple-700">-Rs. 0.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- INDEPENDENT SCROLLABLE CART ITEMS LIST -->
+        <div id="cartItems" class="flex-1 overflow-y-auto space-y-1 py-1 my-0.5 border-y border-gray-100 text-xs min-h-[45px]">
+          <p class="text-center text-gray-400 py-2 text-[10.5px]">Cart එක හිස්ය. කෑම වර්ගයක් තෝරන්න.</p>
+        </div>
+        
+        <!-- FIXED BOTTOM CHECKOUT & PAYMENT CONTROLS (ALWAYS 100% VISIBLE ON SCREEN) -->
+        <div class="shrink-0 space-y-1 text-xs pt-0.5">
+          
+          <!-- Totals & Breakdown -->
+          <div class="space-y-0.5 text-gray-600 text-[10px] leading-tight">
+            <div class="flex justify-between items-center">
+              <span>Subtotal:</span>
+              <span id="cartSubtotal" class="font-bold text-gray-800">Rs. 0.00</span>
+            </div>
+            <div id="cartDiscountRow" class="hidden flex justify-between text-purple-700 font-bold">
+              <span>Discount:</span>
+              <span id="cartDiscountTotalVal">-Rs. 0.00</span>
+            </div>
+            <div id="cartLoyaltyRow" class="hidden flex justify-between text-purple-700 font-bold">
+              <span>Loyalty Points:</span>
+              <span id="cartLoyaltyTotalVal">-Rs. 0.00</span>
+            </div>
+            <div id="cartServiceChargeRow" class="hidden flex justify-between">
+              <span id="cartServiceChargeLabel">Service Charge:</span>
+              <span id="cartServiceChargeVal" class="font-bold text-gray-800">Rs. 0.00</span>
+            </div>
+            <div id="cartVatRow" class="hidden flex justify-between">
+              <span id="cartVatLabel">VAT:</span>
+              <span id="cartVatVal" class="font-bold text-gray-800">Rs. 0.00</span>
+            </div>
+            <div id="cartCslRow" class="hidden flex justify-between">
+              <span id="cartCslLabel">SSCL:</span>
+              <span id="cartCslVal" class="font-bold text-gray-800">Rs. 0.00</span>
+            </div>
+            
+            <!-- NET TOTAL -->
+            <div class="flex justify-between items-center text-xs font-black text-gray-900 pt-0.5 border-t border-gray-200">
+              <span class="text-[9.5px] uppercase font-bold text-gray-600">NET TOTAL:</span>
+              <span id="cartTotal" class="text-sm font-black text-blue-600 font-mono">Rs. 0.00</span>
+            </div>
+          </div>
+          
+          <!-- Kitchen & Pre-Bill Row -->
+          <div class="grid grid-cols-2 gap-1">
+            <button onclick="sendOrderToKitchen(false)" id="btnSendKitchen" disabled class="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-1 rounded text-[10px] shadow-2xs transition flex justify-center items-center gap-1 cursor-pointer">
+              <i class="fa-solid fa-bell-concierge"></i> Send Kitchen
+            </button>
+            <button onclick="printPreBillEstimate()" id="btnPrePrintBill" disabled class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-1 rounded text-[10px] shadow-2xs transition flex justify-center items-center gap-1 cursor-pointer">
+              <i class="fa-solid fa-file-lines"></i> Pre-Bill
+            </button>
+          </div>
+          
+          <!-- Payment Methods Tabs (5 Tabs) -->
+          <div class="grid grid-cols-5 gap-1">
+            <button type="button" onclick="selectPayMethod('cash')" id="payTab-cash" class="pay-method-tab py-0.5 rounded border border-blue-600 bg-blue-50 text-blue-700 font-bold text-[9px] flex flex-col items-center cursor-pointer">
+              Cash
+            </button>
+            <button type="button" onclick="selectPayMethod('card')" id="payTab-card" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
+              Card
+            </button>
+            <button type="button" onclick="selectPayMethod('transfer')" id="payTab-transfer" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
+              Transfer
+            </button>
+            <button type="button" onclick="selectPayMethod('split')" id="payTab-split" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
+              Split
+            </button>
+            <button type="button" onclick="selectPayMethod('credit')" id="payTab-credit" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
+              Credit
+            </button>
+          </div>
+          
+          <!-- Compact Payment Input Boxes -->
+          <div id="paymentDetailsBox" class="bg-gray-50 p-1 rounded-lg border border-gray-200 space-y-0.5">
+            <div id="payFields-cash" class="space-y-0.5">
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-[9px] text-gray-600 font-bold whitespace-nowrap">Cash Received:</span>
+                <input type="number" step="10" id="cashTendered" placeholder="0.00" oninput="calculateCashChange()" class="w-24 p-0.5 border border-gray-300 rounded text-xs font-bold text-right outline-none bg-white font-mono">
+              </div>
+              
+              <div class="grid grid-cols-4 gap-1">
+                <button type="button" onclick="setQuickCashAmount(500)" class="py-0.5 bg-white border border-gray-300 rounded text-[8.5px] font-black text-gray-800 shadow-2xs cursor-pointer">500</button>
+                <button type="button" onclick="setQuickCashAmount(1000)" class="py-0.5 bg-white border border-gray-300 rounded text-[8.5px] font-black text-gray-800 shadow-2xs cursor-pointer">1,000</button>
+                <button type="button" onclick="setQuickCashAmount(5000)" class="py-0.5 bg-white border border-gray-300 rounded text-[8.5px] font-black text-gray-800 shadow-2xs cursor-pointer">5,000</button>
+                <button type="button" onclick="setQuickCashAmount('exact')" class="py-0.5 bg-green-50 border border-green-300 text-green-800 rounded text-[8.5px] font-black shadow-2xs cursor-pointer">Exact</button>
+              </div>
+              
+              <div class="flex items-center justify-between text-[10px] pt-0.5 border-t border-gray-200 leading-none">
+                <span class="text-gray-500 font-semibold">Change (ඉතිරි):</span>
+                <span id="cashChangeVal" class="font-black text-green-600">Rs. 0.00</span>
+              </div>
+            </div>
+            
+            <div id="payFields-card" class="hidden grid grid-cols-2 gap-1">
+              <select id="cardType" class="p-0.5 border rounded text-[10px] bg-white font-bold outline-none">
+                <option value="Visa">Visa</option>
+                <option value="MasterCard">MasterCard</option>
+                <option value="AMEX">AMEX</option>
+                <option value="FriMi/Genie">FriMi / Genie</option>
+                <option value="OtherCard">Other Card</option>
+              </select>
+              <input type="text" maxlength="4" id="cardLast4" placeholder="Last 4 Digits" class="p-0.5 border rounded text-[10px] font-mono font-bold text-center bg-white outline-none">
+            </div>
+            
+            <div id="payFields-transfer" class="hidden">
+              <input type="text" id="transferRef" placeholder="Transaction / Ref ID" class="w-full p-0.5 border rounded text-[10px] font-mono font-bold bg-white outline-none">
+            </div>
+            
+            <div id="payFields-split" class="hidden grid grid-cols-2 gap-1 text-[9px]">
+              <input type="number" step="10" id="splitPayCash" placeholder="Cash Rs." oninput="calculateSplitPaymentBalance()" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
+              <input type="number" step="10" id="splitPayCard" placeholder="Card Rs." oninput="calculateSplitPaymentBalance()" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
+            </div>
+            
+            <div id="payFields-credit" class="hidden grid grid-cols-2 gap-1">
+              <input type="text" id="creditCustomerName" placeholder="Name" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
+              <input type="text" id="creditCustomerPhone" placeholder="Phone" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
+            </div>
+          </div>
+          
+          <!-- Final Action Buttons: Print Bill & WhatsApp Bill (NEVER CUT OFF) -->
+          <div class="grid grid-cols-2 gap-1 pt-0.5">
+            <button type="button" onclick="processOrder(false)" id="btnCheckout" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2 rounded-xl text-xs shadow-md transition flex justify-center items-center gap-1 cursor-pointer">
+              <i class="fa-solid fa-print"></i> Print Bill
+            </button>
+            <button type="button" onclick="processOrder(true)" id="btnWhatsAppCheckout" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2 rounded-xl text-xs shadow-md transition flex justify-center items-center gap-1 cursor-pointer">
+              <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </div>
-</div>
 
       <!-- VIEW 2: TABLE MANAGEMENT ENGINE (ARCHITECTURAL FLOOR PLAN) -->
 <div id="viewTables" class="hidden space-y-4 max-w-7xl mx-auto">
@@ -2039,35 +2041,60 @@ to { transform: translateY(0); opacity: 1; }
                 </div>
                 
                 <!-- Slot 4: Secondary Cashier / Accounts -->
-                <div class="p-3.5 bg-gray-50 border border-gray-200 rounded-2xl space-y-2">
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs font-black text-gray-800">🖨️ Printer 4 (Accounts)</span>
-                    <span class="text-[9px] bg-green-100 text-green-800 font-bold px-1.5 py-0.2 rounded">Accounts</span>
-                  </div>
-                  <div>
-                    <label class="text-[9px] text-gray-500 uppercase block mb-0.5">Custom Label</label>
-                    <input type="text" id="p4_name" value="Cashier 2 / Accounts" class="w-full p-1.5 border rounded-lg text-xs bg-white outline-none">
-                  </div>
-                  <div>
-                    <label class="text-[9px] text-indigo-700 uppercase block mb-0.5">Windows Printer</label>
-                    <input type="text" id="p4_device" list="installedPrintersList" placeholder="Select Printer" value="POS80-Accounts" class="w-full p-1.5 border border-indigo-300 rounded-lg text-xs font-mono bg-white outline-none text-indigo-900">
-                  </div>
-                  <div class="space-y-1 text-[11px] text-gray-600 pt-1 border-t border-gray-200">
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" id="p4_bill" checked class="w-4 h-4 text-blue-600 rounded">
-                      <span>Print Bills</span>
-                    </label>
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" id="p4_kot" class="w-4 h-4 text-yellow-600 rounded">
-                      <span>Print KOT</span>
-                    </label>
-                  </div>
-                  <button type="button" onclick="testDirectPrinter('p4')" class="w-full py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-[10px] font-bold transition cursor-pointer">
-                    <i class="fa-solid fa-vial"></i> Test Print
-                  </button>
-                </div>
-                
-              </div>
+<div class="p-3.5 bg-gray-50 border border-gray-200 rounded-2xl space-y-2">
+  <div class="flex items-center justify-between">
+    <span class="text-xs font-black text-gray-800">🖨️ Printer 4 (Accounts)</span>
+    <span class="text-[9px] bg-green-100 text-green-800 font-bold px-1.5 py-0.2 rounded">Accounts</span>
+  </div>
+  <div>
+    <label class="text-[9px] text-gray-500 uppercase block mb-0.5">Custom Label</label>
+    <input type="text" id="p4_name" value="Cashier 2 / Accounts" class="w-full p-1.5 border rounded-lg text-xs bg-white outline-none">
+  </div>
+  <div>
+    <label class="text-[9px] text-indigo-700 uppercase block mb-0.5">Windows Printer</label>
+    <input type="text" id="p4_device" list="installedPrintersList" placeholder="Select Printer" value="POS80-Accounts" class="w-full p-1.5 border border-indigo-300 rounded-lg text-xs font-mono bg-white outline-none text-indigo-900">
+  </div>
+  <div class="space-y-1 text-[11px] text-gray-600 pt-1 border-t border-gray-200">
+    <label class="flex items-center gap-1.5 cursor-pointer">
+      <input type="checkbox" id="p4_bill" checked class="w-4 h-4 text-blue-600 rounded">
+      <span>Print Bills</span>
+    </label>
+    <label class="flex items-center gap-1.5 cursor-pointer">
+      <input type="checkbox" id="p4_kot" class="w-4 h-4 text-yellow-600 rounded">
+      <span>Print KOT</span>
+    </label>
+  </div>
+  <button type="button" onclick="testDirectPrinter('p4')" class="w-full py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-[10px] font-bold transition cursor-pointer">
+    <i class="fa-solid fa-vial"></i> Test Print
+  </button>
+</div>
+
+<!-- Slot 5: Dedicated Staff Payslip Printer -->
+<div class="p-3.5 bg-gray-50 border border-gray-200 rounded-2xl space-y-2">
+  <div class="flex items-center justify-between">
+    <span class="text-xs font-black text-gray-800">🖨️ Printer 5 (Payslips)</span>
+    <span class="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.2 rounded">Payslip</span>
+  </div>
+  <div>
+    <label class="text-[9px] text-gray-500 uppercase block mb-0.5">Custom Label</label>
+    <input type="text" id="p5_name" value="Accounts Payslip Printer" class="w-full p-1.5 border rounded-lg text-xs bg-white outline-none font-bold">
+  </div>
+  <div>
+    <label class="text-[9px] text-indigo-700 uppercase block mb-0.5">Windows Printer</label>
+    <input type="text" id="p5_device" list="installedPrintersList" placeholder="Select Printer" value="" class="w-full p-1.5 border border-indigo-300 rounded-lg text-xs font-mono bg-white outline-none text-indigo-900 font-bold">
+  </div>
+  <div class="space-y-1 text-[11px] text-gray-600 pt-1 border-t border-gray-200">
+    <label class="flex items-center gap-1.5 cursor-pointer">
+      <input type="checkbox" id="p5_payslip" checked class="w-4 h-4 text-teal-600 rounded">
+      <span class="font-bold text-teal-900">Dedicated Payslip Printer</span>
+    </label>
+  </div>
+  <button type="button" onclick="testDirectPrinter('p5')" class="w-full py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-[10px] font-bold transition cursor-pointer">
+    <i class="fa-solid fa-vial"></i> Test Print
+  </button>
+</div>
+
+</div>
               
               <div class="flex justify-between items-center pt-2">
                 <span class="text-[10px] text-gray-400 font-medium">Windows වල ඇති Printers නම් ලැයිස්තුවෙන් පහසුවෙන් තෝරාගන්න.</span>
@@ -2363,21 +2390,66 @@ to { transform: translateY(0); opacity: 1; }
         <button onclick="closeDayEndModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-gray-50 p-3 rounded-2xl border border-gray-200 text-xs">
-        <div>
-          <span class="text-[10px] text-gray-400 font-bold uppercase block">Cash Sales (+)</span>
-          <span id="dayEndCashSalesVal" class="text-sm font-black text-green-600 mt-0.5 block">Rs. 0.00</span>
-        </div>
-        <div>
-          <span class="text-[10px] text-gray-400 font-bold uppercase block">Opening Float (+)</span>
-          <span id="dayEndOpeningFloatVal" class="text-sm font-black text-blue-600 mt-0.5 block">Rs. 0.00</span>
-        </div>
-        <div class="bg-green-100 p-2 rounded-xl border border-green-200">
-          <span class="text-[9px] text-green-900 font-extrabold uppercase block">Expected In Cashier Drawer</span>
-          <span id="dayEndExpectedCashVal" class="text-sm font-black text-green-800 mt-0.5 block">Rs. 0.00</span>
-        </div>
-      </div>
+      <!-- Cash & Card System Totals Grid -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-50 p-2.5 rounded-2xl border border-gray-200 text-xs">
+  <div>
+    <span class="text-[9px] text-gray-400 font-bold uppercase block">Cash Sales (+)</span>
+    <span id="dayEndCashSalesVal" class="text-xs font-black text-green-600 mt-0.5 block">Rs. 0.00</span>
+  </div>
+  <div>
+    <span class="text-[9px] text-gray-400 font-bold uppercase block">Opening Float (+)</span>
+    <span id="dayEndOpeningFloatVal" class="text-xs font-black text-blue-600 mt-0.5 block">Rs. 0.00</span>
+  </div>
+  <div>
+    <span class="text-[9px] text-gray-400 font-bold uppercase block">Total Card Sales</span>
+    <span id="dayEndCardSalesVal" class="text-xs font-black text-purple-600 mt-0.5 block">Rs. 0.00</span>
+  </div>
+  <div class="bg-green-100 p-1.5 rounded-xl border border-green-200">
+    <span class="text-[8.5px] text-green-900 font-extrabold uppercase block">Expected Cash in Drawer</span>
+    <span id="dayEndExpectedCashVal" class="text-xs font-black text-green-800 mt-0.5 block">Rs. 0.00</span>
+  </div>
+</div>
 
+<!-- 💳 CARD SALES DETAILED BREAKDOWN & CARD MACHINE RECONCILIATION -->
+<div class="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2">
+  <div class="flex justify-between items-center">
+    <span class="text-xs font-black text-purple-950 uppercase flex items-center gap-1.5">
+      <i class="fa-solid fa-credit-card text-purple-600"></i> Card Payment System Breakdown & Audit
+    </span>
+    <span class="text-[9px] text-purple-700 font-bold">POS vs Card Terminal Batch Total</span>
+  </div>
+  
+  <!-- System Breakdown by Card Type -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex justify-between items-center">
+      <span class="font-bold text-gray-600">Visa:</span>
+      <span id="dayEndVisaTotalVal" class="font-black text-purple-900">Rs. 0.00</span>
+    </div>
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex justify-between items-center">
+      <span class="font-bold text-gray-600">MasterCard:</span>
+      <span id="dayEndMasterTotalVal" class="font-black text-purple-900">Rs. 0.00</span>
+    </div>
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex justify-between items-center">
+      <span class="font-bold text-gray-600">AMEX:</span>
+      <span id="dayEndAmexTotalVal" class="font-black text-purple-900">Rs. 0.00</span>
+    </div>
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex justify-between items-center">
+      <span class="font-bold text-gray-600">Other / FriMi:</span>
+      <span id="dayEndOtherCardTotalVal" class="font-black text-purple-900">Rs. 0.00</span>
+    </div>
+  </div>
+  
+  <!-- Actual Card Settlement (Credit Card Machine Settlement Slip Total) -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-purple-200 items-center">
+    <div class="flex items-center justify-between gap-2">
+      <label class="text-[10px] font-bold text-purple-950 uppercase whitespace-nowrap">Actual Card Machine Total:</label>
+      <input type="number" step="0.01" id="dayEndActualCardInput" oninput="calculateDayEndVariance()" placeholder="Card Batch Total" class="w-36 p-1.5 border border-purple-300 rounded-lg text-xs font-black text-purple-900 text-right bg-white outline-none font-mono">
+    </div>
+    <div id="dayEndCardVarianceBox" class="p-1.5 rounded-lg border text-center font-bold text-[11px] bg-white text-gray-600">
+      Card Machine එකේ Settlement Total මුදල ඇතුළත් කරන්න...
+    </div>
+  </div>
+</div>
       <div class="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between text-xs">
         <div>
           <span class="font-black text-blue-900 flex items-center gap-1.5 uppercase text-[11px]">
@@ -2758,19 +2830,49 @@ to { transform: translateY(0); opacity: 1; }
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">Basic Salary (Rs.)</label>
-            <input type="number" step="100" id="empSalaryInput" placeholder="45000" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold text-green-600">
-          </div>
-          <div>
-            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">OT Hourly Rate (Rs.)</label>
-            <input type="number" step="10" id="empOtRateInput" placeholder="350" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold text-blue-600">
-          </div>
-        </div>
+      <div class="grid grid-cols-2 gap-2">
+  <div>
+    <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">Basic Salary (Rs.)</label>
+    <input type="number" step="100" id="empSalaryInput" placeholder="45000" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold text-green-600">
+  </div>
+  <div>
+    <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">OT Hourly Rate (Rs.)</label>
+    <input type="number" step="10" id="empOtRateInput" placeholder="350" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold text-blue-600">
+  </div>
+</div>
 
-        <div>
-          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">Address (ලිපිනය)</label>
+<!-- EPF / ETF & Allowances / Deductions Settings -->
+<div class="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 text-xs">
+  <span class="font-extrabold text-blue-950 uppercase text-[10px] block">EPF / ETF & Fixed Allowances / Deductions</span>
+  
+  <div class="grid grid-cols-2 gap-2">
+    <div>
+      <label class="text-[10px] font-bold text-gray-600 block mb-0.5">EPF / ETF No (අංකය)</label>
+      <input type="text" id="empEpfNoInput" placeholder="EPF-1234" class="w-full p-2 border rounded-lg bg-white outline-none font-bold">
+    </div>
+    <div>
+      <label class="text-[10px] font-bold text-gray-600 block mb-0.5">EPF / ETF සුදුසුකම</label>
+      <select id="empEpfEligibleSelect" class="w-full p-2 border rounded-lg bg-white outline-none font-bold text-xs">
+        <option value="yes">ඔව් (8% EPF / 3% ETF)</option>
+        <option value="no">නැත (Non-EPF)</option>
+      </select>
+    </div>
+  </div>
+  
+  <div class="grid grid-cols-2 gap-2">
+    <div>
+      <label class="text-[10px] font-bold text-gray-600 block mb-0.5">Fixed Allowance (+ දීමනා Rs.)</label>
+      <input type="number" step="100" id="empAllowanceInput" placeholder="0.00" class="w-full p-2 border rounded-lg bg-white outline-none font-bold text-green-700">
+    </div>
+    <div>
+      <label class="text-[10px] font-bold text-gray-600 block mb-0.5">Fixed Deductions (- අඩු කිරීම් Rs.)</label>
+      <input type="number" step="100" id="empOtherDeductionsInput" placeholder="0.00" class="w-full p-2 border rounded-lg bg-white outline-none font-bold text-red-600">
+    </div>
+  </div>
+</div>
+
+<div>
+  <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">Address (ලිපිනය)</label>
           <textarea id="empAddressInput" rows="2" placeholder="No. 45, Kandy Road, Colombo" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50"></textarea>
         </div>
 
@@ -3139,12 +3241,30 @@ to { transform: translateY(0); opacity: 1; }
         </div>
       </div>
 
-      <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-200 flex flex-wrap justify-between items-center gap-2">
-        <span class="text-xs font-bold text-gray-700">ණය මුදලක් පියවීමට (Pay Debt):</span>
-        <button onclick="openSupPayFromLedger()" class="bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition cursor-pointer">
-          + Record Payment (ගෙවීමක් සටහන් කරන්න)
-        </button>
-      </div>
+      <!-- Date Range Filter for Supplier Ledger -->
+<div class="bg-purple-50/70 p-3 rounded-xl border border-purple-200 flex flex-wrap items-center justify-between gap-2.5 text-xs font-bold">
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="text-gray-500 font-bold text-[10px] uppercase">Filter Period:</span>
+    <div class="flex items-center gap-1">
+      <span class="text-gray-400 font-semibold text-[10px]">From:</span>
+      <input type="date" id="supLedgerFromDate" class="p-1.5 border border-purple-200 rounded-lg outline-none bg-white font-bold text-xs">
+    </div>
+    <div class="flex items-center gap-1">
+      <span class="text-gray-400 font-semibold text-[10px]">To:</span>
+      <input type="date" id="supLedgerToDate" class="p-1.5 border border-purple-200 rounded-lg outline-none bg-white font-bold text-xs">
+    </div>
+    <button type="button" onclick="filterSupplierLedgerByDate()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1">
+      <i class="fa-solid fa-filter text-[10px]"></i> Filter
+    </button>
+    <button type="button" onclick="resetSupplierLedgerDateFilter()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer text-[10px]">
+      Reset
+    </button>
+  </div>
+  
+  <button onclick="openSupPayFromLedger()" class="bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition cursor-pointer">
+    + Record Payment (ගෙවීමක් සටහන් කරන්න)
+  </button>
+</div>
 
       <div class="border border-gray-200 rounded-xl overflow-hidden shadow-xs">
         <div class="p-2.5 bg-gray-50 border-b border-gray-100 flex justify-between items-center text-xs">
@@ -3253,24 +3373,44 @@ to { transform: translateY(0); opacity: 1; }
           <p id="payslipEmpIdRole" class="text-xs text-blue-600 font-bold font-mono">EMP-01 (Waiter)</p>
         </div>
         
-        <div class="space-y-1.5 border-t border-b border-gray-100 py-2.5 text-gray-700">
-          <div class="flex justify-between">
-            <span>Basic Salary:</span>
-            <span id="payslipRowBasic" class="font-bold">Rs. 0.00</span>
-          </div>
-          <div class="flex justify-between text-gray-500">
-            <span>OT Hours (<span id="payslipRowOtHours">0</span> hrs @ Rs. <span id="payslipRowOtRate">0</span>):</span>
-            <span id="payslipRowOtPay" class="font-bold text-yellow-600">+ Rs. 0.00</span>
-          </div>
-          <div class="flex justify-between font-bold text-gray-800 pt-1 border-t border-gray-100">
-            <span>Gross Earnings:</span>
-            <span id="payslipRowGross">Rs. 0.00</span>
-          </div>
-          <div class="flex justify-between text-red-600 font-bold">
-            <span>Salary Advances / Deductions:</span>
-            <span id="payslipRowAdvance">- Rs. 0.00</span>
-          </div>
-        </div>
+<div class="space-y-1.5 border-t border-b border-gray-100 py-2.5 text-gray-700">
+  <div class="flex justify-between">
+    <span>Basic Salary:</span>
+    <span id="payslipRowBasic" class="font-bold">Rs. 0.00</span>
+  </div>
+  <div class="flex justify-between text-gray-500">
+    <span>OT Hours (<span id="payslipRowOtHours">0</span> hrs @ Rs. <span id="payslipRowOtRate">0</span>):</span>
+    <span id="payslipRowOtPay" class="font-bold text-yellow-600">+ Rs. 0.00</span>
+  </div>
+  <div id="payslipRowAllowanceBox" class="flex justify-between text-green-700 font-bold">
+    <span>Allowances (දීමනා):</span>
+    <span id="payslipRowAllowance">+ Rs. 0.00</span>
+  </div>
+  <div class="flex justify-between font-bold text-gray-800 pt-1 border-t border-gray-100">
+    <span>Gross Earnings (දළ වැටුප):</span>
+    <span id="payslipRowGross">Rs. 0.00</span>
+  </div>
+  
+  <!-- EPF 8% Employee Deduction -->
+  <div id="payslipRowEpfBox" class="flex justify-between text-red-600 font-bold">
+    <span>EPF Employee (8%):</span>
+    <span id="payslipRowEpf">- Rs. 0.00</span>
+  </div>
+  <div class="flex justify-between text-red-600 font-bold">
+    <span>Salary Advances:</span>
+    <span id="payslipRowAdvance">- Rs. 0.00</span>
+  </div>
+  <div id="payslipRowOtherDeductBox" class="flex justify-between text-red-600 font-bold">
+    <span>Other Deductions:</span>
+    <span id="payslipRowOtherDeduct">- Rs. 0.00</span>
+  </div>
+  
+  <!-- Employer Contributions Note -->
+  <div id="payslipRowEmployerContribBox" class="pt-1 border-t border-dashed border-gray-200 text-[10px] text-gray-500 font-bold flex justify-between">
+    <span>Employer Contributions:</span>
+    <span>EPF (12%): <span id="payslipRowEmployerEpf">Rs. 0.00</span> | ETF (3%): <span id="payslipRowEmployerEtf">Rs. 0.00</span></span>
+  </div>
+</div>
         
         <div class="flex justify-between items-center bg-green-50 border border-green-200 p-3 rounded-xl">
           <span class="font-black text-green-900 text-sm uppercase">Net Salary Payable:</span>
