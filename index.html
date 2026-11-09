@@ -69,12 +69,34 @@ to { transform: translateY(0); opacity: 1; }
 }
 .toast-animate { animation: slideInDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
-/* 🛡️ POS FIXED ZERO-SCROLL TERMINAL STYLES */
-#viewPos {
-height: calc(100vh - 65px) !important;
-max-height: calc(100vh - 65px) !important;
-overflow: hidden !important;
-}
+/* 🛡️ 100% ZERO-SCROLL DESKTOP POS LOCK */
+    html, body {
+      height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden !important;
+    }
+
+    #mainApp, main {
+      height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden !important;
+    }
+
+    /* POS View strictly locked to exact viewport */
+    #viewPos {
+      height: calc(100vh - 54px) !important;
+      max-height: calc(100vh - 54px) !important;
+      overflow: hidden !important;
+    }
+
+    /* අනෙක් Views (Reports, Inventory, Menu) සඳහා පමණක් Scrollbar එක ක්‍රියාත්මක කිරීම */
+    #viewTables, #viewKitchen, #viewMenu, #viewInventory, 
+    #viewSuppliersGrn, #viewCustomers, #viewPettyCash, 
+    #viewFaceScan, #viewEmployees, #viewReports, #viewSettings {
+      max-height: calc(100vh - 54px) !important;
+      overflow-y: auto !important;
+      padding-bottom: 2.5rem !important;
+    }
 </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen relative">
