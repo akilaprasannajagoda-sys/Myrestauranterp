@@ -540,9 +540,11 @@ export function checkDishStockAvailability(dish) {
   };
 }
 
+// 🛡️ CRITICAL FIX: SEARCH DISHES ACROSS ALL CATEGORIES PROPERLY
 export function renderPOSDishesGrid() {
   const container = document.getElementById("posGrid");
-  const searchQuery = (document.getElementById("posSearchInput")?.value || "").toLowerCase();
+  const searchInput = document.getElementById("posSearchInput");
+  const searchQuery = (searchInput?.value || "").toLowerCase().trim();
   if (!container) return;
   container.innerHTML = "";
 
@@ -558,8 +560,16 @@ export function renderPOSDishesGrid() {
   }
 
   const dishesList = Object.entries(dishesObj).filter(([id, dish]) => {
-    const matchesCategory = currentCategoryFilter === "ALL" || dish.category === currentCategoryFilter;
-    const matchesQuery = (dish.name || "").toLowerCase().includes(searchQuery);
+    // 🛡️ FIX: Search Query එකක් ඇති විට Category එක කුමක් වුවත් සියලුම Dishes අතර Search කරයි!
+    // Search එක හිස්ව ඇති විට පමණක් Category Filter එක ක්‍රියාත්මක වේ.
+    const matchesCategory = searchQuery 
+      ? true 
+      : (currentCategoryFilter === "ALL" || (dish.category || "").toLowerCase().trim() === currentCategoryFilter.toLowerCase().trim());
+
+    const dishName = (dish.name || "").toLowerCase();
+    const dishCategory = (dish.category || "").toLowerCase();
+    const matchesQuery = !searchQuery || dishName.includes(searchQuery) || dishCategory.includes(searchQuery);
+
     return matchesCategory && matchesQuery;
   });
 
@@ -849,7 +859,9 @@ export function recalculateCartTotalsUI() {
     }
   }
 
-  if (currentBill.discountVal !== discVal || currentBill.discountType !== currentDiscountType || currentBill.loyaltyPointsRedeemed !== loyaltyRedeemed) {
+  const prevDisc = parseFloat(currentBill.discountVal || 0);
+  const prevRedeem = parseFloat(currentBill.loyaltyPointsRedeemed || 0);
+  if (Math.abs(prevDisc - discVal) > 0.001 || currentBill.discountType !== currentDiscountType || Math.abs(prevRedeem - loyaltyRedeemed) > 0.001) {
     persistActiveBillToCloud({
       discountVal: discVal,
       discountType: currentDiscountType,
@@ -1177,7 +1189,6 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       
       // ☁️ 2. CLOUD FIREBASE SYNC (INTERNET ඇති විට CLOUD එකටත් SAVE වේ)
       if (navigator.onLine && dbRef && currentTenant && isAuthReady()) {
-        // 🛡️ FIX: LAN එකෙන් Print වූවා නම් Cloud එකෙන් නැවත Print නොවන ලෙස isPrinted: true සලකුණු කරයි
         const cloudKotTicket = {
           ...kotTicket,
           isPrinted: (isDesktopPrinterHost || sentViaLan) ? true : false
@@ -1261,14 +1272,13 @@ export function handleIncomingCloudPrint(orderId, orderData) {
   if (!window.electronAPI || !window.electronAPI.printSilent) return;
   if (!orderData || !orderData.items || orderData.status !== "Cooking" || orderData.isPrinted === true) return;
 
-  // 🛡️ එකම Table එක සහ එකම Items සහිත Order එකක් තත්පර 60ක් ඇතුළත දෙවරක් Print වීම 100% වළකයි
   const orderSig = `${orderData.tableNo || 'NA'}_${(orderData.items || []).map(i => `${i.name}_${i.qty}`).join('|')}_${orderData.timestamp || ''}`;
   if (recentlyPrintedOrderSignatures.has(orderSig)) {
     console.log("🛡️ Duplicate order print prevented by signature cache:", orderSig);
     return;
   }
   recentlyPrintedOrderSignatures.add(orderSig);
-  setTimeout(() => recentlyPrintedOrderSignatures.delete(orderSig), 60000); // විනාඩියකට පසු මතකයෙන් ඉවත් කරයි
+  setTimeout(() => recentlyPrintedOrderSignatures.delete(orderSig), 60000);
 
   orderData.isPrinted = true;
   if (dbRef && updateFn && currentTenant && isAuthReady()) {
@@ -1567,7 +1577,6 @@ export async function processOrder(sendWhatsApp = false) {
         if (isRecipeMode) {
           const rawDeductions = {};
           
-          // 1. බිලේ සියලුම කෑම වල අමුද්‍රව්‍ය එකතුවක් සාදා ගැනීම
           for (const item of cartList) {
             const dish = erpState.dishes[item.dishId];
             if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
@@ -1582,7 +1591,6 @@ export async function processOrder(sendWhatsApp = false) {
             }
           }
           
-          // 2. තනි Batch Object එකකට සකස් කර ක්ෂණිකව Memory එකෙන්ද අඩු කිරීම
           const rawUpdates = {};
           for (const [rawId, deductQty] of Object.entries(rawDeductions)) {
             const currentStock = parseFloat(erpState.rawItems[rawId]?.stock || 0);
@@ -1593,7 +1601,6 @@ export async function processOrder(sendWhatsApp = false) {
             }
           }
           
-          // 3. තනි Network Call එකකින් Database එකට ලිවීම
           if (Object.keys(rawUpdates).length > 0 && updateFn) {
             await updateFn(dbRef(`tenants/${currentTenant}/rawItems`), rawUpdates);
           }
@@ -1626,13 +1633,11 @@ export async function processOrder(sendWhatsApp = false) {
           await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${savedActiveBillId}`));
         }
       } else if (localDBInstance) {
-        // 🛡️ OFFLINE SAFE FALLBACK: Dexie IndexedDB එකේ සුරකියි
         await localDBInstance.offlineInvoices.add({
           ...invoiceData,
           synced: 0
         });
         
-        // 👈 FIX: Internet නැතිවිටද Local Memory එකෙන් Stock අඩු කරන්න
         const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
         if (isRecipeMode) {
           for (const item of cartList) {
@@ -1650,7 +1655,6 @@ export async function processOrder(sendWhatsApp = false) {
           }
         }
         
-        // 👈 FIX: Offline විටද Merge වූ සියලු මේස නිදහස් කරන්න
         if (currentBill.tableNo) {
           const allTablesToRelease = [currentBill.tableNo, ...(currentBill.mergedTables || [])];
           allTablesToRelease.forEach(tblNumStr => {
