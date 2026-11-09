@@ -742,20 +742,23 @@
           </div>
 
           <!-- SECTION 1: STOCK VIEW -->
-          <div id="invSection-stock" class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
-            <div class="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Raw Material Products Inventory</span>
-              
-              <div class="flex items-center gap-2 w-full sm:w-auto">
-                <div class="relative flex-1 sm:w-64">
-                  <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
-                  <input type="text" id="rawSearchInput" oninput="onRawSearchInput()" placeholder="Search materials (අමුද්‍රව්‍ය සොයන්න)..." class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-gray-50 outline-none font-bold">
-                </div>
-                <span id="rawItemCountBadge" class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-bold whitespace-nowrap">0 Items</span>
-              </div>
-            </div>
-            
-            <div class="overflow-x-auto">
+<div id="invSection-stock" class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
+  <div class="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Raw Material Products Inventory</span>
+    
+    <div class="flex items-center gap-2 w-full sm:w-auto">
+      <div class="relative flex-1 sm:w-64">
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+        <input type="text" id="rawSearchInput" oninput="onRawSearchInput()" placeholder="Search materials (අමුද්‍රව්‍ය සොයන්න)..." class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-gray-50 outline-none font-bold">
+      </div>
+      <span id="rawItemCountBadge" class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-bold whitespace-nowrap">0 Items</span>
+    </div>
+  </div>
+  
+  <!-- 📦 RAW MATERIAL CATEGORY FILTER PILLS (කාණ්ඩ අනුව FILTER කරන තීරුව) -->
+  <div id="rawCategoryFilterPills" class="px-4 py-2 bg-gray-50/70 border-b border-gray-100 flex gap-1.5 overflow-x-auto no-scrollbar text-xs font-bold"></div>
+  
+  <div class="overflow-x-auto">
               <table class="w-full text-left text-xs">
                 <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-100">
                   <tr>
