@@ -2,6 +2,8 @@
 // MODULE 11: POS ENGINE (CENTRAL PRINT HUB, FIFO QUEUE & ACTIVE FOCUS GUARD)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HIGH-CONTRAST PURE-BLACK RECEIPT)
 // 🛡️ DUAL PAPER WIDTH (80MM / 58MM) & ZERO PERMISSION-DENIED SYNC ENGINE
+// 🛡️ DUAL-LAYER MULTI-DEVICE KOT/BOT DE-DUPLICATION ENGINE
+// 🔒 DYNAMIC TABLE-ORDER CHECKOUT HIDING GUARD (METHOD 01)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
@@ -19,6 +21,44 @@ let transactionFn = null;
 
 let isOfflineSyncInProgress = false;
 export let currentDiscountType = "fixed";
+
+// 🔒 TABLE ORDER TAKING MODE (TABLE එකකින් එන විට PRINT BILL / WHATSAPP BILL සඟවයි)
+export let isTableOrderMode = false;
+
+export function setTableOrderMode(val) {
+  isTableOrderMode = !!val;
+  updateCheckoutButtonsVisibility();
+}
+
+export function updateCheckoutButtonsVisibility() {
+  const btnPay = document.getElementById("btnCheckout");
+  const btnWACheckout = document.getElementById("btnWhatsAppCheckout");
+  const checkoutRow = btnPay?.parentElement;
+  let noticeEl = document.getElementById("posTableOrderModeNotice");
+
+  if (!noticeEl && checkoutRow?.parentElement) {
+    noticeEl = document.createElement("div");
+    noticeEl.id = "posTableOrderModeNotice";
+    noticeEl.className = "hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900 font-bold shadow-xs";
+    noticeEl.innerHTML = `<i class="fa-solid fa-bell-concierge mr-1 text-amber-600"></i> <span>Order Taking Mode: කෑම තෝරා "Send to Kitchen & Bar" ඔබන්න. (බිල Settle කිරීම Cashier කවුන්ටරයෙන් පමණි)</span>`;
+    checkoutRow.parentElement.appendChild(noticeEl);
+  }
+
+  if (isTableOrderMode) {
+    if (checkoutRow) checkoutRow.classList.add("hidden");
+    if (noticeEl) noticeEl.classList.remove("hidden");
+  } else {
+    if (checkoutRow) checkoutRow.classList.remove("hidden");
+    if (noticeEl) noticeEl.classList.add("hidden");
+  }
+}
+
+// Sidebar එකේ "POS & Billing" ක්ලික් කළ විට Cashier Mode එකට හැරවීම
+setTimeout(() => {
+  document.getElementById("nav-pos")?.addEventListener("click", () => {
+    setTableOrderMode(false);
+  });
+}, 500);
 
 // 🛡️ Helper: Firebase Auth Session එක සක්‍රීයදැයි පරීක්ෂා කිරීම (PERMISSION_DENIED වැළැක්වීමට)
 function isAuthReady() {
@@ -198,6 +238,7 @@ export async function persistActiveBillToCloud(updatedObj) {
 }
 
 export async function addNewBillTab() {
+  setTableOrderMode(false); // New Tab සාදන විට Cashier Checkout Mode එක ක්‍රියාත්මක වේ
   const keys = Object.keys(erpState.activeBills || {});
   const nextNum = keys.length + 1;
   const newKey = "bill_" + Date.now();
@@ -232,9 +273,17 @@ export async function addNewBillTab() {
 }
 
 export function switchBillTab(key) {
+  setTableOrderMode(false); // Cashier ටැබ් මාරු කරද්දී Print Bill / WhatsApp Bill පෙනේ
   setActiveBillId(key);
   renderBillTabsBar();
   syncActiveBillToFormUI();
+}
+
+// 🛡️ Helper: Extract Table Pure Numbers
+function extractTableNum(val) {
+  if (!val) return null;
+  const digits = String(val).replace(/\D/g, '');
+  return digits ? parseInt(digits, 10) : null;
 }
 
 export async function closeBillTab(key, ev) {
@@ -244,31 +293,42 @@ export async function closeBillTab(key, ev) {
     showLiveToast("ℹ️ Bill Tab Notice", "අවම වශයෙන් එක් Bill Tab එකක්වත් තිබිය යුතුය.", "info", "fa-circle-info");
     return;
   }
-
+  
   const b = erpState.activeBills[key];
   if (b && b.cart && b.cart.length > 0) {
     if (!confirm(`${b.name} හි කෑම ඇණවුම් අඩංගුයි. මෙම බිල ඉවත් කිරීමට අවශ්‍යද?`)) {
       return;
     }
   }
-
+  
+  // 🔗 Release both target table and all merged tables
   if (b && b.tableNo) {
-    const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
-      ([k, bill]) => k !== key && bill.tableNo === b.tableNo && bill.cart && bill.cart.length > 0
-    );
-    if (!hasOtherBillsOnTable) {
-      const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === b.tableNo);
-      if (matchedTable) {
-        matchedTable[1].status = "Available";
-        if (dbRef && updateFn && currentTenant && navigator.onLine && isAuthReady()) {
-          updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" }).catch(() => {});
+    const allTablesToRelease = [b.tableNo, ...(b.mergedTables || [])];
+    allTablesToRelease.forEach(tblNumStr => {
+      const tNum = extractTableNum(tblNumStr);
+      const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+        ([k, bill]) => k !== key && (extractTableNum(bill.tableNo) === tNum || (bill.mergedTables && bill.mergedTables.some(m => extractTableNum(m) === tNum))) && bill.cart && bill.cart.length > 0
+      );
+      if (!hasOtherBillsOnTable) {
+        const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === tNum);
+        if (matchedTable) {
+          matchedTable[1].status = "Available";
+          delete matchedTable[1].mergedInto;
+          delete matchedTable[1].mergedWith;
+          if (dbRef && updateFn && currentTenant && navigator.onLine && isAuthReady()) {
+            updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), {
+              status: "Available",
+              mergedInto: null,
+              mergedWith: null
+            }).catch(() => {});
+          }
         }
       }
-    }
+    });
   }
-
+  
   delete erpState.activeBills[key];
-
+  
   if (dbRef && removeFn && currentTenant && navigator.onLine && isAuthReady()) {
     try {
       removeFn(dbRef(`tenants/${currentTenant}/activeBills/${key}`)).catch(() => {});
@@ -286,33 +346,39 @@ export function renderBillTabsBar() {
   const container = document.getElementById("billTabsList");
   if (!container) return;
   container.innerHTML = "";
-
+  
   const allActiveBills = Object.entries(erpState.activeBills || {});
-
+  
   allActiveBills.forEach(([key, billObj]) => {
     const isCurrent = key === activeBillId;
     const cartArr = billObj.cart || [];
     const itemCount = cartArr.reduce((total, i) => total + (parseInt(i.qty) || 0), 0);
     const hasActiveOrders = itemCount > 0;
-
+    const isMergedBill = Array.isArray(billObj.mergedTables) && billObj.mergedTables.length > 0;
+    
     const tabBtn = document.createElement("div");
     tabBtn.className = `px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-2 border select-none transition ${
       isCurrent 
-        ? "bg-blue-600 text-white border-blue-600 shadow-sm" 
-        : hasActiveOrders
-          ? "bg-yellow-50 text-yellow-900 border-yellow-300 hover:bg-yellow-100"
-          : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+        ? isMergedBill ? "bg-purple-700 text-white border-purple-700 shadow-sm" : "bg-blue-600 text-white border-blue-600 shadow-sm" 
+        : isMergedBill
+          ? "bg-purple-50 text-purple-900 border-purple-300 hover:bg-purple-100"
+          : hasActiveOrders
+            ? "bg-yellow-50 text-yellow-900 border-yellow-300 hover:bg-yellow-100"
+            : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
     }`;
     tabBtn.onclick = () => switchBillTab(key);
-
-    const label = billObj.tableNo ? `Table ${billObj.tableNo}` : billObj.name;
-
+    
+    let label = billObj.tableNo ? `Table ${billObj.tableNo}` : billObj.name;
+    if (isMergedBill) {
+      label = `🔗 Table ${billObj.tableNo} (+${billObj.mergedTables.join(', +')})`;
+    }
+    
     tabBtn.innerHTML = `
       <div class="flex items-center gap-1.5">
-        ${hasActiveOrders ? `<span class="w-2 h-2 rounded-full ${isCurrent ? 'bg-white' : 'bg-yellow-500'} animate-pulse"></span>` : ''}
+        ${hasActiveOrders ? `<span class="w-2 h-2 rounded-full ${isCurrent ? 'bg-white' : isMergedBill ? 'bg-purple-600' : 'bg-yellow-500'} animate-pulse"></span>` : ''}
         <span>${label}</span>
       </div>
-      <span class="text-[10px] px-1.5 py-0.2 rounded-full font-black ${isCurrent ? 'bg-blue-800 text-white' : 'bg-gray-200 text-gray-800'}">${itemCount}</span>
+      <span class="text-[10px] px-1.5 py-0.2 rounded-full font-black ${isCurrent ? 'bg-black/30 text-white' : 'bg-gray-200 text-gray-800'}">${itemCount}</span>
       ${allActiveBills.length > 1 ? `<i class="fa-solid fa-xmark hover:text-red-400 text-xs ml-1 p-0.5 cursor-pointer" onclick="closeBillTab('${key}', event)"></i>` : ""}
     `;
     container.appendChild(tabBtn);
@@ -369,6 +435,7 @@ export function syncActiveBillToFormUI() {
   selectPayMethod(currentBill.selectedPayMethod || "cash", false);
   renderCartItemsUI();
   syncLiveCustomerDisplay();
+  updateCheckoutButtonsVisibility();
 }
 
 export async function updateCurrentBillSettings() {
@@ -723,6 +790,7 @@ export function renderCartItemsUI() {
   }
 
   recalculateCartTotalsUI();
+  updateCheckoutButtonsVisibility();
 }
 
 // ⭐ 100% ACCURATE ORDER TOTALS & LOYALTY POINT-TO-RUPEE CONVERSION ENGINE
@@ -862,6 +930,7 @@ export function recalculateCartTotalsUI() {
   calculateCashChange();
   calculateSplitPaymentBalance();
   syncLiveCustomerDisplay();
+  updateCheckoutButtonsVisibility();
 }
 
 export function selectPayMethod(method, syncCloud = true) {
@@ -1001,7 +1070,7 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ SMART DELTA, OFFLINE-SAFE & LOCAL LAN STATION ORDER SENDER
+// 🖨️ SMART DELTA, OFFLINE-SAFE & LOCAL LAN STATION ORDER SENDER (DUAL-LAYER DE-DUPLICATED)
 export async function sendOrderToKitchen(forceReprintAll = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -1078,30 +1147,44 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       currentBill.cart = updatedCart;
       renderCartItemsUI();
       
+      let sentViaLan = false;
+
       // 📡 1. MOBILE APK OFFLINE LOCAL LAN DIRECT PRINT (INTERNET නැතත් PRINTER එකට කෙලින්ම යැවීම)
       if (!isDesktopPrinterHost) {
         const targetCashierIp = localStorage.getItem("cashier_lan_ip") || "192.168.8.100";
         if (targetCashierIp) {
-          fetch(`http://${targetCashierIp}:8085/api/kot`, {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const res = await fetch(`http://${targetCashierIp}:8085/api/kot`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(kotTicket)
-            })
-            .then(r => r.json())
-            .then(res => {
-              console.log("✅ Offline Order Sent via Local Wi-Fi successfully:", res);
-              showLiveToast("🖨️ Wi-Fi Print Sent", `Table ${kotTicket.tableNo} ඇණවුම Cashier Printer එකට Local Wi-Fi හරහා යවන ලදී.`, "kitchen", "fa-print");
-            })
-            .catch(err => {
-              console.warn("Local Wi-Fi unreachable, will rely on Cloud sync:", err.message);
+              body: JSON.stringify(kotTicket),
+              signal: controller.signal
             });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+              sentViaLan = true;
+              console.log("✅ Offline Order Sent via Local Wi-Fi successfully");
+              showLiveToast("🖨️ Wi-Fi Print Sent", `Table ${kotTicket.tableNo} ඇණවුම Cashier Printer එකට Local Wi-Fi හරහා යවන ලදී.`, "kitchen", "fa-print");
+            }
+          } catch (err) {
+            console.warn("Local Wi-Fi unreachable, will rely on Cloud sync:", err.message);
+          }
         }
       }
       
       // ☁️ 2. CLOUD FIREBASE SYNC (INTERNET ඇති විට CLOUD එකටත් SAVE වේ)
       if (navigator.onLine && dbRef && currentTenant && isAuthReady()) {
+        // 🛡️ FIX: LAN එකෙන් Print වූවා නම් Cloud එකෙන් නැවත Print නොවන ලෙස isPrinted: true සලකුණු කරයි
+        const cloudKotTicket = {
+          ...kotTicket,
+          isPrinted: (isDesktopPrinterHost || sentViaLan) ? true : false
+        };
+
         if (pushFn) {
-          pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), kotTicket).catch(() => {});
+          pushFn(dbRef(`tenants/${currentTenant}/kitchenOrders`), cloudKotTicket).catch(() => {});
         }
         if (currentBill.tableNo && updateFn) {
           const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
@@ -1171,10 +1254,21 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
   }
 }
 
-// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS
+// ⚡ AUTO-PRINT INCOMING ORDERS RECEIVED FROM TABLETS (DUAL-LAYER DE-DUPLICATION)
+const recentlyPrintedOrderSignatures = new Set();
+
 export function handleIncomingCloudPrint(orderId, orderData) {
   if (!window.electronAPI || !window.electronAPI.printSilent) return;
   if (!orderData || !orderData.items || orderData.status !== "Cooking" || orderData.isPrinted === true) return;
+
+  // 🛡️ එකම Table එක සහ එකම Items සහිත Order එකක් තත්පර 60ක් ඇතුළත දෙවරක් Print වීම 100% වළකයි
+  const orderSig = `${orderData.tableNo || 'NA'}_${(orderData.items || []).map(i => `${i.name}_${i.qty}`).join('|')}_${orderData.timestamp || ''}`;
+  if (recentlyPrintedOrderSignatures.has(orderSig)) {
+    console.log("🛡️ Duplicate order print prevented by signature cache:", orderSig);
+    return;
+  }
+  recentlyPrintedOrderSignatures.add(orderSig);
+  setTimeout(() => recentlyPrintedOrderSignatures.delete(orderSig), 60000); // විනාඩියකට පසු මතකයෙන් ඉවත් කරයි
 
   orderData.isPrinted = true;
   if (dbRef && updateFn && currentTenant && isAuthReady()) {
@@ -1468,8 +1562,12 @@ export async function processOrder(sendWhatsApp = false) {
           });
         }
         
+        // 🛡️ BATCH INVENTORY UPDATE: සියලුම අමුද්‍රව්‍ය තනි Request එකකින් යවා 90% ක Data නාස්තිය නවතයි
         const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
         if (isRecipeMode) {
+          const rawDeductions = {};
+          
+          // 1. බිලේ සියලුම කෑම වල අමුද්‍රව්‍ය එකතුවක් සාදා ගැනීම
           for (const item of cartList) {
             const dish = erpState.dishes[item.dishId];
             if (dish && dish.ingredients && Array.isArray(dish.ingredients)) {
@@ -1478,38 +1576,52 @@ export async function processOrder(sendWhatsApp = false) {
                 if (rawItem) {
                   const convertedQtyPerPortion = convertRecipeQtyToBaseUnit(rawItem.unit, ing.qty, ing.unit);
                   const totalDeduct = convertedQtyPerPortion * (parseInt(item.qty) || 1);
-                  
-                  if (transactionFn) {
-                    await transactionFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}/stock`), (currentStock) => {
-                      const prevStock = (currentStock === null || isNaN(currentStock)) ? 0 : parseFloat(currentStock);
-                      return Math.max(0, parseFloat((prevStock - totalDeduct).toFixed(3)));
-                    });
-                  } else if (updateFn) {
-                    const currentStock = parseFloat(rawItem.stock || 0);
-                    const newStock = Math.max(0, currentStock - totalDeduct);
-                    await updateFn(dbRef(`tenants/${currentTenant}/rawItems/${ing.rawId}`), {
-                      stock: parseFloat(newStock.toFixed(3))
-                    });
-                  }
+                  rawDeductions[ing.rawId] = (rawDeductions[ing.rawId] || 0) + totalDeduct;
                 }
               }
             }
           }
-        }
-        
-        if (currentBill.tableNo && updateFn) {
-          const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
-            ([k, b]) => k !== savedActiveBillId && b.tableNo === currentBill.tableNo && b.cart && b.cart.length > 0
-          );
-          if (!hasOtherBillsOnTable) {
-            const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-            if (matchedTable) {
-              matchedTable[1].status = "Available"; // 👈 Floor Plan එකේ මේසය වහාම කොළ පාට වේ
-              await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), { status: "Available" });
+          
+          // 2. තනි Batch Object එකකට සකස් කර ක්ෂණිකව Memory එකෙන්ද අඩු කිරීම
+          const rawUpdates = {};
+          for (const [rawId, deductQty] of Object.entries(rawDeductions)) {
+            const currentStock = parseFloat(erpState.rawItems[rawId]?.stock || 0);
+            const newStock = Math.max(0, parseFloat((currentStock - deductQty).toFixed(3)));
+            rawUpdates[`${rawId}/stock`] = newStock;
+            if (erpState.rawItems[rawId]) {
+              erpState.rawItems[rawId].stock = newStock;
             }
+          }
+          
+          // 3. තනි Network Call එකකින් Database එකට ලිවීම
+          if (Object.keys(rawUpdates).length > 0 && updateFn) {
+            await updateFn(dbRef(`tenants/${currentTenant}/rawItems`), rawUpdates);
           }
         }
         
+        if (currentBill.tableNo && updateFn) {
+          const allTablesToRelease = [currentBill.tableNo, ...(currentBill.mergedTables || [])];
+          for (const tblNumStr of allTablesToRelease) {
+            const tNum = extractTableNum(tblNumStr);
+            const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+              ([k, b]) => k !== savedActiveBillId && (extractTableNum(b.tableNo) === tNum || (b.mergedTables && b.mergedTables.some(m => extractTableNum(m) === tNum))) && b.cart && b.cart.length > 0
+            );
+            if (!hasOtherBillsOnTable) {
+              const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === tNum);
+              if (matchedTable) {
+                matchedTable[1].status = "Available";
+                delete matchedTable[1].mergedInto;
+                delete matchedTable[1].mergedWith;
+                await updateFn(dbRef(`tenants/${currentTenant}/tables/${matchedTable[0]}`), {
+                  status: "Available",
+                  mergedInto: null,
+                  mergedWith: null
+                });
+              }
+            }
+          }
+        }
+
         if (removeFn) {
           await removeFn(dbRef(`tenants/${currentTenant}/activeBills/${savedActiveBillId}`));
         }
@@ -1519,7 +1631,7 @@ export async function processOrder(sendWhatsApp = false) {
           ...invoiceData,
           synced: 0
         });
-
+        
         // 👈 FIX: Internet නැතිවිටද Local Memory එකෙන් Stock අඩු කරන්න
         const isRecipeMode = (erpState.settings?.inventoryMode || "recipe") === "recipe";
         if (isRecipeMode) {
@@ -1537,18 +1649,24 @@ export async function processOrder(sendWhatsApp = false) {
             }
           }
         }
-
-        // 👈 FIX: Offline විටද මේසය නිදහස් කරන්න
+        
+        // 👈 FIX: Offline විටද Merge වූ සියලු මේස නිදහස් කරන්න
         if (currentBill.tableNo) {
-          const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
-            ([k, b]) => k !== savedActiveBillId && b.tableNo === currentBill.tableNo && b.cart && b.cart.length > 0
-          );
-          if (!hasOtherBillsOnTable) {
-            const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === currentBill.tableNo);
-            if (matchedTable) {
-              matchedTable[1].status = "Available";
+          const allTablesToRelease = [currentBill.tableNo, ...(currentBill.mergedTables || [])];
+          allTablesToRelease.forEach(tblNumStr => {
+            const tNum = extractTableNum(tblNumStr);
+            const hasOtherBillsOnTable = Object.entries(erpState.activeBills || {}).some(
+              ([k, b]) => k !== savedActiveBillId && (extractTableNum(b.tableNo) === tNum || (b.mergedTables && b.mergedTables.some(m => extractTableNum(m) === tNum))) && b.cart && b.cart.length > 0
+            );
+            if (!hasOtherBillsOnTable) {
+              const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => extractTableNum(t.tableNo) === tNum);
+              if (matchedTable) {
+                matchedTable[1].status = "Available";
+                delete matchedTable[1].mergedInto;
+                delete matchedTable[1].mergedWith;
+              }
             }
-          }
+          });
         }
       }
     } catch (bgErr) {
@@ -2054,6 +2172,8 @@ export async function syncOfflineInvoicesToCloud() {
 }
 
 // 🛡️ CRITICAL GLOBAL WINDOW EXPORTS
+window.setTableOrderMode = setTableOrderMode;
+window.updateCheckoutButtonsVisibility = updateCheckoutButtonsVisibility;
 window.enqueuePrintJob = enqueuePrintJob;
 window.handleIncomingCloudPrint = handleIncomingCloudPrint;
 window.persistActiveBillToCloud = persistActiveBillToCloud;
