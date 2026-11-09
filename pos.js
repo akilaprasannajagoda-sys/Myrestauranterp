@@ -441,7 +441,7 @@ export function syncActiveBillToFormUI() {
 export async function updateCurrentBillSettings() {
   const orderType = document.getElementById("orderType")?.value || "Dine-in";
   const tableNo = document.getElementById("orderTable")?.value.trim() || "";
-
+  
   let matchedWaiter = "";
   if (tableNo) {
     const tObj = Object.values(erpState.tables || {}).find(t => t.tableNo === tableNo);
@@ -449,13 +449,20 @@ export async function updateCurrentBillSettings() {
       matchedWaiter = tObj.assignedWaiter;
     }
   }
-
+  
+  // 🛡️ FIX: මේස අංකය ගැසූ සැණින් දකුණු පැත්තේ Title & Subtitle එක ක්ෂණිකව Refresh කිරීම
+  const bTitle = document.getElementById("currentBillTitle");
+  const bSub = document.getElementById("currentBillSubtitle");
+  const label = tableNo ? `Table ${tableNo}` : (getActiveBillData().name || "Bill #1");
+  if (bTitle) bTitle.innerHTML = `<i class="fa-solid fa-receipt text-blue-600"></i> ${label}`;
+  if (bSub) bSub.innerText = `${orderType} (Table: ${tableNo || 'N/A'}${matchedWaiter ? ' | ' + matchedWaiter : ''})`;
+  
   await persistActiveBillToCloud({
     orderType: orderType,
     tableNo: tableNo,
     waiterName: matchedWaiter
   });
-
+  
   if (tableNo) {
     const matchedTable = Object.entries(erpState.tables || {}).find(([id, t]) => t.tableNo === tableNo);
     if (matchedTable) {
@@ -465,11 +472,10 @@ export async function updateCurrentBillSettings() {
       }
     }
   }
-
+  
   renderBillTabsBar();
   recalculateCartTotalsUI();
 }
-
 export function onPosSearchInput() {
   renderPOSDishesGrid();
 }
