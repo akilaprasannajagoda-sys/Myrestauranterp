@@ -13,7 +13,7 @@ let updateFn = null;
 let removeFn = null;
 let transactionFn = null;
 
-// 🛡️ Double-Submission Lock
+// 🛡️ Double-Submission Lock & Debounce Timers
 let isSubmittingCustomer = false;
 let customerSearchDebounceTimer = null;
 let currentCustomerDisplayLimit = 80;
@@ -28,6 +28,13 @@ export function initCustomersContext(dbRefInstance, pushMethod, updateMethod, re
 
 // 1. OPEN / CLOSE CUSTOMER MODAL
 export function openCustomerModal(mode = 'add', customerId = null) {
+  // 🛡️ POS Search Dropdown එක විවෘතව ඇත්නම් එය පළමුව සඟවන්න (Clicks Trap වීම වැළැක්වීමට)
+  const dropdown = document.getElementById("posCustomerSearchResults");
+  if (dropdown) {
+    dropdown.classList.add("hidden");
+    dropdown.innerHTML = "";
+  }
+
   const modal = document.getElementById("customerModal");
   const form = document.getElementById("customerForm");
   if (form) form.reset();
@@ -62,8 +69,21 @@ export function openCustomerModal(mode = 'add', customerId = null) {
 }
 
 export function closeCustomerModal() {
-  document.getElementById("customerModal")?.classList.add("hidden");
+  const modal = document.getElementById("customerModal");
+  if (modal) modal.classList.add("hidden");
   isSubmittingCustomer = false;
+
+  // 🛡️ CRITICAL UNFREEZE: Modal එක වැසූ පසු Keyboard Focus එක සක්‍රීය POS Search Textbox එකට යොමු කරන්න
+  setTimeout(() => {
+    const posSearch = document.getElementById("posSearchInput");
+    const posCustomerSearch = document.getElementById("posCustomerSearchInput");
+    
+    if (posSearch && !posSearch.closest(".hidden")) {
+      posSearch.focus();
+    } else if (posCustomerSearch && !posCustomerSearch.closest(".hidden")) {
+      posCustomerSearch.focus();
+    }
+  }, 60);
 }
 
 // 2. SUBMIT / SAVE CUSTOMER RECORD
@@ -374,7 +394,10 @@ export function onPosCustomerSearch(input) {
 export function selectCustomerForCurrentBill(customerId) {
   const cust = erpState.customers?.[customerId];
   const dropdown = document.getElementById("posCustomerSearchResults");
-  if (dropdown) dropdown.classList.add("hidden");
+  if (dropdown) {
+    dropdown.classList.add("hidden");
+    dropdown.innerHTML = "";
+  }
 
   const searchInput = document.getElementById("posCustomerSearchInput");
   const badgeContainer = document.getElementById("posSelectedCustomerBadge");
@@ -459,6 +482,17 @@ export function exportCustomersToCSV() {
 
   downloadCSVFile(csv, `Customer_Directory_${getLocalDateString()}.csv`);
 }
+
+// 🛡️ Global Click Handler: පිටත ක්ලික් කළ විට Search Dropdown එක ස්වයංක්‍රීයව සඟවයි
+document.addEventListener("click", (e) => {
+  const searchInput = document.getElementById("posCustomerSearchInput");
+  const dropdown = document.getElementById("posCustomerSearchResults");
+  if (dropdown && !dropdown.classList.contains("hidden")) {
+    if (!dropdown.contains(e.target) && e.target !== searchInput) {
+      dropdown.classList.add("hidden");
+    }
+  }
+});
 
 // Global Window Exports
 window.openCustomerModal = openCustomerModal;
