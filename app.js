@@ -581,7 +581,7 @@ export async function handleRestoreBackupFile(event) {
 }
 window.handleRestoreBackupFile = handleRestoreBackupFile;
 
-// INACTIVITY AUTO PIN-LOCK ENGINE
+// 🛡️ INACTIVITY AUTO PIN-LOCK ENGINE (FOCUS SAFE)
 let inactivityTimer = null;
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
@@ -594,11 +594,17 @@ function resetInactivityTimer() {
 
       if (isKitchenActive || isFaceScanActive) return;
 
-      document.getElementById("inactivityLockScreen")?.classList.remove("hidden");
-      const pinIn = document.getElementById("unlockScreenPinInput");
-      if (pinIn) {
-        pinIn.value = "";
-        setTimeout(() => pinIn.focus(), 60);
+      const lockScreen = document.getElementById("inactivityLockScreen");
+      if (lockScreen) {
+        lockScreen.classList.remove("hidden");
+        const pinIn = document.getElementById("unlockScreenPinInput");
+        if (pinIn) {
+          pinIn.value = "";
+          setTimeout(() => {
+            pinIn.focus();
+            pinIn.select();
+          }, 100);
+        }
       }
     }
   }, 240000);
@@ -637,6 +643,14 @@ window.submitCounterUnlock = async function() {
     document.getElementById("inactivityLockScreen")?.classList.add("hidden");
     resetInactivityTimer();
     showLiveToast("🔓 Terminal Unlocked", "කවුන්ටරය සාර්ථකව Unlock කරන ලදී.", "success", "fa-unlock");
+    
+    // 🛡️ Return focus back to POS Search input upon unlock
+    setTimeout(() => {
+      const posInput = document.getElementById("posSearchInput");
+      if (posInput && !posInput.closest(".hidden")) {
+        posInput.focus();
+      }
+    }, 60);
   } else {
     showLiveToast("⚠️ අගුළු ඇරීමේ දෝෂයක්", "❌ වැරදි PIN අංකයකි! නැවත උත්සාහ කරන්න.", "warning", "fa-lock");
     if (pinIn) {
@@ -1025,95 +1039,95 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubTables);
 
-  // 9. Kitchen Orders (Optimized limitToLast: 35) - KDS සහ Auto-Print සඳහා ප්‍රමාණවත්ය
-const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(35));
-const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
-  const prevOrders = erpState.kitchenOrders || {};
-  erpState.kitchenOrders = snapshot.val() || {};
-  KDS.renderKDSOrdersGrid();
-  
-  const currentOrders = erpState.kitchenOrders;
-  
-  if (Object.keys(currentOrders).length > Object.keys(prevOrders).length) {
-    triggerAudioAlert("newOrder");
-  }
-  
-  if (window.electronAPI && window.electronAPI.printSilent) {
-    Object.entries(currentOrders).forEach(([orderId, orderData]) => {
-      if (orderData && orderData.status === "Cooking" && orderData.isPrinted === false) {
-        POS.handleIncomingCloudPrint(orderId, orderData);
+  // 9. Kitchen Orders (Optimized limitToLast: 35)
+  const recentKitchenQuery = query(ref(dbInstance, `${basePath}/kitchenOrders`), limitToLast(35));
+  const unsubKitchen = onValue(recentKitchenQuery, (snapshot) => {
+    const prevOrders = erpState.kitchenOrders || {};
+    erpState.kitchenOrders = snapshot.val() || {};
+    KDS.renderKDSOrdersGrid();
+    
+    const currentOrders = erpState.kitchenOrders;
+    
+    if (Object.keys(currentOrders).length > Object.keys(prevOrders).length) {
+      triggerAudioAlert("newOrder");
+    }
+    
+    if (window.electronAPI && window.electronAPI.printSilent) {
+      Object.entries(currentOrders).forEach(([orderId, orderData]) => {
+        if (orderData && orderData.status === "Cooking" && orderData.isPrinted === false) {
+          POS.handleIncomingCloudPrint(orderId, orderData);
+        }
+      });
+    }
+    
+    Object.keys(currentOrders).forEach(k => {
+      if (currentOrders[k].status === "Ready" && prevOrders[k] && prevOrders[k].status === "Cooking") {
+        triggerAudioAlert("kitchen");
+        showLiveToast("🛎️ Order Ready!", `Table ${currentOrders[k].tableNo} කෑම පිළියෙල කර අවසන්!`, "kitchen", "fa-bell-concierge");
       }
     });
-  }
-  
-  Object.keys(currentOrders).forEach(k => {
-    if (currentOrders[k].status === "Ready" && prevOrders[k] && prevOrders[k].status === "Cooking") {
-      triggerAudioAlert("kitchen");
-      showLiveToast("🛎️ Order Ready!", `Table ${currentOrders[k].tableNo} කෑම පිළියෙල කර අවසන්!`, "kitchen", "fa-bell-concierge");
+  });
+  activeFirebaseUnsubscribers.push(unsubKitchen);
+
+  // 10. Suppliers Directory
+  const unsubSuppliers = onValue(ref(dbInstance, `${basePath}/suppliers`), (snapshot) => {
+    erpState.suppliers = snapshot.val() || {};
+    Suppliers.renderSuppliersDirectoryTable();
+    Suppliers.populateGRNSupplierDropdown();
+  });
+  activeFirebaseUnsubscribers.push(unsubSuppliers);
+
+  // 10.1 Registered Customers & Loyalty CRM
+  const unsubCustomers = onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
+    erpState.customers = snapshot.val() || {};
+    try {
+      localStorage.setItem("cached_erp_customers", JSON.stringify(erpState.customers));
+    } catch (e) {}
+    Customers.renderCustomersTable();
+  });
+  activeFirebaseUnsubscribers.push(unsubCustomers);
+
+  // 11. Supplier Payments
+  const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(40));
+  const unsubSupPay = onValue(recentSupPayQuery, (snapshot) => {
+    erpState.supplierPayments = snapshot.val() || {};
+    Suppliers.renderSuppliersDirectoryTable();
+  });
+  activeFirebaseUnsubscribers.push(unsubSupPay);
+
+  // 12. GRNs
+  const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(40));
+  const unsubGrns = onValue(recentGrnQuery, (snapshot) => {
+    erpState.grns = snapshot.val() || {};
+    Suppliers.renderGRNHistoryTable();
+    Suppliers.renderSuppliersDirectoryTable();
+  });
+  activeFirebaseUnsubscribers.push(unsubGrns);
+
+  // 13. Invoices
+  const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(35));
+  const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
+    const fromVal = document.getElementById("repFromDate")?.value;
+    const toVal = document.getElementById("repToDate")?.value;
+    
+    if (!fromVal && !toVal) {
+      erpState.invoices = snapshot.val() || {};
+      if (Reports.activeReportTabName === "pnl") {
+        Reports.renderPnLStatement();
+      } else if (Reports.activeReportTabName === "hourly") {
+        Reports.renderHourlyVelocityReport();
+      } else if (Reports.activeReportTabName === "waiters") {
+        Reports.renderWaiterSalesReport();
+      } else if (Reports.activeReportTabName === "items") {
+        Reports.renderItemWiseSalesSummary();
+      } else if (Reports.activeReportTabName === "credits") {
+        Reports.renderCustomerCreditsLedger();
+      } else {
+        Reports.renderInvoiceReportsList();
+      }
     }
   });
-});
-activeFirebaseUnsubscribers.push(unsubKitchen);
-
-// 10. Suppliers Directory
-const unsubSuppliers = onValue(ref(dbInstance, `${basePath}/suppliers`), (snapshot) => {
-  erpState.suppliers = snapshot.val() || {};
-  Suppliers.renderSuppliersDirectoryTable();
-  Suppliers.populateGRNSupplierDropdown();
-});
-activeFirebaseUnsubscribers.push(unsubSuppliers);
-
-// 10.1 Registered Customers & Loyalty CRM (Auto-Cached Locally)
-const unsubCustomers = onValue(ref(dbInstance, `${basePath}/customers`), (snapshot) => {
-  erpState.customers = snapshot.val() || {};
-  try {
-    localStorage.setItem("cached_erp_customers", JSON.stringify(erpState.customers));
-  } catch (e) {}
-  Customers.renderCustomersTable();
-});
-activeFirebaseUnsubscribers.push(unsubCustomers);
-
-// 11. Supplier Payments (Optimized limitToLast: 40)
-const recentSupPayQuery = query(ref(dbInstance, `${basePath}/supplierPayments`), limitToLast(40));
-const unsubSupPay = onValue(recentSupPayQuery, (snapshot) => {
-  erpState.supplierPayments = snapshot.val() || {};
-  Suppliers.renderSuppliersDirectoryTable();
-});
-activeFirebaseUnsubscribers.push(unsubSupPay);
-
-// 12. GRNs (Optimized limitToLast: 40)
-const recentGrnQuery = query(ref(dbInstance, `${basePath}/grns`), limitToLast(40));
-const unsubGrns = onValue(recentGrnQuery, (snapshot) => {
-  erpState.grns = snapshot.val() || {};
-  Suppliers.renderGRNHistoryTable();
-  Suppliers.renderSuppliersDirectoryTable();
-});
-activeFirebaseUnsubscribers.push(unsubGrns);
-
-// 13. Invoices (Optimized limitToLast: 35 for POS Counter View)
-const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(35));
-const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
-  const fromVal = document.getElementById("repFromDate")?.value;
-  const toVal = document.getElementById("repToDate")?.value;
-  
-  if (!fromVal && !toVal) {
-    erpState.invoices = snapshot.val() || {};
-    if (Reports.activeReportTabName === "pnl") {
-      Reports.renderPnLStatement();
-    } else if (Reports.activeReportTabName === "hourly") {
-      Reports.renderHourlyVelocityReport();
-    } else if (Reports.activeReportTabName === "waiters") {
-      Reports.renderWaiterSalesReport();
-    } else if (Reports.activeReportTabName === "items") {
-      Reports.renderItemWiseSalesSummary();
-    } else if (Reports.activeReportTabName === "credits") {
-      Reports.renderCustomerCreditsLedger();
-    } else {
-      Reports.renderInvoiceReportsList();
-    }
-  }
-});
-activeFirebaseUnsubscribers.push(unsubInvoices);
+  activeFirebaseUnsubscribers.push(unsubInvoices);
 
   // 14. Customer Credits
   const unsubCredits = onValue(ref(dbInstance, `${basePath}/customerCredits`), (snapshot) => {
@@ -1133,7 +1147,7 @@ activeFirebaseUnsubscribers.push(unsubInvoices);
   });
   activeFirebaseUnsubscribers.push(unsubPetty);
 
-  // 16. Employees (Cache locally for Offline PIN login)
+  // 16. Employees
   const unsubEmployees = onValue(ref(dbInstance, `${basePath}/employees`), (snapshot) => {
     erpState.employees = snapshot.val() || {};
     try {
@@ -1204,73 +1218,69 @@ activeFirebaseUnsubscribers.push(unsubInvoices);
   });
   activeFirebaseUnsubscribers.push(unsubActiveBills);
 
-  // 20. Heartbeat & SaaS Subscription (Zero-Bandwidth Optimized)
-const sendHeartbeat = () => {
-  if (currentTenant && dbRef && navigator.onLine) {
-    update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
-      lastHeartbeat: new Date().toISOString()
-    }).catch(() => {});
-  }
-};
-sendHeartbeat();
-// 🛡️ තත්පර 45 වෙනුවට විනාඩි 3 කට වරක් Ping යැවීමෙන් දත්ත නාස්තිය අවම කෙරේ
-setInterval(sendHeartbeat, 180000);
+  // 20. Heartbeat & SaaS Subscription
+  const sendHeartbeat = () => {
+    if (currentTenant && dbRef && navigator.onLine) {
+      update(ref(dbInstance, `tenants/${currentTenant}/subscription`), {
+        lastHeartbeat: new Date().toISOString()
+      }).catch(() => {});
+    }
+  };
+  sendHeartbeat();
+  setInterval(sendHeartbeat, 180000);
 
-if (!erpState.subscription) erpState.subscription = {};
+  if (!erpState.subscription) erpState.subscription = {};
 
-// 1. Status පමණක් Live බලයි (Heartbeat write නිසා Download නොවීමට)
-const unsubStatus = onValue(ref(dbInstance, `${basePath}/subscription/status`), (snapshot) => {
-  const status = snapshot.val() || "active";
-  erpState.subscription.status = status;
-  
-  if (status === "suspended") {
-    document.getElementById("mainApp")?.classList.add("hidden");
-    document.getElementById("authScreen")?.classList.add("hidden");
+  const unsubStatus = onValue(ref(dbInstance, `${basePath}/subscription/status`), (snapshot) => {
+    const status = snapshot.val() || "active";
+    erpState.subscription.status = status;
     
-    let lockScreen = document.getElementById("saasLockoutScreen");
-    if (!lockScreen) {
-      lockScreen = document.createElement("div");
-      lockScreen.id = "saasLockoutScreen";
-      lockScreen.className = "fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-6 text-center text-white";
-      document.body.appendChild(lockScreen);
-    }
-    lockScreen.classList.remove("hidden");
-    lockScreen.innerHTML = `
-        <div class="bg-gray-900 border border-red-500/30 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-4">
-          <div class="w-16 h-16 rounded-2xl bg-red-600/20 text-red-500 border border-red-500/40 flex items-center justify-center mx-auto text-3xl">
-            <i class="fa-solid fa-lock"></i>
+    if (status === "suspended") {
+      document.getElementById("mainApp")?.classList.add("hidden");
+      document.getElementById("authScreen")?.classList.add("hidden");
+      
+      let lockScreen = document.getElementById("saasLockoutScreen");
+      if (!lockScreen) {
+        lockScreen = document.createElement("div");
+        lockScreen.id = "saasLockoutScreen";
+        lockScreen.className = "fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-6 text-center text-white";
+        document.body.appendChild(lockScreen);
+      }
+      lockScreen.classList.remove("hidden");
+      lockScreen.innerHTML = `
+          <div class="bg-gray-900 border border-red-500/30 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-4">
+            <div class="w-16 h-16 rounded-2xl bg-red-600/20 text-red-500 border border-red-500/40 flex items-center justify-center mx-auto text-3xl">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <h2 class="text-xl font-black text-white">Software Subscription Suspended</h2>
+            <p class="text-xs text-gray-400 leading-relaxed">
+              ඔබගේ හෝටලයේ මෘදුකාංග ගිණුම තාවකාලිකව අත්හිටුවා ඇත. කරුණාකර සේවා සපයන්නා අමතන්න.
+            </p>
           </div>
-          <h2 class="text-xl font-black text-white">Software Subscription Suspended</h2>
-          <p class="text-xs text-gray-400 leading-relaxed">
-            ඔබගේ හෝටලයේ මෘදුකාංග ගිණුම තාවකාලිකව අත්හිටුවා ඇත. කරුණාකර සේවා සපයන්නා අමතන්න.
-          </p>
-        </div>
-      `;
-  } else {
-    const lockScreen = document.getElementById("saasLockoutScreen");
-    if (lockScreen) lockScreen.classList.add("hidden");
-    if (authInstance.currentUser || currentTenant) {
-      document.getElementById("mainApp")?.classList.remove("hidden");
+        `;
+    } else {
+      const lockScreen = document.getElementById("saasLockoutScreen");
+      if (lockScreen) lockScreen.classList.add("hidden");
+      if (authInstance.currentUser || currentTenant) {
+        document.getElementById("mainApp")?.classList.remove("hidden");
+      }
     }
-  }
-});
-activeFirebaseUnsubscribers.push(unsubStatus);
+  });
+  activeFirebaseUnsubscribers.push(unsubStatus);
 
-// 2. Features පමණක් වෙනස් වන විට අදාළ UI සකසයි
-const unsubFeatures = onValue(ref(dbInstance, `${basePath}/subscription/features`), (snapshot) => {
-  erpState.subscription.features = snapshot.val() || {};
-  applyRoleBasedUI(currentUserRole, currentStaffPermissions);
-});
-activeFirebaseUnsubscribers.push(unsubFeatures);
+  const unsubFeatures = onValue(ref(dbInstance, `${basePath}/subscription/features`), (snapshot) => {
+    erpState.subscription.features = snapshot.val() || {};
+    applyRoleBasedUI(currentUserRole, currentStaffPermissions);
+  });
+  activeFirebaseUnsubscribers.push(unsubFeatures);
 
-// 3. Broadcast Notice එකක් දැමූ විට පමණක් Live දැනුම් දෙයි
-const unsubNotice = onValue(ref(dbInstance, `${basePath}/subscription/broadcastNotice`), (snapshot) => {
-  const notice = snapshot.val();
-  if (notice && String(notice).trim()) {
-    showLiveToast("📢 Notice", String(notice).trim(), "info", "fa-bullhorn");
-  }
-});
-activeFirebaseUnsubscribers.push(unsubNotice);
+  const unsubNotice = onValue(ref(dbInstance, `${basePath}/subscription/broadcastNotice`), (snapshot) => {
+    const notice = snapshot.val();
+    if (notice && String(notice).trim()) {
+      showLiveToast("📢 Notice", String(notice).trim(), "info", "fa-bullhorn");
+    }
+  });
+  activeFirebaseUnsubscribers.push(unsubNotice);
 
   // 21. Day-End Reports
   const recentDayEndQuery = query(ref(dbInstance, `${basePath}/dayEndReports`), limitToLast(40));
@@ -1356,7 +1366,6 @@ export function switchView(viewName) {
 
   if (viewName === "settings") {
     loadInstalledPrintersToUI();
-    // 🌐 Update local server IP badge in UI
     if (window.electronAPI && window.electronAPI.getLocalServerInfo) {
       window.electronAPI.getLocalServerInfo().then(info => {
         const badge = document.getElementById("lanServerIpDisplay");
@@ -1446,7 +1455,6 @@ if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
   window.electronAPI.onLanOrderReceived((orderData) => {
     console.log("📥 [LAN] Local Offline Order received from Mobile:", orderData);
 
-    // 1. Alert Sound & Show Live Notification
     triggerAudioAlert("newOrder");
     showLiveToast(
       "📱 Mobile Order (Offline Wi-Fi)",
@@ -1455,7 +1463,6 @@ if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
       "fa-print"
     );
 
-    // 2. Add Order to KDS (Kitchen Display System)
     const tempOrderId = "lan_" + Date.now();
     const formattedOrder = {
       ...orderData,
@@ -1468,7 +1475,6 @@ if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
     erpState.kitchenOrders[tempOrderId] = formattedOrder;
     KDS.renderKDSOrdersGrid();
 
-    // 3. Mark Table Occupied in Floor Plan
     if (orderData.tableNo) {
       const matchedTable = Object.values(erpState.tables || {}).find(
         t => String(t.tableNo) === String(orderData.tableNo) || parseInt(t.tableNo, 10) === parseInt(orderData.tableNo, 10)
@@ -1479,7 +1485,6 @@ if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
       }
     }
 
-    // 4. 🔥 AUTO-PRINT KOT & BOT DIRECTLY TO PHYSICAL PRINTERS!
     POS.handleIncomingCloudPrint(tempOrderId, formattedOrder);
   });
 }
@@ -1487,11 +1492,10 @@ if (window.electronAPI && window.electronAPI.onLanOrderReceived) {
 // ==========================================================================
 // 🚀 MOBILE APK IN-APP AUTO-UPDATE DETECTOR (GITHUB RELEASES SYNC)
 // ==========================================================================
-const CURRENT_MOBILE_VERSION = "1.0.20"; // දැනට පවතින App Version එක
+const CURRENT_MOBILE_VERSION = "1.0.20";
 const GITHUB_REPO_PATH = "akilaprasannajagoda-sys/Myrestauranterp";
 
 async function checkForMobileAppUpdates() {
-  // Desktop Electron App එකේදී මෙය ක්‍රියාත්මක නොවේ (එය autoUpdater මඟින් සිදුවේ)
   if (window.electronAPI) return;
 
   try {
@@ -1503,9 +1507,7 @@ async function checkForMobileAppUpdates() {
     const releaseData = await res.json();
     const latestVersion = (releaseData.tag_name || "").replace(/^v/, "").trim();
 
-    // Version දෙක සංසන්දනය කිරීම
     if (latestVersion && isNewerVersion(latestVersion, CURRENT_MOBILE_VERSION)) {
-      // Release Assets අතරින් .apk ගොනුව සොයාගැනීම
       const apkAsset = (releaseData.assets || []).find(a => a.name.endsWith('.apk'));
       const apkDownloadUrl = apkAsset ? apkAsset.browser_download_url : releaseData.html_url;
 
@@ -1516,7 +1518,6 @@ async function checkForMobileAppUpdates() {
   }
 }
 
-// Version Numbers සංසන්දනය කරන Helper
 function isNewerVersion(latest, current) {
   const lParts = latest.split('.').map(Number);
   const cParts = current.split('.').map(Number);
@@ -1529,7 +1530,6 @@ function isNewerVersion(latest, current) {
   return false;
 }
 
-// 📱 MOBILE UPDATE NOTIFICATION MODAL
 function showMobileUpdateModal(newVer, downloadUrl, releaseNotes) {
   if (document.getElementById("mobileUpdatePromptModal")) return;
 
@@ -1565,7 +1565,6 @@ function showMobileUpdateModal(newVer, downloadUrl, releaseNotes) {
   document.body.appendChild(modal);
 }
 
-// App එක පණගැන්වී තත්පර 2කට පසු Update තිබේදැයි ස්වයංක්‍රීයව පරීක්ෂා කිරීම
 setTimeout(checkForMobileAppUpdates, 2000);
 
 // ALL GLOBAL WINDOW EXPORTS
