@@ -1,5 +1,7 @@
 // ==========================================================================
-// MODULE 07: SUPPLIERS, GRN SUPPLY CHAIN & CASH-BOOK LEDGER ENGINE (UNFREEZE READY)
+// MODULE 07: SUPPLIERS, GRN SUPPLY CHAIN & CASH-BOOK LEDGER ENGINE
+// 🛡️ UNFREEZE READY & ZERO-COLLISION ARCHITECTURE
+// 📅 SUPPLIER LEDGER DATE RANGE SEARCH (FROM & TO DATES WITH BALANCE B/F)
 // ==========================================================================
 
 import { erpState, currentTenant, activeSupplierLedgerId, setActiveSupplierLedgerId } from './state.js';
@@ -192,86 +194,158 @@ export function renderSuppliersDirectoryTable() {
   });
 }
 
-// 2. SUPPLIER LEDGER MODAL
+// 2. SUPPLIER LEDGER MODAL & DATE RANGE SEARCH (WITH BALANCE B/F)
 export function openSupplierLedgerModal(supId) {
   setActiveSupplierLedgerId(supId);
-  const sup = erpState.suppliers[supId];
-  if (!sup) return;
-
-  const sub = document.getElementById("supLedgerSubtitle");
-  if (sub) sub.innerText = `Supplier: ${sup.name} | Contact: ${sup.phone}`;
-  const { totalPurchases, totalPaid, creditBalance } = calculateSupplierBalances(supId);
-
-  const purEl = document.getElementById("supLedgerTotalPurchases");
-  const paidEl = document.getElementById("supLedgerTotalPaid");
-  const outEl = document.getElementById("supLedgerOutstanding");
-
-  if (purEl) purEl.innerText = `Rs. ${totalPurchases.toFixed(2)}`;
-  if (paidEl) paidEl.innerText = `Rs. ${totalPaid.toFixed(2)}`;
-  if (outEl) outEl.innerText = `Rs. ${creditBalance.toFixed(2)}`;
-
-  const transactions = [];
-
-  Object.values(erpState.grns || {}).forEach(g => {
-    if (g.supplierId === supId) {
-      transactions.push({
-        date: g.date || g.createdAt,
-        type: `📥 GRN Purchase (${(g.paymentMethod || 'cash').toUpperCase()})`,
-        ref: `${g.grnNumber} (Inv: ${g.invoiceNo || 'N/A'})`,
-        debit: g.paymentMethod !== 'credit' ? parseFloat(g.netTotal || 0) : 0,
-        credit: parseFloat(g.netTotal || 0),
-        rawTime: new Date(g.createdAt || g.date).getTime()
-      });
-    }
-  });
-
-  Object.values(erpState.supplierPayments || {}).forEach(p => {
-    if (p.supplierId === supId) {
-      transactions.push({
-        date: p.date ? p.date.split("T")[0] : '',
-        type: `💵 Debt Settlement (${(p.method || 'cash').toUpperCase()})`,
-        ref: p.chequeNo ? `Cheque #${p.chequeNo} (${p.bank || ''})` : (p.refNo || 'Direct Payment'),
-        debit: parseFloat(p.amount || 0),
-        credit: 0,
-        rawTime: new Date(p.date).getTime()
-      });
-    }
-  });
-
-  transactions.sort((a, b) => a.rawTime - b.rawTime);
-
-  const tbody = document.getElementById("supLedgerTableBody");
-  if (tbody) {
-    if (transactions.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-400">ගනුදෙනු දත්ත නොමැත...</td></tr>`;
-    } else {
-      tbody.innerHTML = "";
-      let runningBalance = 0;
-
-      transactions.forEach(t => {
-        runningBalance += (t.credit - t.debit);
-
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-gray-50 border-b border-gray-100";
-        tr.innerHTML = `
-          <td class="p-2.5 font-semibold text-gray-600">${t.date}</td>
-          <td class="p-2.5 font-bold text-gray-800">${t.type}</td>
-          <td class="p-2.5 font-mono text-gray-500">${t.ref}</td>
-          <td class="p-2.5 text-right font-bold text-green-600">${t.debit > 0 ? 'Rs. ' + t.debit.toFixed(2) : '-'}</td>
-          <td class="p-2.5 text-right font-bold text-purple-900">${t.credit > 0 ? 'Rs. ' + t.credit.toFixed(2) : '-'}</td>
-          <td class="p-2.5 text-right font-black ${runningBalance > 0 ? 'text-red-600' : 'text-gray-800'}">Rs. ${runningBalance.toFixed(2)}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-  }
-
+  const fromIn = document.getElementById("supLedgerFromDate");
+  const toIn = document.getElementById("supLedgerToDate");
+  if (fromIn) fromIn.value = "";
+  if (toIn) toIn.value = "";
+  
+  renderSupplierLedgerTable(supId);
   document.getElementById("supplierLedgerModal")?.classList.remove("hidden");
 }
 
 export function closeSupplierLedgerModal() {
   document.getElementById("supplierLedgerModal")?.classList.add("hidden");
   setActiveSupplierLedgerId(null);
+}
+
+export function filterSupplierLedgerByDate() {
+  if (!activeSupplierLedgerId) return;
+  renderSupplierLedgerTable(activeSupplierLedgerId);
+}
+
+export function resetSupplierLedgerDateFilter() {
+  const fromIn = document.getElementById("supLedgerFromDate");
+  const toIn = document.getElementById("supLedgerToDate");
+  if (fromIn) fromIn.value = "";
+  if (toIn) toIn.value = "";
+  if (activeSupplierLedgerId) {
+    renderSupplierLedgerTable(activeSupplierLedgerId);
+  }
+}
+
+export function renderSupplierLedgerTable(supId) {
+  const sup = erpState.suppliers[supId];
+  if (!sup) return;
+
+  const sub = document.getElementById("supLedgerSubtitle");
+  if (sub) sub.innerText = `Supplier: ${sup.name} | Contact: ${sup.phone}`;
+
+  const fromVal = document.getElementById("supLedgerFromDate")?.value;
+  const toVal = document.getElementById("supLedgerToDate")?.value;
+
+  const fromTime = fromVal ? new Date(fromVal + "T00:00:00").getTime() : 0;
+  const toTime = toVal ? new Date(toVal + "T23:59:59").getTime() : Infinity;
+
+  const allTransactions = [];
+
+  Object.values(erpState.grns || {}).forEach(g => {
+    if (g.supplierId === supId) {
+      const gDateStr = g.date || (g.createdAt ? g.createdAt.split("T")[0] : "");
+      const gTime = new Date(g.createdAt || g.date || 0).getTime();
+      allTransactions.push({
+        date: gDateStr,
+        type: `📥 GRN Purchase (${(g.paymentMethod || 'cash').toUpperCase()})`,
+        ref: `${g.grnNumber} (Inv: ${g.invoiceNo || 'N/A'})`,
+        debit: g.paymentMethod !== 'credit' ? parseFloat(g.netTotal || 0) : 0,
+        credit: parseFloat(g.netTotal || 0),
+        rawTime: gTime
+      });
+    }
+  });
+
+  Object.values(erpState.supplierPayments || {}).forEach(p => {
+    if (p.supplierId === supId) {
+      const pDateStr = p.date ? p.date.split("T")[0] : "";
+      const pTime = new Date(p.date || 0).getTime();
+      allTransactions.push({
+        date: pDateStr,
+        type: `💵 Debt Settlement (${(p.method || 'cash').toUpperCase()})`,
+        ref: p.chequeNo ? `Cheque #${p.chequeNo} (${p.bank || ''})` : (p.refNo || 'Direct Payment'),
+        debit: parseFloat(p.amount || 0),
+        credit: 0,
+        rawTime: pTime
+      });
+    }
+  });
+
+  allTransactions.sort((a, b) => a.rawTime - b.rawTime);
+
+  let openingBalanceBF = 0;
+  const filteredTransactions = [];
+  let periodPurchases = 0;
+  let periodPaid = 0;
+
+  allTransactions.forEach(t => {
+    if (t.rawTime < fromTime) {
+      openingBalanceBF += (t.credit - t.debit);
+    } else if (t.rawTime <= toTime) {
+      filteredTransactions.push(t);
+      periodPurchases += t.credit;
+      periodPaid += t.debit;
+    }
+  });
+
+  const { totalPurchases: lifePurchases, totalPaid: lifePaid, creditBalance: lifeCredit } = calculateSupplierBalances(supId);
+
+  const purEl = document.getElementById("supLedgerTotalPurchases");
+  const paidEl = document.getElementById("supLedgerTotalPaid");
+  const outEl = document.getElementById("supLedgerOutstanding");
+
+  if (fromVal || toVal) {
+    if (purEl) purEl.innerText = `Rs. ${periodPurchases.toFixed(2)}`;
+    if (paidEl) paidEl.innerText = `Rs. ${periodPaid.toFixed(2)}`;
+    const periodBalance = Math.max(0, openingBalanceBF + (periodPurchases - periodPaid));
+    if (outEl) outEl.innerText = `Rs. ${periodBalance.toFixed(2)}`;
+  } else {
+    if (purEl) purEl.innerText = `Rs. ${lifePurchases.toFixed(2)}`;
+    if (paidEl) paidEl.innerText = `Rs. ${lifePaid.toFixed(2)}`;
+    if (outEl) outEl.innerText = `Rs. ${lifeCredit.toFixed(2)}`;
+  }
+
+  const tbody = document.getElementById("supLedgerTableBody");
+  if (!tbody) return;
+
+  if (filteredTransactions.length === 0 && openingBalanceBF === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-400">තෝරාගත් කාලසීමාව තුළ ගනුදෙනු දත්ත නොමැත...</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = "";
+  let runningBalance = openingBalanceBF;
+
+  // Render Opening Balance B/F if a From Date is set
+  if (fromVal && openingBalanceBF !== 0) {
+    const bfTr = document.createElement("tr");
+    bfTr.className = "bg-purple-50/60 font-bold border-b border-purple-100 text-purple-950";
+    bfTr.innerHTML = `
+      <td class="p-2.5 font-mono text-gray-500">${fromVal}</td>
+      <td class="p-2.5"><span class="px-2 py-0.5 rounded-full text-[9px] bg-purple-100 text-purple-800 font-extrabold uppercase">⚖️ BALANCE B/F</span></td>
+      <td class="p-2.5 text-purple-900 font-extrabold">ආරම්භක ශේෂය (Brought Forward)</td>
+      <td class="p-2.5 text-right text-gray-400">-</td>
+      <td class="p-2.5 text-right text-gray-400">-</td>
+      <td class="p-2.5 text-right font-black ${runningBalance > 0 ? 'text-red-600' : 'text-gray-800'}">Rs. ${runningBalance.toFixed(2)}</td>
+    `;
+    tbody.appendChild(bfTr);
+  }
+
+  filteredTransactions.forEach(t => {
+    runningBalance += (t.credit - t.debit);
+
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-gray-50 border-b border-gray-100";
+    tr.innerHTML = `
+      <td class="p-2.5 font-semibold text-gray-600">${t.date}</td>
+      <td class="p-2.5 font-bold text-gray-800">${t.type}</td>
+      <td class="p-2.5 font-mono text-gray-500">${t.ref}</td>
+      <td class="p-2.5 text-right font-bold text-green-600">${t.debit > 0 ? 'Rs. ' + t.debit.toFixed(2) : '-'}</td>
+      <td class="p-2.5 text-right font-bold text-purple-900">${t.credit > 0 ? 'Rs. ' + t.credit.toFixed(2) : '-'}</td>
+      <td class="p-2.5 text-right font-black ${runningBalance > 0 ? 'text-red-600' : 'text-gray-800'}">Rs. ${runningBalance.toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 export function openSupPayFromLedger() {
@@ -285,8 +359,11 @@ export function exportSupplierLedgerToCSV() {
   const sup = erpState.suppliers[activeSupplierLedgerId];
   if (!sup) return;
 
+  const fromVal = document.getElementById("supLedgerFromDate")?.value || "All";
+  const toVal = document.getElementById("supLedgerToDate")?.value || "All";
+
   const rows = document.querySelectorAll("#supLedgerTableBody tr");
-  let csv = `Date,Type,Reference,Debit (Paid),Credit (Purchased),Balance\n`;
+  let csv = `Date,Type,Reference,Debit (Paid Rs),Credit (Purchased Rs),Balance (Debt Rs)\n`;
 
   rows.forEach(r => {
     const cols = r.querySelectorAll("td");
@@ -295,7 +372,7 @@ export function exportSupplierLedgerToCSV() {
     }
   });
 
-  downloadCSVFile(csv, `Ledger_${sup.name.replace(/\s+/g, '_')}_${getLocalDateString()}.csv`);
+  downloadCSVFile(csv, `Ledger_${sup.name.replace(/\s+/g, '_')}_${fromVal}_to_${toVal}.csv`);
 }
 
 // 3. ZERO-FREEZE SEARCHABLE GRN BUILDER
@@ -598,7 +675,7 @@ export function exportGrnToCSV() {
   downloadCSVFile(csv, `GRN_Report_${getLocalDateString()}.csv`);
 }
 
-// 4. SUPPLIER DEBT SETTLEMENT (AUTO-FOCUS SAFE)
+// 4. SUPPLIER DEBT SETTLEMENT
 export function openSupplierPayModal(supId, outstanding) {
   const sup = erpState.suppliers[supId];
   if (!sup) return;
@@ -663,6 +740,9 @@ export async function handleSupplierPaySubmit(e) {
     }
     closeSupplierPayModal();
     renderSuppliersDirectoryTable();
+    if (activeSupplierLedgerId) {
+      renderSupplierLedgerTable(activeSupplierLedgerId);
+    }
     showLiveToast("💰 Supplier Paid", `සැපයුම්කරුට Rs. ${amount.toFixed(2)} ක මුදලක් සාර්ථකව පියවන ලදී.`, "success", "fa-money-bill-wave");
   } catch (err) {
     showLiveToast("⚠️ දෝෂයකි", "ගෙවීම සටහන් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
@@ -676,6 +756,9 @@ window.closeSupplierModal = closeSupplierModal;
 window.handleSupplierSubmit = handleSupplierSubmit;
 window.openSupplierLedgerModal = openSupplierLedgerModal;
 window.closeSupplierLedgerModal = closeSupplierLedgerModal;
+window.filterSupplierLedgerByDate = filterSupplierLedgerByDate;
+window.resetSupplierLedgerDateFilter = resetSupplierLedgerDateFilter;
+window.renderSupplierLedgerTable = renderSupplierLedgerTable;
 window.openSupPayFromLedger = openSupPayFromLedger;
 window.exportSupplierLedgerToCSV = exportSupplierLedgerToCSV;
 window.addGrnItemRow = addGrnItemRow;
