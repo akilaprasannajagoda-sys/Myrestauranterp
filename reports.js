@@ -98,38 +98,57 @@ export function setReportPeriodPreset(preset) {
   applyReportDateFilter();
 }
 
-// 🔒 5-YEAR ZERO-LAG INDEXED SERVER QUERY
-export async function applyReportDateFilter() {
+// 🛡️ ZERO-BANDWIDTH INTELLIGENT REPORT QUERY ENGINE
+let isFetchingReports = false;
+let lastReportQueryKey = "";
+let lastReportFetchTime = 0;
+
+export async function applyReportDateFilter(forceRefresh = false) {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
-
-  if (fbQuery && fbQuery.query && dbRef && currentTenant) {
+  const queryKey = `${fromVal || 'ALL'}_${toVal || 'ALL'}`;
+  const nowMs = Date.now();
+  
+  // 🛡️ එකම කාලසීමාව නැවත නැවත Filter කිරීමේදී තත්පර 30 ක් ඇතුළත නම් Server එකෙන් Re-download නොකර Memory Cache එකෙන් පෙන්වයි
+  const isSameQueryRecent = (queryKey === lastReportQueryKey && (nowMs - lastReportFetchTime) < 30000 && !forceRefresh);
+  
+  if (!isSameQueryRecent && fbQuery && fbQuery.query && dbRef && currentTenant) {
+    if (isFetchingReports) return;
+    isFetchingReports = true;
+    
     try {
       let q;
       const baseInvoicesRef = dbRef(`tenants/${currentTenant}/invoices`);
-
+      
       if (fromVal && toVal) {
         const fromIso = new Date(fromVal).toISOString();
         const toIso = new Date(toVal).toISOString();
-        q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.endAt(toIso));
+        // 🛡️ මාසයක කාර්යබහුල හෝටලයක සම්පූර්ණ බිල්පත් ආවරණය වන පරිදි 1,200 ක උපරිමයකට සීමා කර ආරක්ෂා කරයි
+        q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.endAt(toIso), fbQuery.limitToLast(1200));
       } else if (fromVal) {
         const fromIso = new Date(fromVal).toISOString();
-        q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.limitToLast(2500));
+        q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.limitToLast(600));
       } else {
-        q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(1500));
+        // 🛡️ දිනයක් තෝරා නැති විට පරණ බිල්පත් 1,500ක් ඇදීම වෙනුවට මෑත බිල්පත් 150කට සීමා කර 90% ක් දත්ත ඉතිරි කරයි
+        q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(150));
       }
-
+      
       const snap = await fbQuery.get(q);
       if (snap.exists()) {
         erpState.invoices = snap.val();
       } else {
         erpState.invoices = {};
       }
+      
+      lastReportQueryKey = queryKey;
+      lastReportFetchTime = nowMs;
     } catch (err) {
       console.warn("Server query fallback to cache:", err.message);
+    } finally {
+      isFetchingReports = false;
     }
   }
-
+  
   if (activeReportTabName === "pnl") {
     renderPnLStatement();
   } else if (activeReportTabName === "hourly") {
@@ -144,7 +163,6 @@ export async function applyReportDateFilter() {
     renderInvoiceReportsList();
   }
 }
-
 export function getFilteredInvoicesList() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
