@@ -27,5 +27,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 📡 Local LAN Offline Printing Bridges (අන්තර්ජාලය නැතිව Print කිරීමට)
   getLocalServerInfo: () => ipcRenderer.invoke('get-local-server-info'),
-  onLanOrderReceived: (callback) => ipcRenderer.on('lan-order-received', (event, data) => callback(data))
+  onLanOrderReceived: (callback) => ipcRenderer.on('lan-order-received', (event, data) => callback(data)),
+  closeApp: () => ipcRenderer.invoke('close-app')
 });
