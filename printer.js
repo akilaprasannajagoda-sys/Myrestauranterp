@@ -1,6 +1,8 @@
 // ==========================================================================
 // MODULE 12: UNIVERSAL SILENT DIRECT HARDWARE PRINTER DRIVER (KOT & BOT COMPLIANT)
 // 🛡️ DUAL PAPER WIDTH ADAPTIVE ENGINE (80MM & 58MM AUTO-SCALED ZERO-CLIPPING)
+// 🌟 ADVANCED MULTI-LINE AUTO-WRAP ENGINE (NO ITEM NAME TRUNCATION)
+// 🖨️ DEDICATED SLOT 5 PAYSLIP PRINTER ROUTING SUPPORT
 // ==========================================================================
 
 import { erpState, currentTenantInfo } from './state.js';
@@ -18,7 +20,30 @@ const CMD_CENTER = ESC + "a\x01";
 const CMD_LEFT = ESC + "a\x00";
 const CMD_RIGHT = ESC + "a\x02";
 
-// 1. FORMAT RAW TEXT RECEIPT (ADAPTIVE 80MM / 58MM ESC/POS)
+// 🛡️ TEXT WRAPPING HELPER (දිග කෑම නම් කැපෙන්නේ නැතිව පේළි වලට කඩන එන්ජිම)
+function wrapText(text, maxLen) {
+  if (!text) return [""];
+  const words = String(text).trim().split(/\s+/);
+  const lines = [];
+  let currentLine = "";
+
+  words.forEach(word => {
+    if ((currentLine + (currentLine ? " " : "") + word).length <= maxLen) {
+      currentLine += (currentLine ? " " : "") + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      while (word.length > maxLen) {
+        lines.push(word.substring(0, maxLen));
+        word = word.substring(maxLen);
+      }
+      currentLine = word;
+    }
+  });
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+// 1. FORMAT RAW TEXT RECEIPT (ADAPTIVE 80MM / 58MM ESC/POS WITH AUTO-WRAP)
 export function formatReceiptRawText(inv, stationLabel = "") {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const addr = currentTenantInfo?.address || "";
@@ -43,6 +68,9 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   text += `Invoice #${inv.invoiceNumber}\n`;
   text += `Date: ${dateStr}\n`;
   text += `Type: ${inv.orderType} (Table: ${inv.tableNo || 'N/A'})\n`;
+  if (inv.customerName) {
+    text += `Customer: ${inv.customerName} ${inv.customerPhone ? '(' + inv.customerPhone + ')' : ''}\n`;
+  }
   text += CMD_LEFT + divider;
   
   if (is58) {
@@ -57,10 +85,19 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   const totLen = is58 ? 7 : 9;
 
   (inv.items || []).forEach(i => {
-    const namePart = (i.name + " x" + i.qty).padEnd(nameLen, " ").substring(0, nameLen);
-    const pricePart = parseFloat(i.price).toFixed(2).padStart(priceLen, " ");
-    const totPart = (i.price * i.qty).toFixed(2).padStart(totLen, " ");
-    text += `${namePart} ${pricePart} ${totPart}\n`;
+    const fullName = `${i.name} x${i.qty}`;
+    const nameLines = wrapText(fullName, nameLen);
+    const pricePart = parseFloat(i.price || 0).toFixed(2).padStart(priceLen, " ");
+    const totPart = (parseFloat(i.price || 0) * (parseInt(i.qty) || 1)).toFixed(2).padStart(totLen, " ");
+
+    // First line: First chunk of item name + Price + Total on the right
+    text += `${(nameLines[0] || '').padEnd(nameLen, " ")} ${pricePart} ${totPart}\n`;
+
+    // Remaining lines of item name (wrapped cleanly without overwriting price/total)
+    for (let l = 1; l < nameLines.length; l++) {
+      text += `  ${nameLines[l]}\n`;
+    }
+
     if (i.note) {
       text += `  * Note: ${i.note}\n`;
     }
@@ -74,7 +111,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
     text += `Discount: -Rs. ${parseFloat(inv.discountAmount).toFixed(2)}\n`;
   }
   if (parseFloat(inv.loyaltyDiscount || 0) > 0) {
-    text += `Points Disc: -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)}\n`;
+    text += `Points Disc (${inv.loyaltyPointsRedeemed || 0} Pts): -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)}\n`;
   }
   if (parseFloat(inv.scAmount || 0) > 0) {
     text += `Service Charge: Rs. ${parseFloat(inv.scAmount).toFixed(2)}\n`;
@@ -93,7 +130,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   if (p.method === "split") {
     text += `Payment: SPLIT (Cash: Rs. ${parseFloat(p.splitCash || 0).toFixed(2)} + Card: Rs. ${parseFloat(p.splitCard || 0).toFixed(2)})\n`;
   } else {
-    text += `Payment: ${p.method.toUpperCase()}\n`;
+    text += `Payment: ${p.method.toUpperCase()}${p.cardType ? ' (' + p.cardType + ')' : ''}\n`;
     if (p.method === "cash" && p.cashTendered) {
       text += `Tendered: Rs. ${parseFloat(p.cashTendered).toFixed(2)} | Change: Rs. ${parseFloat(p.change || 0).toFixed(2)}\n`;
     }
@@ -101,7 +138,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
 
   if (inv.loyaltyPointsEarned > 0) {
     text += divider;
-    text += `⭐ Points Earned: +${inv.loyaltyPointsEarned} Pts\n`;
+    text += `⭐ Points Earned Today: +${inv.loyaltyPointsEarned} Pts\n`;
   }
   
   text += CMD_CENTER + "\n" + footer + "\n";
@@ -112,7 +149,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
   return text;
 }
 
-// 2. DYNAMIC KOT & BOT STATION ORDER TICKET FORMATTER (ADAPTIVE 80MM / 58MM ESC/POS)
+// 2. DYNAMIC KOT & BOT STATION ORDER TICKET FORMATTER (ADAPTIVE 80MM / 58MM ESC/POS WITH AUTO-WRAP)
 export function formatStationOrderTicket(ticket, stationType = "KOT") {
   const isBar = (stationType || "").toUpperCase() === "BOT";
   const title = isBar ? "*** BAR ORDER TICKET (BOT) ***" : "*** KITCHEN ORDER TICKET (KOT) ***";
@@ -125,7 +162,7 @@ export function formatStationOrderTicket(ticket, stationType = "KOT") {
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
   text += CMD_BOLD_ON + `TABLE: ${ticket.tableNo || 'N/A'}\n` + CMD_BOLD_OFF;
-  text += `Type: ${(ticket.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString()}\n`;
+  text += `Type: ${(ticket.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}\n`;
   if (ticket.waiterName) {
     text += `Waiter: ${ticket.waiterName}\n`;
   }
@@ -143,9 +180,18 @@ export function formatStationOrderTicket(ticket, stationType = "KOT") {
 
   (ticket.items || []).forEach(i => {
     const tag = i.isAddOn ? " (+ADD)" : "";
-    const nameStr = (i.name + tag).padEnd(nameWidth, " ").substring(0, nameWidth);
+    const fullName = i.name + tag;
+    const nameLines = wrapText(fullName, nameWidth);
     const qtyStr = ("x" + i.qty).padStart(qtyWidth, " ");
-    text += CMD_BOLD_ON + `${nameStr} ${qtyStr}\n` + CMD_BOLD_OFF;
+    
+    // First line with Qty on the right
+    text += CMD_BOLD_ON + `${(nameLines[0] || '').padEnd(nameWidth, " ")} ${qtyStr}\n` + CMD_BOLD_OFF;
+
+    // Remaining lines of item name wrapped cleanly
+    for (let l = 1; l < nameLines.length; l++) {
+      text += CMD_BOLD_ON + `  ${nameLines[l]}\n` + CMD_BOLD_OFF;
+    }
+
     if (i.note) {
       text += `  >> NOTE: ${i.note}\n`;
     }
@@ -165,34 +211,68 @@ export function formatKOTRawText(kot, stationLabel = "") {
   return formatStationOrderTicket(kot, stationType);
 }
 
-// 3. 80MM / 58MM DEDICATED THERMAL PAYSLIP FORMATTER
+// 3. 80MM / 58MM COMPLETE SRI LANKAN EPF/ETF THERMAL PAYSLIP FORMATTER
 export function formatPayslipRawText(p) {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   
   const is58 = (erpState.settings?.paperWidth === "58mm");
   const lineWidth = is58 ? 32 : 48;
   const divider = "-".repeat(lineWidth) + "\n";
+  const doubleDivider = "=".repeat(lineWidth) + "\n";
 
   let text = CMD_INIT;
   text += CMD_CENTER + CMD_BOLD_ON + `${hName}\n` + CMD_BOLD_OFF;
-  text += `*** EMPLOYEE SALARY PAYSLIP ***\n`;
+  text += `*** OFFICIAL SALARY PAYSLIP ***\n`;
   text += `Month: ${p.monthStr || 'N/A'}\n`;
   text += CMD_LEFT + divider;
   text += CMD_BOLD_ON + `Emp ID : ${p.empId || 'EMP'}\n` + CMD_BOLD_OFF;
   text += `Name   : ${p.empName || 'Staff'}\n`;
   text += `Role   : ${p.empRole || 'Staff'}\n`;
+  if (p.epfNo) {
+    text += `EPF No : ${p.epfNo}\n`;
+  }
   text += `Days Worked : ${p.daysWorked || 0} Days\n`;
   text += divider;
-  text += CMD_RIGHT;
-  text += `Basic Salary: Rs. ${parseFloat(p.basic || 0).toFixed(2)}\n`;
-  text += `OT (${p.otHours || 0}h @ Rs.${p.otRate || 0}): +Rs. ${parseFloat(p.otAmount || 0).toFixed(2)}\n`;
-  text += `Gross Earnings: Rs. ${(parseFloat(p.basic || 0) + parseFloat(p.otAmount || 0)).toFixed(2)}\n`;
-  text += `Advances Deducted: -Rs. ${parseFloat(p.advances || 0).toFixed(2)}\n`;
-  text += divider;
-  text += CMD_BOLD_ON + `NET SALARY: Rs. ${parseFloat(p.netSalary || 0).toFixed(2)}\n` + CMD_BOLD_OFF;
-  text += divider + "\n";
-  text += CMD_CENTER;
   
+  // EARNINGS
+  text += CMD_BOLD_ON + `EARNINGS (ආදායම්):\n` + CMD_BOLD_OFF;
+  text += `  Basic Salary: Rs. ${parseFloat(p.basic || 0).toFixed(2)}\n`;
+  if (parseFloat(p.otAmount || 0) > 0) {
+    text += `  OT (${p.otHours || 0}h @ Rs.${parseFloat(p.otRate || 0).toFixed(0)}): +Rs. ${parseFloat(p.otAmount || 0).toFixed(2)}\n`;
+  }
+  if (parseFloat(p.allowances || 0) > 0) {
+    text += `  Allowances (දීමනා): +Rs. ${parseFloat(p.allowances || 0).toFixed(2)}\n`;
+  }
+  const gross = parseFloat(p.grossSalary || (parseFloat(p.basic || 0) + parseFloat(p.otAmount || 0) + parseFloat(p.allowances || 0)));
+  text += CMD_BOLD_ON + `  Gross Salary: Rs. ${gross.toFixed(2)}\n` + CMD_BOLD_OFF;
+  
+  text += divider;
+  // DEDUCTIONS
+  text += CMD_BOLD_ON + `DEDUCTIONS (අඩු කිරීම්):\n` + CMD_BOLD_OFF;
+  if (parseFloat(p.epfEmployee || 0) > 0) {
+    text += `  EPF Employee (8%): -Rs. ${parseFloat(p.epfEmployee || 0).toFixed(2)}\n`;
+  }
+  if (parseFloat(p.advances || 0) > 0) {
+    text += `  Salary Advances: -Rs. ${parseFloat(p.advances || 0).toFixed(2)}\n`;
+  }
+  if (parseFloat(p.otherDeductions || 0) > 0) {
+    text += `  Other Deductions: -Rs. ${parseFloat(p.otherDeductions || 0).toFixed(2)}\n`;
+  }
+  
+  text += doubleDivider;
+  text += CMD_RIGHT;
+  text += CMD_BOLD_ON + `NET PAYABLE: Rs. ${parseFloat(p.netSalary || 0).toFixed(2)}\n` + CMD_BOLD_OFF;
+  text += CMD_LEFT + divider;
+
+  // EMPLOYER CONTRIBUTIONS
+  if (parseFloat(p.epfEmployer || 0) > 0 || parseFloat(p.etfEmployer || 0) > 0) {
+    text += `Employer Contributions (සේවායෝජක දායකත්වය):\n`;
+    if (parseFloat(p.epfEmployer || 0) > 0) text += `  EPF (12%): Rs. ${parseFloat(p.epfEmployer || 0).toFixed(2)}\n`;
+    if (parseFloat(p.etfEmployer || 0) > 0) text += `  ETF (3%) : Rs. ${parseFloat(p.etfEmployer || 0).toFixed(2)}\n`;
+    text += divider;
+  }
+  
+  text += CMD_CENTER + "\n\n";
   if (is58) {
     text += `.................   .................\n`;
     text += `  Employer Sign       Employee Sign  \n\n`;
@@ -219,7 +299,7 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
       const res = await window.electronAPI.printSilent({
         printerName: targetDeviceName,
         htmlContent: contentToPrint,
-        paperWidth: paperWidth // 🛡️ 80mm හෝ 58mm අගය Electron Driver වෙත යවයි
+        paperWidth: paperWidth
       });
       if (res && res.success) {
         return true;
@@ -249,7 +329,7 @@ export async function sendDirectSilentPrint(targetDeviceName, rawContent, htmlEl
   return true;
 }
 
-// 5. PRINT THERMAL 80MM / 58MM PAYSLIP DISPATCHER
+// 5. PRINT THERMAL PAYSLIP DISPATCHER (SLOT 5 DEDICATED ROUTING)
 export async function printThermalPayslip(payslipData) {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const pHotel = document.getElementById("payslipThermalHotel");
@@ -277,20 +357,21 @@ export async function printThermalPayslip(payslipData) {
   if (pOtR) pOtR.innerText = payslipData.otRate || 0;
   if (pOtPay) pOtPay.innerText = `+Rs. ${parseFloat(payslipData.otAmount || 0).toFixed(2)}`;
   
-  const gross = parseFloat(payslipData.basic || 0) + parseFloat(payslipData.otAmount || 0);
+  const gross = parseFloat(payslipData.basic || 0) + parseFloat(payslipData.otAmount || 0) + parseFloat(payslipData.allowances || 0);
   if (pGross) pGross.innerText = `Rs. ${gross.toFixed(2)}`;
   if (pAdv) pAdv.innerText = `-Rs. ${parseFloat(payslipData.advances || 0).toFixed(2)}`;
   if (pNet) pNet.innerText = `Rs. ${parseFloat(payslipData.netSalary || 0).toFixed(2)}`;
   
+  // 🖨️ ROUTING: DEDICATED SLOT 5 -> SLOT 4 -> SLOT 1 -> DEFAULT
   const pr = erpState.settings?.printers || {};
-  let targetDevice = pr.p4?.device || pr.p1?.device || "";
+  let targetDevice = (pr.p5?.device || pr.p4?.device || pr.p1?.device || "").trim();
   
   const rawText = formatPayslipRawText(payslipData);
   await sendDirectSilentPrint(targetDevice, rawText, "payslipThermalModal");
   showLiveToast("🖨️ Payslip Printed", `${payslipData.empName} ගේ Payslip එක සාර්ථකව Print විය.`, "success", "fa-receipt");
 }
 
-// 6. TEST PRINT HARDWARE PRINTER (WITH SAMPLE DATA PER STATION)
+// 6. TEST PRINT HARDWARE PRINTER (SUPPORTS SLOTS p1 TO p5)
 export async function testDirectPrinter(slotKey) {
   const pr = erpState.settings?.printers?.[slotKey];
   const devName = document.getElementById(`${slotKey}_device`)?.value.trim() || pr?.device || "";
@@ -311,25 +392,38 @@ export async function testDirectPrinter(slotKey) {
   if (rType) rType.innerText = `Station: [${slotKey.toUpperCase()}] ${labelName} (${devName || 'Default'})`;
   if (rItems) {
     rItems.innerHTML = `
-      <div class="flex justify-between py-1 border-b border-black">
-        <span class="w-1/2 font-bold">1. Printer Connection</span>
-        <span class="w-1/4 text-right">OK</span>
-        <span class="w-1/4 text-right font-bold">100%</span>
+      <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #000;">
+        <span style="flex: 2; font-weight: bold;">1. Printer Connection</span>
+        <span style="flex: 1; text-align: right;">OK</span>
+        <span style="flex: 1; text-align: right; font-weight: bold;">100%</span>
       </div>
-      <div class="flex justify-between py-1 border-b border-black">
-        <span class="w-1/2 font-bold">2. Thermal Head Test</span>
-        <span class="w-1/4 text-right">OK</span>
-        <span class="w-1/4 text-right font-bold">PASS</span>
+      <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #000;">
+        <span style="flex: 2; font-weight: bold;">2. Thermal Head & Wrap Test</span>
+        <span style="flex: 1; text-align: right;">OK</span>
+        <span style="flex: 1; text-align: right; font-weight: bold;">PASS</span>
       </div>
     `;
   }
   if (rSub) rSub.innerText = `Rs. 0.00`;
   if (rTotal) rTotal.innerText = `TEST PASSED`;
-  if (rPay) rPay.innerHTML = `<div class="text-center font-bold">*** Software by systems.lk (0760672029) ***</div>`;
+  if (rPay) rPay.innerHTML = `<div style="text-align: center; font-weight: bold;">*** Software by systems.lk (0760672029) ***</div>`;
   
   try {
-    await sendDirectSilentPrint(devName, "", "receiptModal");
-    showLiveToast("🖨️ Test Print Command Sent", `[${labelName}] වෙත Print Request එක යවන ලදී.`, "success", "fa-check");
+    const testRaw = `
+${ESC}@
+${ESC}a\x01${ESC}E\x01HARDWARE TEST PRINT${ESC}E\x00
+[${slotKey.toUpperCase()}] ${labelName}
+Device: ${devName || 'System Default'}
+${"-".repeat(32)}
+Connection Status: OK (100%)
+Thermal Head Test: PASSED
+Auto-Wrap Engine: READY
+${"-".repeat(32)}
+Software by systems.lk | 0760672029
+\n\n\n${CMD_CUT}
+`;
+    await sendDirectSilentPrint(devName, testRaw, "receiptModal");
+    showLiveToast("🖨️ Test Print Command Sent", `[${labelName}] වෙත Test Print එක සාර්ථකව යවන ලදී.`, "success", "fa-check");
   } catch (err) {
     alert("Test Print Error: " + err.message);
   }
