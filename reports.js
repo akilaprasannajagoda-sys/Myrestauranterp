@@ -1,6 +1,8 @@
 // ==========================================================================
 // MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & WHATSAPP
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (USAR COMPLIANT P&L WITH STORE ISSUES & WASTAGE)
+// 💳 DAY-END CARD MACHINE BATCH RECONCILIATION & CARD TYPE BREAKDOWN
+// 📑 SMART INVOICE LIST PAGINATION (ZERO-LAG BROWSER RENDERING)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, currentUserRole } from './state.js';
@@ -16,6 +18,10 @@ let fbQuery = null;
 let transactionFn = null;
 
 let pendingVoidInvoiceId = null;
+
+// Pagination State for Invoices Report
+export let currentInvoicesPage = 1;
+export const INVOICES_PER_PAGE = 25;
 
 export function initReportsContext(dbRefInstance, pushMethod, updateMethod, printReceiptFn, fbQueryTools = null, runTransactionMethod = null) {
   dbRef = dbRefInstance;
@@ -57,6 +63,7 @@ export function switchReportTab(tabName) {
   } else if (tabName === "credits") {
     renderCustomerCreditsLedger();
   } else {
+    currentInvoicesPage = 1;
     renderInvoiceReportsList();
   }
 }
@@ -109,7 +116,6 @@ export async function applyReportDateFilter(forceRefresh = false) {
   const queryKey = `${fromVal || 'ALL'}_${toVal || 'ALL'}`;
   const nowMs = Date.now();
   
-  // 🛡️ එකම කාලසීමාව නැවත නැවත Filter කිරීමේදී තත්පර 30 ක් ඇතුළත නම් Server එකෙන් Re-download නොකර Memory Cache එකෙන් පෙන්වයි
   const isSameQueryRecent = (queryKey === lastReportQueryKey && (nowMs - lastReportFetchTime) < 30000 && !forceRefresh);
   
   if (!isSameQueryRecent && fbQuery && fbQuery.query && dbRef && currentTenant) {
@@ -123,13 +129,11 @@ export async function applyReportDateFilter(forceRefresh = false) {
       if (fromVal && toVal) {
         const fromIso = new Date(fromVal).toISOString();
         const toIso = new Date(toVal).toISOString();
-        // 🛡️ මාසයක කාර්යබහුල හෝටලයක සම්පූර්ණ බිල්පත් ආවරණය වන පරිදි 1,200 ක උපරිමයකට සීමා කර ආරක්ෂා කරයි
         q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.endAt(toIso), fbQuery.limitToLast(1200));
       } else if (fromVal) {
         const fromIso = new Date(fromVal).toISOString();
         q = fbQuery.query(baseInvoicesRef, fbQuery.orderByChild("createdAt"), fbQuery.startAt(fromIso), fbQuery.limitToLast(600));
       } else {
-        // 🛡️ දිනයක් තෝරා නැති විට පරණ බිල්පත් 1,500ක් ඇදීම වෙනුවට මෑත බිල්පත් 150කට සීමා කර 90% ක් දත්ත ඉතිරි කරයි
         q = fbQuery.query(baseInvoicesRef, fbQuery.limitToLast(150));
       }
       
@@ -149,6 +153,7 @@ export async function applyReportDateFilter(forceRefresh = false) {
     }
   }
   
+  currentInvoicesPage = 1;
   if (activeReportTabName === "pnl") {
     renderPnLStatement();
   } else if (activeReportTabName === "hourly") {
@@ -163,6 +168,7 @@ export async function applyReportDateFilter(forceRefresh = false) {
     renderInvoiceReportsList();
   }
 }
+
 export function getFilteredInvoicesList() {
   const fromVal = document.getElementById("repFromDate")?.value;
   const toVal = document.getElementById("repToDate")?.value;
@@ -179,7 +185,12 @@ export function getFilteredInvoicesList() {
   });
 }
 
-// 1. INVOICES & INCOME REPORT (DOM SLICED FOR 3-5 YEAR ZERO-LAG)
+// 1. INVOICES & INCOME REPORT (WITH CLEAN PAGINATION)
+export function changeInvoicesPage(newPage) {
+  currentInvoicesPage = Math.max(1, newPage);
+  renderInvoiceReportsList();
+}
+
 export function renderInvoiceReportsList() {
   const tbody = document.getElementById("repInvoicesTableBody");
   const countBadge = document.getElementById("repInvoiceCount");
@@ -225,13 +236,19 @@ export function renderInvoiceReportsList() {
     return;
   }
 
-  tbody.innerHTML = "";
   list.sort((a, b) => new Date(b[1].createdAt || 0).getTime() - new Date(a[1].createdAt || 0).getTime());
 
-  // 🛡️ DOM Slicing: Render top 120 invoices to keep UI smooth
-  const visibleSubset = list.slice(0, 120);
+  // 📑 PAGINATION SLICING ENGINE
+  const totalPages = Math.ceil(list.length / INVOICES_PER_PAGE) || 1;
+  if (currentInvoicesPage > totalPages) currentInvoicesPage = totalPages;
 
-  visibleSubset.forEach(([id, inv]) => {
+  const startIndex = (currentInvoicesPage - 1) * INVOICES_PER_PAGE;
+  const endIndex = startIndex + INVOICES_PER_PAGE;
+  const pagedSubset = list.slice(startIndex, endIndex);
+
+  tbody.innerHTML = "";
+
+  pagedSubset.forEach(([id, inv]) => {
     const isVoided = inv.status === "Voided";
     const p = inv.payment || { method: "cash" };
     
@@ -247,7 +264,7 @@ export function renderInvoiceReportsList() {
       if (p.method === "cash") {
         payDetailHtml += ` <span class="text-[10px] text-gray-400 block font-semibold">Tendered: ${p.cashTendered || inv.netTotal} | Chg: ${p.change || 0}</span>`;
       } else if (p.method === "card") {
-        payDetailHtml += ` <span class="text-[10px] text-gray-500 block font-bold">${p.cardType || 'Card'} (**** ${p.last4 || '****'})</span>`;
+        payDetailHtml += ` <span class="text-[10px] text-gray-700 block font-bold">${p.cardType || 'Card'}${p.last4 ? ' (**** ' + p.last4 + ')' : ''}</span>`;
       } else if (p.method === "transfer") {
         payDetailHtml += ` <span class="text-[10px] text-gray-500 block font-mono">Ref: ${p.refNo || '-'}</span>`;
       } else if (p.method === "split") {
@@ -301,6 +318,30 @@ export function renderInvoiceReportsList() {
     `;
     tbody.appendChild(tr);
   });
+
+  // 📑 PAGINATION CONTROLS BAR
+  if (totalPages > 1) {
+    const pagRow = document.createElement("tr");
+    pagRow.innerHTML = `
+      <td colspan="6" class="p-3 bg-gray-50 border-t border-gray-200">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span class="text-gray-500 font-bold">
+            Showing ${startIndex + 1} - ${Math.min(endIndex, list.length)} of ${list.length} Invoices (Page ${currentInvoicesPage} of ${totalPages})
+          </span>
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick="changeInvoicesPage(${currentInvoicesPage - 1})" ${currentInvoicesPage <= 1 ? 'disabled class="opacity-40 cursor-not-allowed px-2.5 py-1 rounded-lg border bg-white"' : 'class="px-2.5 py-1 rounded-lg border bg-white hover:bg-gray-100 font-bold cursor-pointer"'}>
+              <i class="fa-solid fa-chevron-left mr-1"></i> Prev
+            </button>
+            <span class="px-3 py-1 font-black bg-blue-50 text-blue-700 rounded-lg border border-blue-200">${currentInvoicesPage} / ${totalPages}</span>
+            <button type="button" onclick="changeInvoicesPage(${currentInvoicesPage + 1})" ${currentInvoicesPage >= totalPages ? 'disabled class="opacity-40 cursor-not-allowed px-2.5 py-1 rounded-lg border bg-white"' : 'class="px-2.5 py-1 rounded-lg border bg-white hover:bg-gray-100 font-bold cursor-pointer"'}>
+              Next <i class="fa-solid fa-chevron-right ml-1"></i>
+            </button>
+          </div>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(pagRow);
+  }
 }
 
 // 2. ⭐ COMPREHENSIVE PROFIT & LOSS (P&L) STATEMENT
@@ -975,7 +1016,7 @@ export async function settleCustomerCredit(id) {
   }
 }
 
-// 🔒 UTF-8 BOM CSV EXPORT ENGINE (COMPREHENSIVE P&L EXPORT)
+// 🔒 UTF-8 BOM CSV EXPORT ENGINE
 export function exportCurrentReportToCSV() {
   const dateStr = getLocalDateString();
   const invMode = erpState.settings?.inventoryMode || "recipe";
@@ -986,9 +1027,9 @@ export function exportCurrentReportToCSV() {
       showLiveToast("ℹ️ Export Notice", "Export කිරීමට බිල්පත් දත්ත නොමැත.", "info", "fa-circle-info");
       return;
     }
-    let csv = `Invoice Number,Date Time,Order Type,Table No,Waiter,Customer Name,Phone,Payment Method,Subtotal,Bill Discount,Loyalty Pts Redeemed,Loyalty Discount (Rs.),Points Earned,SC,VAT,SSCL,Net Total,Status\n`;
+    let csv = `Invoice Number,Date Time,Order Type,Table No,Waiter,Customer Name,Phone,Payment Method,Card Type,Subtotal,Bill Discount,Loyalty Pts Redeemed,Loyalty Discount (Rs.),Points Earned,SC,VAT,SSCL,Net Total,Status\n`;
     list.forEach(([id, inv]) => {
-      csv += `"${inv.invoiceNumber}","${inv.createdAt}","${inv.orderType}","${inv.tableNo}","${inv.waiterName || 'N/A'}","${inv.customerName || ''}","${inv.customerPhone || ''}","${inv.payment ? inv.payment.method : 'cash'}","${inv.subtotal}","${inv.discountAmount || 0}","${inv.loyaltyPointsRedeemed || 0}","${inv.loyaltyDiscount || 0}","${inv.loyaltyPointsEarned || 0}","${inv.scAmount}","${inv.vatAmount}","${inv.cslAmount}","${inv.netTotal}","${inv.status || 'Paid'}"\n`;
+      csv += `"${inv.invoiceNumber}","${inv.createdAt}","${inv.orderType}","${inv.tableNo}","${inv.waiterName || 'N/A'}","${inv.customerName || ''}","${inv.customerPhone || ''}","${inv.payment ? inv.payment.method : 'cash'}","${inv.payment ? (inv.payment.cardType || '') : ''}","${inv.subtotal}","${inv.discountAmount || 0}","${inv.loyaltyPointsRedeemed || 0}","${inv.loyaltyDiscount || 0}","${inv.loyaltyPointsEarned || 0}","${inv.scAmount}","${inv.vatAmount}","${inv.cslAmount}","${inv.netTotal}","${inv.status || 'Paid'}"\n`;
     });
     downloadCSVFile(csv, `Invoices_Report_${dateStr}.csv`);
 
@@ -1075,20 +1116,17 @@ export function exportCurrentReportToCSV() {
   }
 }
 
-// 5. SMART SHIFT-BASED DAY-END Z-REPORT (PAST-MIDNIGHT SHIFT RECONCILED)
+// 5. SMART SHIFT-BASED DAY-END Z-REPORT (WITH DETAILED CARD BREAKDOWN & RECONCILIATION)
 export let currentZReportCalculatedData = null;
 
 export async function openDayEndModal() {
   const now = new Date();
   const todayLocalStr = getLocalDateString(now);
 
-  // 🛡️ FIX: රාත්‍රී 12:00 පසු වී පාන්දර 5:00 ට පෙර Z-Report එකක් ගත්තද පෙර දින විකුණුම් ආරක්ෂා කර ගැනීම
   let shiftStartTimeMs;
   if (now.getHours() < 5) {
-    // පාන්දර 5ට පෙර නම් ඊයේ දහවල් සිට සිදුවූ විකුණුම් ආවරණය කරයි (පැය 24 ක පෙර කාලය)
     shiftStartTimeMs = now.getTime() - (24 * 60 * 60 * 1000);
   } else {
-    // සාමාන්‍ය දිවා කාලයේදී අද උදෑසන 05:00 සිට ආරම්භ කරයි
     const todayMorning = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 5, 0, 0);
     shiftStartTimeMs = todayMorning.getTime();
   }
@@ -1103,7 +1141,7 @@ export async function openDayEndModal() {
       const lastAuditTimestamp = Math.max(...validPastTimestamps);
       const hoursSinceLastZ = (now.getTime() - lastAuditTimestamp) / (1000 * 60 * 60);
       if (hoursSinceLastZ <= 36) {
-        shiftStartTimeMs = lastAuditTimestamp; // අවසන් Z-Report එකේ සිට මේ දක්වා
+        shiftStartTimeMs = lastAuditTimestamp;
       }
     }
   }
@@ -1131,6 +1169,12 @@ export async function openDayEndModal() {
   let cardSales = 0;
   let transferSales = 0;
   let creditSales = 0;
+
+  // 💳 DETAILED CARD TYPES BREAKDOWN
+  let cardVisa = 0;
+  let cardMaster = 0;
+  let cardAmex = 0;
+  let cardOther = 0;
   
   const orderTypes = {
     "Dine-in": { count: 0, amount: 0 },
@@ -1165,13 +1209,31 @@ export async function openDayEndModal() {
       netSales += net;
 
       const p = inv.payment || { method: "cash" };
-      if (p.method === "cash") cashSales += net;
-      else if (p.method === "card") cardSales += net;
-      else if (p.method === "transfer") transferSales += net;
-      else if (p.method === "credit") creditSales += net;
-      else if (p.method === "split") {
+      let invoiceCardAmount = 0;
+
+      if (p.method === "cash") {
+        cashSales += net;
+      } else if (p.method === "card") {
+        cardSales += net;
+        invoiceCardAmount = net;
+      } else if (p.method === "transfer") {
+        transferSales += net;
+      } else if (p.method === "credit") {
+        creditSales += net;
+      } else if (p.method === "split") {
         cashSales += parseFloat(p.splitCash || 0);
-        cardSales += parseFloat(p.splitCard || 0);
+        const sCard = parseFloat(p.splitCard || 0);
+        cardSales += sCard;
+        invoiceCardAmount = sCard;
+      }
+
+      // 💳 Sort into Card Type Buckets
+      if (invoiceCardAmount > 0) {
+        const cType = (p.cardType || "Visa").toLowerCase();
+        if (cType.includes("visa")) cardVisa += invoiceCardAmount;
+        else if (cType.includes("master")) cardMaster += invoiceCardAmount;
+        else if (cType.includes("amex")) cardAmex += invoiceCardAmount;
+        else cardOther += invoiceCardAmount;
       }
 
       const oType = inv.orderType || "Dine-in";
@@ -1227,6 +1289,12 @@ export async function openDayEndModal() {
     netSales: Math.round(netSales * 100) / 100,
     cashSales: Math.round(cashSales * 100) / 100,
     cardSales: Math.round(cardSales * 100) / 100,
+    cardBreakdown: {
+      visa: Math.round(cardVisa * 100) / 100,
+      master: Math.round(cardMaster * 100) / 100,
+      amex: Math.round(cardAmex * 100) / 100,
+      other: Math.round(cardOther * 100) / 100
+    },
     transferSales: Math.round(transferSales * 100) / 100,
     creditSales: Math.round(creditSales * 100) / 100,
     openingFloat: Math.round(openingFloat * 100) / 100,
@@ -1240,14 +1308,31 @@ export async function openDayEndModal() {
 
   const cVal = document.getElementById("dayEndCashSalesVal");
   const flVal = document.getElementById("dayEndOpeningFloatVal");
+  const cardVal = document.getElementById("dayEndCardSalesVal");
   const expVal = document.getElementById("dayEndExpectedCashVal");
+  
+  // Card Types Breakdown Spans
+  const visaVal = document.getElementById("dayEndVisaTotalVal");
+  const masterVal = document.getElementById("dayEndMasterTotalVal");
+  const amexVal = document.getElementById("dayEndAmexTotalVal");
+  const otherCardVal = document.getElementById("dayEndOtherCardTotalVal");
+  const actCardIn = document.getElementById("dayEndActualCardInput");
+  const cardVBox = document.getElementById("dayEndCardVarianceBox");
+
   const pettyBoxVal = document.getElementById("zModalPettyBoxBalance");
   const actIn = document.getElementById("dayEndActualCashInput");
   const vBox = document.getElementById("dayEndVarianceBox");
 
   if (cVal) cVal.innerText = `Rs. ${currentZReportCalculatedData.cashSales.toFixed(2)}`;
   if (flVal) flVal.innerText = `Rs. ${currentZReportCalculatedData.openingFloat.toFixed(2)}`;
+  if (cardVal) cardVal.innerText = `Rs. ${currentZReportCalculatedData.cardSales.toFixed(2)}`;
   if (expVal) expVal.innerText = `Rs. ${currentZReportCalculatedData.expectedCash.toFixed(2)}`;
+
+  if (visaVal) visaVal.innerText = `Rs. ${cardVisa.toFixed(2)}`;
+  if (masterVal) masterVal.innerText = `Rs. ${cardMaster.toFixed(2)}`;
+  if (amexVal) amexVal.innerText = `Rs. ${cardAmex.toFixed(2)}`;
+  if (otherCardVal) otherCardVal.innerText = `Rs. ${cardOther.toFixed(2)}`;
+
   if (pettyBoxVal) pettyBoxVal.innerText = `Rs. ${currentZReportCalculatedData.pettyNetBalance.toFixed(2)}`;
   
   ["5000", "1000", "500", "100", "50", "20", "coins"].forEach(d => {
@@ -1256,9 +1341,16 @@ export async function openDayEndModal() {
   });
 
   if (actIn) actIn.value = "";
+  if (actCardIn) actCardIn.value = "";
+
   if (vBox) {
-    vBox.className = "p-3.5 rounded-xl border text-center font-bold text-sm bg-gray-100 text-gray-600";
+    vBox.className = "p-3 rounded-xl border text-center font-bold text-xs bg-gray-100 text-gray-600";
     vBox.innerText = "නෝට්ටු ගණන හෝ මුළු මුදල ඇතුළත් කරන්න...";
+  }
+
+  if (cardVBox) {
+    cardVBox.className = "p-1.5 rounded-lg border text-center font-bold text-[11px] bg-white text-gray-600";
+    cardVBox.innerText = "Card Machine එකේ Settlement Total මුදල ඇතුළත් කරන්න...";
   }
 
   renderZReportModalBreakdowns(currentZReportCalculatedData);
@@ -1312,28 +1404,49 @@ export function calculateCashDenominations() {
 }
 
 export function calculateDayEndVariance() {
-  const expected = currentZReportCalculatedData ? currentZReportCalculatedData.expectedCash : 0;
-  const actual = parseFloat(document.getElementById("dayEndActualCashInput")?.value || 0);
-  const diff = actual - expected;
+  // 1. CASH RECONCILIATION
+  const expectedCash = currentZReportCalculatedData ? currentZReportCalculatedData.expectedCash : 0;
+  const actualCash = parseFloat(document.getElementById("dayEndActualCashInput")?.value || 0);
+  const diffCash = actualCash - expectedCash;
 
   const box = document.getElementById("dayEndVarianceBox");
-  if (!box) return;
-
-  if (actual === 0 && !document.getElementById("dayEndActualCashInput")?.value) {
-    box.className = "p-3.5 rounded-xl border text-center font-bold text-sm bg-gray-100 text-gray-600";
-    box.innerText = "නෝට්ටු ගණන හෝ මුළු මුදල ඇතුළත් කරන්න...";
-    return;
+  if (box) {
+    if (actualCash === 0 && !document.getElementById("dayEndActualCashInput")?.value) {
+      box.className = "p-3 rounded-xl border text-center font-bold text-xs bg-gray-100 text-gray-600";
+      box.innerText = "නෝට්ටු ගණන හෝ මුළු මුදල ඇතුළත් කරන්න...";
+    } else if (Math.abs(diffCash) < 0.01) {
+      box.className = "p-3 rounded-xl border border-green-300 bg-green-50 text-green-800 text-center font-black text-xs";
+      box.innerHTML = `✅ Perfect Match! මුදල් පෙට්ටිය 100% ක් නිවැරදියි (Rs. 0.00)`;
+    } else if (diffCash < 0) {
+      box.className = "p-3 rounded-xl border border-red-300 bg-red-50 text-red-800 text-center font-black text-xs";
+      box.innerHTML = `⚠️ මුදල් හිඟයකි (Cash Shortage): -Rs. ${Math.abs(diffCash).toFixed(2)}`;
+    } else {
+      box.className = "p-3 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-800 text-center font-black text-xs";
+      box.innerHTML = `ℹ️ මුදල් වැඩිය (Cash Excess): +Rs. ${diffCash.toFixed(2)}`;
+    }
   }
 
-  if (Math.abs(diff) < 0.01) {
-    box.className = "p-3.5 rounded-xl border border-green-300 bg-green-50 text-green-800 text-center font-black text-sm";
-    box.innerHTML = `✅ Perfect Match! කවුන්ටරය 100% ක් නිවැරදියි (Rs. 0.00)`;
-  } else if (diff < 0) {
-    box.className = "p-3.5 rounded-xl border border-red-300 bg-red-50 text-red-800 text-center font-black text-sm";
-    box.innerHTML = `⚠️ මුදල් හිඟයකි (Cash Shortage): -Rs. ${Math.abs(diff).toFixed(2)}`;
-  } else {
-    box.className = "p-3.5 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-800 text-center font-black text-sm";
-    box.innerHTML = `ℹ️ මුදල් වැඩිය (Cash Excess): +Rs. ${diff.toFixed(2)}`;
+  // 2. 💳 CARD MACHINE RECONCILIATION
+  const expectedCard = currentZReportCalculatedData ? currentZReportCalculatedData.cardSales : 0;
+  const actualCardInput = document.getElementById("dayEndActualCardInput");
+  const actualCard = parseFloat(actualCardInput?.value || 0);
+  const diffCard = actualCard - expectedCard;
+
+  const cardBox = document.getElementById("dayEndCardVarianceBox");
+  if (cardBox) {
+    if (actualCard === 0 && !actualCardInput?.value) {
+      cardBox.className = "p-1.5 rounded-lg border text-center font-bold text-[11px] bg-white text-gray-600";
+      cardBox.innerText = "Card Machine එකේ Settlement Total මුදල ඇතුළත් කරන්න...";
+    } else if (Math.abs(diffCard) < 0.01) {
+      cardBox.className = "p-1.5 rounded-lg border border-green-300 bg-green-50 text-green-800 text-center font-black text-[11px]";
+      cardBox.innerHTML = `✅ Card Match! සම්පූර්ණයෙන්ම සමානයි (Rs. 0.00)`;
+    } else if (diffCard < 0) {
+      cardBox.className = "p-1.5 rounded-lg border border-red-300 bg-red-50 text-red-800 text-center font-black text-[11px]";
+      cardBox.innerHTML = `⚠️ Card හිඟයකි (Card Shortage): -Rs. ${Math.abs(diffCard).toFixed(2)}`;
+    } else {
+      cardBox.className = "p-1.5 rounded-lg border border-yellow-300 bg-yellow-50 text-yellow-800 text-center font-black text-[11px]";
+      cardBox.innerHTML = `ℹ️ Card වැඩිය (Card Excess): +Rs. ${diffCard.toFixed(2)}`;
+    }
   }
 }
 
@@ -1342,12 +1455,17 @@ export async function printAndSaveZReport() {
   if (!currentZReportCalculatedData) return;
 
   const actualCash = parseFloat(document.getElementById("dayEndActualCashInput")?.value || 0);
-  const variance = actualCash - currentZReportCalculatedData.expectedCash;
+  const varianceCash = actualCash - currentZReportCalculatedData.expectedCash;
+
+  const actualCard = parseFloat(document.getElementById("dayEndActualCardInput")?.value || 0);
+  const varianceCard = actualCard - currentZReportCalculatedData.cardSales;
 
   const fullZReportPayload = {
     ...currentZReportCalculatedData,
     actualCash: Math.round(actualCash * 100) / 100,
-    variance: Math.round(variance * 100) / 100,
+    variance: Math.round(varianceCash * 100) / 100,
+    actualCard: Math.round(actualCard * 100) / 100,
+    cardVariance: Math.round(varianceCard * 100) / 100,
     timestamp: new Date().toISOString(),
     hotelName: currentTenantInfo?.hotelName || "Restaurant ERP"
   };
@@ -1368,6 +1486,7 @@ export async function printAndSaveZReport() {
         netSales: fullZReportPayload.netSales,
         cashSales: fullZReportPayload.cashSales,
         cardSales: fullZReportPayload.cardSales,
+        cardBreakdown: fullZReportPayload.cardBreakdown,
         transferSales: fullZReportPayload.transferSales,
         creditSales: fullZReportPayload.creditSales,
         totalDiscounts: fullZReportPayload.totalDiscounts,
@@ -1404,7 +1523,7 @@ export async function printAndSaveZReport() {
   }
 }
 
-// THERMAL PRINTABLE Z-REPORT FORMATTER
+// THERMAL PRINTABLE Z-REPORT FORMATTER (WITH CARD AUDIT)
 function renderAdvancedThermalZReport(z) {
   const zHotel = document.getElementById("zHotelName");
   const zDate = document.getElementById("zReportDate");
@@ -1438,7 +1557,18 @@ function renderAdvancedThermalZReport(z) {
   const zCred = document.getElementById("zCreditSales");
 
   if (zCash) zCash.innerText = `Rs. ${z.cashSales.toFixed(2)}`;
-  if (zCard) zCard.innerText = `Rs. ${z.cardSales.toFixed(2)}`;
+  
+  if (zCard) {
+    const cb = z.cardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+    zCard.innerHTML = `
+      <span>Rs. ${z.cardSales.toFixed(2)}</span>
+      <div style="font-size: 8.5px; color: #444; font-weight: normal; margin-top: 2px;">
+        Visa: Rs.${cb.visa.toFixed(0)} | Master: Rs.${cb.master.toFixed(0)}<br>
+        AMEX: Rs.${cb.amex.toFixed(0)} | Other: Rs.${cb.other.toFixed(0)}
+      </div>
+    `;
+  }
+
   if (zTrans) zTrans.innerText = `Rs. ${z.transferSales.toFixed(2)}`;
   if (zCred) zCred.innerText = `Rs. ${z.creditSales.toFixed(2)}`;
 
@@ -1577,6 +1707,7 @@ export async function handleShiftHandoverSubmit(e) {
 window.switchReportTab = switchReportTab;
 window.setReportPeriodPreset = setReportPeriodPreset;
 window.applyReportDateFilter = applyReportDateFilter;
+window.changeInvoicesPage = changeInvoicesPage;
 window.reprintInvoice = reprintInvoice;
 window.shareWhatsAppInvoice = shareWhatsAppInvoice;
 window.settleCustomerCredit = settleCustomerCredit;
