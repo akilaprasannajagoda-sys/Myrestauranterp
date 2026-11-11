@@ -1,9 +1,10 @@
 // ==========================================================================
-// MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP, HASHING & HELPERS)
+// MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP, HASHING, CSV & PDF ENGINE)
 // 🛡️ XSS & SPECIAL CHARACTER ESCAPING IMMUNE ARCHITECTURE
+// 📄 ENTERPRISE 100% VECTOR HIGH-CONTRAST OFFLINE PDF REPORT GENERATOR
 // ==========================================================================
 
-import { erpState } from './state.js';
+import { erpState, currentTenantInfo } from './state.js';
 
 export let alertHistory = [];
 
@@ -198,6 +199,158 @@ export function downloadCSVFile(csvContent, filename) {
   showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
 }
 
+// 📄 5.1 100% HIGH-PRECISION OFFLINE A4 PDF REPORT GENERATOR (SINHALA UNICODE IMMUNE)
+export function generateReportPDF({
+  reportTitle = "Official Report",
+  subtitle = "",
+  columns = [],
+  rows = [],
+  summaryCards = [],
+  orientation = "portrait" // 'portrait' or 'landscape'
+}) {
+  const hotelName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
+  const address = currentTenantInfo?.address || "";
+  const phone = currentTenantInfo?.phone ? `Tel: ${currentTenantInfo.phone}` : "";
+  const taxNo = currentTenantInfo?.taxNo ? `TIN/VAT: ${currentTenantInfo.taxNo}` : "";
+  const printDate = new Date().toLocaleString();
+
+  // Create clean Printable HTML for A4 Output
+  const isLandscape = orientation === "landscape";
+  const pageSize = isLandscape ? "A4 landscape" : "A4 portrait";
+
+  let summaryHtml = "";
+  if (summaryCards && summaryCards.length > 0) {
+    summaryHtml = `
+      <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+        ${summaryCards.map(c => `
+          <div style="flex: 1; min-width: 140px; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 10px 14px;">
+            <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHTML(c.label)}</div>
+            <div style="font-size: 15px; font-weight: 900; color: ${c.color || '#0f172a'}; margin-top: 2px;">${escapeHTML(c.value)}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  let tableHeaderHtml = `<tr>${columns.map(col => `
+    <th style="padding: 8px 10px; background: #1e293b; color: #ffffff; font-size: 10.5px; font-weight: 800; text-align: ${col.align || 'left'}; border: 1px solid #1e293b; text-transform: uppercase;">
+      ${escapeHTML(col.label)}
+    </th>
+  `).join("")}</tr>`;
+
+  let tableRowsHtml = rows.map((r, rIdx) => {
+    const bg = rIdx % 2 === 0 ? "#ffffff" : "#f8fafc";
+    return `<tr style="background: ${bg};">
+      ${r.map((cell, cIdx) => {
+        const align = columns[cIdx]?.align || 'left';
+        const isBold = columns[cIdx]?.bold || false;
+        return `
+          <td style="padding: 7px 10px; font-size: 10px; color: #1e293b; text-align: ${align}; font-weight: ${isBold ? '800' : '500'}; border: 1px solid #e2e8f0; line-height: 1.35;">
+            ${escapeHTML(String(cell !== null && cell !== undefined ? cell : '-'))}
+          </td>
+        `;
+      }).join("")}
+    </tr>`;
+  }).join("");
+
+  const fullHtml = `
+    <!DOCTYPE html>
+    <html lang="si">
+    <head>
+      <meta charset="UTF-8">
+      <title>${escapeHTML(reportTitle)}</title>
+      <style>
+        @page {
+          size: ${pageSize};
+          margin: 12mm 10mm;
+        }
+        *, *::before, *::after {
+          box-sizing: border-box;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Sinhala", Arial, sans-serif;
+          color: #0f172a;
+          background: #ffffff;
+          margin: 0;
+          padding: 0;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 8px;
+        }
+        tr {
+          page-break-inside: avoid;
+        }
+      </style>
+    </head>
+    <body>
+      <!-- REPORT HEADER -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px;">
+        <div>
+          <h1 style="margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: 0.5px;">${escapeHTML(hotelName)}</h1>
+          ${address ? `<div style="font-size: 10px; color: #475569; margin-top: 2px;">${escapeHTML(address)}</div>` : ''}
+          <div style="font-size: 10px; color: #475569; margin-top: 1px;">
+            ${phone ? `<span>${escapeHTML(phone)}</span> ` : ''}
+            ${taxNo ? `| <span>${escapeHTML(taxNo)}</span>` : ''}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <h2 style="margin: 0; font-size: 14px; font-weight: 900; color: #2563eb; text-transform: uppercase;">${escapeHTML(reportTitle)}</h2>
+          ${subtitle ? `<div style="font-size: 10px; font-weight: 700; color: #475569; margin-top: 2px;">${escapeHTML(subtitle)}</div>` : ''}
+          <div style="font-size: 9px; color: #94a3b8; margin-top: 3px; font-mono;">Printed: ${escapeHTML(printDate)}</div>
+        </div>
+      </div>
+
+      <!-- SUMMARY CARDS (IF APPLICABLE) -->
+      ${summaryHtml}
+
+      <!-- MAIN DATA TABLE -->
+      <table>
+        <thead>${tableHeaderHtml}</thead>
+        <tbody>${tableRowsHtml}</tbody>
+      </table>
+
+      <!-- REPORT FOOTER -->
+      <div style="margin-top: 20px; padding-top: 8px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #64748b;">
+        <div>*** Official System Generated Document - Restaurant ERP ***</div>
+        <div style="font-weight: 800;">Powered by systems.lk | Hotline: 0760672029</div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Render via clean hidden iframe to allow seamless Print-to-PDF
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(fullHtml);
+  doc.close();
+
+  iframe.contentWindow.focus();
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.warn("PDF print window pass:", e);
+    } finally {
+      setTimeout(() => iframe.remove(), 2000);
+    }
+  }, 350);
+
+  showLiveToast("📄 PDF Report Ready", `"${reportTitle}" මුද්‍රණය කිරීමට හෝ Save as PDF කිරීමට සූදානම්.`, "success", "fa-file-pdf");
+}
+
 // 6. DEBOUNCE HELPER
 export function debounce(func, wait = 250) {
   let timeout;
@@ -231,28 +384,30 @@ export function formatCurrency(amount = 0) {
   return `Rs. ${num.toFixed(2)}`;
 }
 
-// 8. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
-export function showCustomInputModal(titleText, placeholderText = "", defaultValue = "") {
+// 🛡️ 8. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT (BUG #11 FIXED: DYNAMIC SUBTITLE & ICON)
+export function showCustomInputModal(titleText, placeholderText = "", defaultValue = "", subtitleText = "විස්තරය ඇතුළත් කරන්න", iconClass = "fa-pen") {
   return new Promise((resolve) => {
     const existing = document.getElementById("globalCustomPromptModal");
     if (existing) existing.remove();
+
+    const isWA = iconClass.includes("whatsapp");
 
     const overlay = document.createElement("div");
     overlay.id = "globalCustomPromptModal";
     overlay.className = "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4";
     overlay.innerHTML = `
       <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 border border-gray-100 text-center">
-        <div class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center mx-auto text-xl">
-          <i class="fa-brands fa-whatsapp"></i>
+        <div class="w-12 h-12 rounded-2xl ${isWA ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'} flex items-center justify-center mx-auto text-xl">
+          <i class="${isWA ? 'fa-brands' : 'fa-solid'} ${escapeHTML(iconClass)}"></i>
         </div>
         <div>
           <h4 class="font-black text-base text-gray-800">${escapeHTML(titleText)}</h4>
-          <p class="text-[11px] text-gray-400 mt-0.5">පාරිභෝගිකයාගේ WhatsApp අංකය ඇතුළත් කරන්න</p>
+          <p class="text-[11px] text-gray-400 mt-0.5">${escapeHTML(subtitleText)}</p>
         </div>
-        <input type="text" id="customPromptInputField" value="${escapeHTML(defaultValue)}" placeholder="${escapeHTML(placeholderText)}" class="w-full p-3 border-2 border-green-400 rounded-2xl text-center text-base font-bold outline-none bg-green-50/40 text-gray-800 focus:bg-white focus:border-green-600 transition">
+        <input type="text" id="customPromptInputField" value="${escapeHTML(defaultValue)}" placeholder="${escapeHTML(placeholderText)}" class="w-full p-3 border-2 ${isWA ? 'border-green-400 bg-green-50/40 focus:border-green-600' : 'border-blue-400 bg-blue-50/40 focus:border-blue-600'} rounded-2xl text-center text-base font-bold outline-none text-gray-800 focus:bg-white transition">
         <div class="flex justify-end gap-2 pt-2 text-xs font-bold border-t border-gray-100">
           <button type="button" id="customPromptCancelBtn" class="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition cursor-pointer">Cancel</button>
-          <button type="button" id="customPromptOkBtn" class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md transition cursor-pointer">OK (Send)</button>
+          <button type="button" id="customPromptOkBtn" class="flex-1 py-2.5 rounded-xl ${isWA ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white shadow-md transition cursor-pointer">OK (Confirm)</button>
         </div>
       </div>
     `;
@@ -291,7 +446,7 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   }
   
   if (!rawPhone) {
-    rawPhone = await showCustomInputModal("WhatsApp Bill Dispatch", "0771234567");
+    rawPhone = await showCustomInputModal("WhatsApp Bill Dispatch", "0771234567", "", "පාරිභෝගිකයාගේ WhatsApp අංකය ඇතුළත් කරන්න", "fa-whatsapp");
   }
   
   if (!rawPhone) {
@@ -414,7 +569,7 @@ export async function verifyPin(enteredPin, storedHashOrPlain) {
   return enteredClean === storedClean;
 }
 
-// 🛡️ Global Window Assignments (අනෙක් ඕනෑම file එකකදී කෙලින්ම escapeHTML භාවිත කළ හැකි වන සේ)
+// 🛡️ Global Window Assignments
 window.escapeHTML = escapeHTML;
 window.triggerAudioAlert = triggerAudioAlert;
 window.showLiveToast = showLiveToast;
@@ -422,6 +577,7 @@ window.toggleNotificationPanel = toggleNotificationPanel;
 window.clearAllNotifications = clearAllNotifications;
 window.manualPurgeSystemMemory = manualPurgeSystemMemory;
 window.downloadCSVFile = downloadCSVFile;
+window.generateReportPDF = generateReportPDF;
 window.sendInvoiceViaWhatsApp = sendInvoiceViaWhatsApp;
 window.formatCurrency = formatCurrency;
 window.getLocalDateString = getLocalDateString;
