@@ -2,10 +2,11 @@
 // MODULE 13: CUSTOMER DIRECTORY, CRM & LOYALTY POINTS ENGINE (UNFREEZE READY)
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (DOM SLICED & DEBOUNCED ZERO-LAG)
 // 🛡️ XSS & SPECIAL CHARACTER SAFE DIRECTORY ENGINE
+// 📄 100% VECTOR HIGH-CONTRAST A4 PDF & EXCEL (CSV) CRM EXPORT HUB
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
-import { showLiveToast, downloadCSVFile, getLocalDateString, escapeHTML } from './utils.js';
+import { showLiveToast, downloadCSVFile, generateReportPDF, getLocalDateString, escapeHTML } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -28,7 +29,6 @@ export function initCustomersContext(dbRefInstance, pushMethod, updateMethod, re
 
 // 1. OPEN / CLOSE CUSTOMER MODAL
 export function openCustomerModal(mode = 'add', customerId = null) {
-  // 🛡️ POS Search Dropdown එක විවෘතව ඇත්නම් එය පළමුව සඟවන්න (Clicks Trap වීම වැළැක්වීමට)
   const dropdown = document.getElementById("posCustomerSearchResults");
   if (dropdown) {
     dropdown.classList.add("hidden");
@@ -73,7 +73,6 @@ export function closeCustomerModal() {
   if (modal) modal.classList.add("hidden");
   isSubmittingCustomer = false;
 
-  // 🛡️ CRITICAL UNFREEZE: Modal එක වැසූ පසු Keyboard Focus එක සක්‍රීය POS Search Textbox එකට යොමු කරන්න
   setTimeout(() => {
     const posSearch = document.getElementById("posSearchInput");
     const posCustomerSearch = document.getElementById("posCustomerSearchInput");
@@ -174,7 +173,7 @@ export function onCustomerSearchInput() {
   }, 120);
 }
 
-// 4. HIGH-PERFORMANCE DOM-SLICED CUSTOMERS DIRECTORY TABLE (XSS IMMUNE)
+// 4. HIGH-PERFORMANCE DOM-SLICED CUSTOMERS DIRECTORY TABLE
 export function renderCustomersTable() {
   const tbody = document.getElementById("customersTableBody");
   const badge = document.getElementById("customerCountBadge");
@@ -207,7 +206,6 @@ export function renderCustomersTable() {
   tbody.innerHTML = "";
   list.sort((a, b) => (parseFloat(b[1].loyaltyPoints || 0)) - (parseFloat(a[1].loyaltyPoints || 0)));
 
-  // 🛡️ DOM SLICING: Render up to current limit (default 80) to prevent browser thread freeze
   const visibleSubset = list.slice(0, currentCustomerDisplayLimit);
 
   visibleSubset.forEach(([id, c]) => {
@@ -244,7 +242,6 @@ export function renderCustomersTable() {
     tbody.appendChild(tr);
   });
 
-  // If there are more customers than visible limit, append Load More button
   if (totalMatchingCount > currentCustomerDisplayLimit) {
     const loadMoreRow = document.createElement("tr");
     loadMoreRow.innerHTML = `
@@ -267,11 +264,12 @@ window.loadMoreCustomersUI = loadMoreCustomersUI;
 // 5. DELETE CUSTOMER RECORD
 export async function deleteCustomer(id) {
   if (confirm("මෙම පාරිභෝගිකයා ඉවත් කිරීමට අවශ්‍යද?")) {
+    if (erpState.customers) delete erpState.customers[id];
+    renderCustomersTable();
+
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/customers/${id}`));
-      if (erpState.customers) delete erpState.customers[id];
       showLiveToast("🗑️ Customer Removed", "පාරිභෝගිකයා සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
-      renderCustomersTable();
     }
   }
 }
@@ -350,7 +348,7 @@ export async function submitLoyaltyAdjustment(e) {
   }
 }
 
-// 7. POS CUSTOMER SELECTION & ATTACHMENT (XSS IMMUNE)
+// 7. POS CUSTOMER SELECTION & ATTACHMENT
 export function onPosCustomerSearch(input) {
   const query = (input?.value || "").toLowerCase().trim();
   const dropdown = document.getElementById("posCustomerSearchResults");
@@ -467,7 +465,57 @@ export function removeCustomerFromCurrentBill() {
   showLiveToast("👤 Customer Unlinked", "පාරිභෝගිකයා බිලෙන් ඉවත් කරන ලදී.", "info", "fa-user-minus");
 }
 
-// 8. EXPORT CUSTOMERS DIRECTORY TO CSV
+// 📄 8. EXPORT CUSTOMERS DIRECTORY TO VECTOR A4 PDF
+export function exportCustomersToPDF() {
+  const list = Object.values(erpState.customers || {});
+  if (list.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට පාරිභෝගික දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  list.sort((a, b) => (parseFloat(b.loyaltyPoints || 0)) - (parseFloat(a.loyaltyPoints || 0)));
+
+  let totalPoints = 0;
+  let totalSpend = 0;
+  const rows = list.map(c => {
+    const pts = parseFloat(c.loyaltyPoints || 0);
+    const sp = parseFloat(c.totalSpend || 0);
+    totalPoints += pts;
+    totalSpend += sp;
+    return [
+      c.name || "-",
+      c.phone || "-",
+      c.address || "-",
+      c.totalVisits || 0,
+      sp.toFixed(2),
+      pts,
+      c.notes || "-"
+    ];
+  });
+
+  generateReportPDF({
+    reportTitle: "Customer Directory & Loyalty Rewards Report",
+    subtitle: `Registered Customer Base | Generated: ${new Date().toLocaleDateString()}`,
+    orientation: "landscape",
+    summaryCards: [
+      { label: "Total Members", value: `${list.length} Customers` },
+      { label: "Cumulative Spend", value: `Rs. ${totalSpend.toFixed(2)}`, color: "#2563eb" },
+      { label: "Active Loyalty Points", value: `${totalPoints} Points`, color: "#7c3aed" }
+    ],
+    columns: [
+      { label: "Customer Name", bold: true },
+      { label: "Mobile Phone" },
+      { label: "Address / Area" },
+      { label: "Visits", align: "center" },
+      { label: "Total Spent (Rs.)", align: "right", bold: true },
+      { label: "Points", align: "center", bold: true },
+      { label: "Notes" }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 8.1 EXPORT CUSTOMERS DIRECTORY TO CSV
 export function exportCustomersToCSV() {
   const list = Object.values(erpState.customers || {});
   if (list.length === 0) {
@@ -483,7 +531,7 @@ export function exportCustomersToCSV() {
   downloadCSVFile(csv, `Customer_Directory_${getLocalDateString()}.csv`);
 }
 
-// 🛡️ Global Click Handler: පිටත ක්ලික් කළ විට Search Dropdown එක ස්වයංක්‍රීයව සඟවයි
+// Global Click Handler
 document.addEventListener("click", (e) => {
   const searchInput = document.getElementById("posCustomerSearchInput");
   const dropdown = document.getElementById("posCustomerSearchResults");
@@ -509,3 +557,4 @@ window.onPosCustomerSearch = onPosCustomerSearch;
 window.selectCustomerForCurrentBill = selectCustomerForCurrentBill;
 window.removeCustomerFromCurrentBill = removeCustomerFromCurrentBill;
 window.exportCustomersToCSV = exportCustomersToCSV;
+window.exportCustomersToPDF = exportCustomersToPDF;
