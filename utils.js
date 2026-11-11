@@ -63,7 +63,7 @@ export function triggerAudioAlert(soundType = "info") {
   }
 }
 
-// 🛡️ 2. SANITIZATION / HTML ESCAPING HELPER (PREVENTS NOTE DISAPPEARANCE & XSS)
+// 🛡️ 2. SANITIZATION / HTML ESCAPING HELPER
 export function escapeHTML(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -199,14 +199,14 @@ export function downloadCSVFile(csvContent, filename) {
   showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
 }
 
-// 📄 5.1 100% HIGH-PRECISION OFFLINE A4 PDF REPORT GENERATOR (SINHALA UNICODE IMMUNE)
-export function generateReportPDF({
+// 📄 5.1 100% DIRECT DOWNLOAD VECTOR PDF REPORT GENERATOR (NO PRINT WINDOW!)
+export async function generateReportPDF({
   reportTitle = "Official Report",
   subtitle = "",
   columns = [],
   rows = [],
   summaryCards = [],
-  orientation = "portrait" // 'portrait' or 'landscape'
+  orientation = "portrait"
 }) {
   const hotelName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const address = currentTenantInfo?.address || "";
@@ -214,7 +214,6 @@ export function generateReportPDF({
   const taxNo = currentTenantInfo?.taxNo ? `TIN/VAT: ${currentTenantInfo.taxNo}` : "";
   const printDate = new Date().toLocaleString();
 
-  // Create clean Printable HTML for A4 Output
   const isLandscape = orientation === "landscape";
   const pageSize = isLandscape ? "A4 landscape" : "A4 portrait";
 
@@ -300,11 +299,11 @@ export function generateReportPDF({
         <div style="text-align: right;">
           <h2 style="margin: 0; font-size: 14px; font-weight: 900; color: #2563eb; text-transform: uppercase;">${escapeHTML(reportTitle)}</h2>
           ${subtitle ? `<div style="font-size: 10px; font-weight: 700; color: #475569; margin-top: 2px;">${escapeHTML(subtitle)}</div>` : ''}
-          <div style="font-size: 9px; color: #94a3b8; margin-top: 3px; font-mono;">Printed: ${escapeHTML(printDate)}</div>
+          <div style="font-size: 9px; color: #94a3b8; margin-top: 3px; font-mono;">Generated: ${escapeHTML(printDate)}</div>
         </div>
       </div>
 
-      <!-- SUMMARY CARDS (IF APPLICABLE) -->
+      <!-- SUMMARY CARDS -->
       ${summaryHtml}
 
       <!-- MAIN DATA TABLE -->
@@ -322,7 +321,31 @@ export function generateReportPDF({
     </html>
   `;
 
-  // Render via clean hidden iframe to allow seamless Print-to-PDF
+  const cleanTitle = (reportTitle || "Report").replace(/[^\w\s\u0D80-\u0DFF-]/g, "").replace(/\s+/g, "_");
+  const defaultFilename = `${cleanTitle}_${getLocalDateString()}.pdf`;
+
+  // 1. ELECTRON NATIVE DIRECT PDF DOWNLOAD VIA CHROMIUM ENGINE
+  if (window.electronAPI && window.electronAPI.savePdf) {
+    try {
+      showLiveToast("⏳ Generating PDF", "PDF ගොනුව සකස් කරමින් පවතී...", "info", "fa-spinner fa-spin");
+      const res = await window.electronAPI.savePdf({
+        htmlContent: fullHtml,
+        filename: defaultFilename,
+        orientation: orientation
+      });
+
+      if (res && res.success) {
+        showLiveToast("📄 PDF Downloaded", `PDF ගොනුව සාර්ථකව බාගත විය.`, "success", "fa-file-pdf");
+      } else if (res && !res.canceled) {
+        showLiveToast("⚠️ PDF Error", res.error || "PDF සේව් කිරීම අසාර්ථකයි.", "warning", "fa-triangle-exclamation");
+      }
+      return;
+    } catch (err) {
+      console.warn("Electron native PDF error, using fallback:", err);
+    }
+  }
+
+  // 2. BROWSER FALLBACK
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
@@ -347,8 +370,6 @@ export function generateReportPDF({
       setTimeout(() => iframe.remove(), 2000);
     }
   }, 350);
-
-  showLiveToast("📄 PDF Report Ready", `"${reportTitle}" මුද්‍රණය කිරීමට හෝ Save as PDF කිරීමට සූදානම්.`, "success", "fa-file-pdf");
 }
 
 // 6. DEBOUNCE HELPER
@@ -384,7 +405,7 @@ export function formatCurrency(amount = 0) {
   return `Rs. ${num.toFixed(2)}`;
 }
 
-// 🛡️ 8. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT (BUG #11 FIXED: DYNAMIC SUBTITLE & ICON)
+// 🛡️ 8. ELECTRON-SAFE TOUCH-FRIENDLY CUSTOM INPUT PROMPT
 export function showCustomInputModal(titleText, placeholderText = "", defaultValue = "", subtitleText = "විස්තරය ඇතුළත් කරන්න", iconClass = "fa-pen") {
   return new Promise((resolve) => {
     const existing = document.getElementById("globalCustomPromptModal");
@@ -559,13 +580,11 @@ export async function verifyPin(enteredPin, storedHashOrPlain) {
   const enteredClean = String(enteredPin).trim();
   const storedClean = String(storedHashOrPlain).trim();
   
-  // 1. If stored password is already SHA-256 (64 hex characters)
   if (/^[a-f0-9]{64}$/i.test(storedClean)) {
     const enteredHashed = await hashPin(enteredClean);
     return enteredHashed === storedClean;
   }
   
-  // 2. Backward compatibility fallback for legacy plain text PINs
   return enteredClean === storedClean;
 }
 
