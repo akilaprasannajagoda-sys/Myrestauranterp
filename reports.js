@@ -1,12 +1,13 @@
 // ==========================================================================
-// MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & WHATSAPP
-// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (USAR COMPLIANT P&L WITH STORE ISSUES & WASTAGE)
-// 💳 DAY-END CARD MACHINE BATCH RECONCILIATION & CARD TYPE BREAKDOWN
+// MODULE 10: REPORTS, FINANCIAL ANALYTICS, ADVANCED Z-REPORT, VOID AUDIT & PDF
+// 5-YEAR PRODUCTION HARDENED ARCHITECTURE (USAR COMPLIANT P&L WITH STORE ISSUES)
+// 📄 100% VECTOR HIGH-CONTRAST A4 PDF & EXCEL (CSV) EXPORT HUB
+// 💳 DAY-END CARD MACHINE BATCH RECONCILIATION & MIDNIGHT SHIFT REPAIRED
 // 📑 SMART INVOICE LIST PAGINATION (ZERO-LAG BROWSER RENDERING)
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, currentUserRole } from './state.js';
-import { showLiveToast, downloadCSVFile, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal, showCustomInputModal, verifyPin } from './utils.js';
+import { showLiveToast, downloadCSVFile, generateReportPDF, sendInvoiceViaWhatsApp, getLocalDateString, formatDateTimeLocal, showCustomInputModal, verifyPin } from './utils.js';
 import { convertRecipeQtyToBaseUnit } from './menu.js';
 import { sendDirectSilentPrint } from './printer.js';
 
@@ -36,7 +37,9 @@ export let activeReportTabName = "invoices";
 
 export function switchReportTab(tabName) {
   activeReportTabName = tabName;
-  ["invoices", "pnl", "hourly", "waiters", "items", "credits"].forEach(t => {
+  
+  // All Report Sub-tabs including Day-End History
+  ["invoices", "pnl", "hourly", "waiters", "items", "credits", "dayEndHistory"].forEach(t => {
     const sec = document.getElementById("reportSection-" + t);
     const tabBtn = document.getElementById("repTab-" + t);
     if (sec) sec.classList.add("hidden");
@@ -44,14 +47,24 @@ export function switchReportTab(tabName) {
       tabBtn.className = "px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer";
     }
   });
-
+  
   const activeSec = document.getElementById("reportSection-" + tabName);
   const activeBtn = document.getElementById("repTab-" + tabName);
   if (activeSec) activeSec.classList.remove("hidden");
   if (activeBtn) {
     activeBtn.className = "px-3 py-1.5 rounded-lg bg-green-600 text-white shadow-sm font-bold cursor-pointer";
   }
-
+  
+  // Hide general date bar when Day-End History is active (since it has its own dedicated filter bar)
+  const generalDateBar = document.getElementById("repDateFilterBar");
+  if (generalDateBar) {
+    if (tabName === "dayEndHistory") {
+      generalDateBar.classList.add("hidden");
+    } else {
+      generalDateBar.classList.remove("hidden");
+    }
+  }
+  
   if (tabName === "pnl") {
     renderPnLStatement();
   } else if (tabName === "hourly") {
@@ -62,6 +75,17 @@ export function switchReportTab(tabName) {
     renderItemWiseSalesSummary();
   } else if (tabName === "credits") {
     renderCustomerCreditsLedger();
+  } else if (tabName === "dayEndHistory") {
+    const fromIn = document.getElementById("zHistFromDate");
+    const toIn = document.getElementById("zHistToDate");
+    if (fromIn && !fromIn.value) {
+      const now = new Date();
+      fromIn.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    }
+    if (toIn && !toIn.value) {
+      toIn.value = getLocalDateString();
+    }
+    renderDayEndHistoryTable();
   } else {
     currentInvoicesPage = 1;
     renderInvoiceReportsList();
@@ -774,7 +798,7 @@ export async function submitManagerOverrideAction() {
   await executeVoidInvoiceProcess(idToVoid, authorizerName);
 }
 
-// 🔒 EXECUTE VOID INVOICE ENGINE
+// 🔒 EXECUTE VOID INVOICE ENGINE (BUG #11 FIXED)
 export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "Manager") {
   const inv = erpState.invoices[invoiceId];
   if (!inv) return;
@@ -782,7 +806,9 @@ export async function executeVoidInvoiceProcess(invoiceId, authorizedByName = "M
   const reason = await showCustomInputModal(
     `Void Invoice #${inv.invoiceNumber}`,
     "අවලංගු කිරීමට හේතුව (උදා: Wrong Item, Cancelled)",
-    ""
+    "",
+    "බිල්පත අවලංගු කිරීමට නිල හේතුව සටහන් කරන්න",
+    "fa-ban"
   );
 
   if (!reason || !reason.trim()) {
@@ -1016,6 +1042,252 @@ export async function settleCustomerCredit(id) {
   }
 }
 
+// 📄 100% VECTOR HIGH-CONTRAST A4 PDF EXPORT FOR ALL REPORTS
+export function exportCurrentReportToPDF() {
+  const dateStr = getLocalDateString();
+  const invMode = erpState.settings?.inventoryMode || "recipe";
+
+  if (activeReportTabName === "invoices") {
+    const list = getFilteredInvoicesList();
+    if (list.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට බිල්පත් දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+
+    let totalCash = 0;
+    let totalCard = 0;
+    let totalNet = 0;
+    const rows = [];
+
+    list.forEach(([id, inv]) => {
+      const isVoided = inv.status === "Voided";
+      const p = inv.payment || { method: "cash" };
+      const net = parseFloat(inv.netTotal || 0);
+
+      if (!isVoided) {
+        totalNet += net;
+        if (p.method === "cash") totalCash += net;
+        else if (p.method === "card") totalCard += net;
+        else if (p.method === "split") {
+          totalCash += parseFloat(p.splitCash || 0);
+          totalCard += parseFloat(p.splitCard || 0);
+        }
+      }
+
+      rows.push([
+        inv.invoiceNumber + (isVoided ? " (VOID)" : ""),
+        new Date(inv.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        `${inv.orderType} (${inv.tableNo || 'N/A'})`,
+        inv.customerName || "-",
+        p.method.toUpperCase(),
+        parseFloat(inv.subtotal || 0).toFixed(2),
+        parseFloat(inv.discountAmount || 0).toFixed(2),
+        net.toFixed(2),
+        isVoided ? "VOIDED" : "PAID"
+      ]);
+    });
+
+    generateReportPDF({
+      reportTitle: "Invoices & Revenue Ledger Report",
+      subtitle: `Date Range: ${document.getElementById("repFromDate")?.value || 'Start'} to ${document.getElementById("repToDate")?.value || 'End'}`,
+      orientation: "landscape",
+      summaryCards: [
+        { label: "Total Active Invoices", value: `${list.filter(x => x[1].status !== 'Voided').length} Bills` },
+        { label: "Total Cash Collected", value: `Rs. ${totalCash.toFixed(2)}`, color: "#16a34a" },
+        { label: "Total Card Collected", value: `Rs. ${totalCard.toFixed(2)}`, color: "#2563eb" },
+        { label: "Grand Net Revenue", value: `Rs. ${totalNet.toFixed(2)}`, color: "#0f172a" }
+      ],
+      columns: [
+        { label: "Invoice #", bold: true },
+        { label: "Time" },
+        { label: "Type / Table" },
+        { label: "Customer" },
+        { label: "Method" },
+        { label: "Subtotal (Rs.)", align: "right" },
+        { label: "Disc (Rs.)", align: "right" },
+        { label: "Net Total (Rs.)", align: "right", bold: true },
+        { label: "Status", align: "center" }
+      ],
+      rows: rows
+    });
+
+  } else if (activeReportTabName === "pnl") {
+    const rGross = document.getElementById("pnlRowGrossSales")?.innerText || "0.00";
+    const rDisc = document.getElementById("pnlRowDiscounts")?.innerText || "0.00";
+    const rNet = document.getElementById("pnlRowNetSales")?.innerText || "0.00";
+    const rCogs = document.getElementById("pnlRowCOGS")?.innerText || "0.00";
+    const rGrossProf = document.getElementById("pnlRowGrossProfit")?.innerText || "0.00";
+    const rPetty = document.getElementById("pnlRowPettyExp")?.innerText || "0.00";
+    const rDeptIssues = document.getElementById("pnlRowDeptIssues")?.innerText || "0.00";
+    const rWastage = document.getElementById("pnlRowWastage")?.innerText || "0.00";
+    const rFinalNet = document.getElementById("pnlRowFinalNetProfit")?.innerText || "0.00";
+
+    const rows = [
+      ["1. Gross Menu Sales (Dishes Subtotal)", rGross, "Total menu sales before any discount"],
+      ["2. (-) Bill & Loyalty Discounts", rDisc, "Customer & promotional bill discounts deducted"],
+      ["= Net Food & Beverage Revenue", rNet, "Real revenue generated from orders"],
+      [`3. (-) Cost of Goods Sold (${invMode === 'issue' ? 'Store Issues' : 'BOM Recipe'})`, rCogs, "Direct food & ingredients cost"],
+      ["= Gross Kitchen Operating Profit", rGrossProf, "Net Revenue minus Food Cost"],
+      ["4. (-) Operating Petty Cash Expenses", rPetty, "Utilities, gas, maintenance, transport expenses"],
+      ["5. (-) Department Material Issues", rDeptIssues, "Staff meals, housekeeping and non-food supplies"],
+      ["6. (-) Kitchen Spoilage / Wastage Loss", rWastage, "Cost of spoiled or discarded raw materials"],
+      ["ESTIMATED NET OPERATING PROFIT", rFinalNet, "Final net bottom-line earnings"]
+    ];
+
+    generateReportPDF({
+      reportTitle: "Estimated Profit & Loss (P&L) Statement",
+      subtitle: `Inventory Accounting Mode: ${invMode === 'issue' ? 'Daily Store Issues' : 'Recipe BOM'} | Period: ${dateStr}`,
+      orientation: "portrait",
+      summaryCards: [
+        { label: "Net Sales Revenue", value: rNet, color: "#2563eb" },
+        { label: "Cost of Goods (COGS)", value: rCogs, color: "#d97706" },
+        { label: "Operating Expenses", value: rPetty, color: "#dc2626" },
+        { label: "Estimated Net Profit", value: rFinalNet, color: "#16a34a" }
+      ],
+      columns: [
+        { label: "Account / Ledger Breakdown", bold: true },
+        { label: "Amount (Rs.)", align: "right", bold: true },
+        { label: "Accounting Description" }
+      ],
+      rows: rows
+    });
+
+  } else if (activeReportTabName === "hourly") {
+    const rows = [];
+    document.querySelectorAll("#repHourlyTableBody tr").forEach(r => {
+      const cols = r.querySelectorAll("td");
+      if (cols.length >= 4) {
+        rows.push([
+          cols[0].innerText.replace('🔥 Peak Time', '').trim(),
+          cols[1].innerText.trim(),
+          cols[3].innerText.trim()
+        ]);
+      }
+    });
+
+    if (rows.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+
+    generateReportPDF({
+      reportTitle: "Hourly Sales Velocity & Peak Analysis",
+      subtitle: `24-Hour Velocity Breakdown | Peak Time: ${document.getElementById("hourlyPeakTimeVal")?.innerText || 'N/A'}`,
+      orientation: "portrait",
+      columns: [
+        { label: "Time Interval", bold: true },
+        { label: "Orders Count", align: "center" },
+        { label: "Hourly Revenue (Rs.)", align: "right", bold: true }
+      ],
+      rows: rows
+    });
+
+  } else if (activeReportTabName === "waiters") {
+    const rows = [];
+    document.querySelectorAll("#repWaitersTableBody tr").forEach(r => {
+      const cols = r.querySelectorAll("td");
+      if (cols.length >= 6) {
+        rows.push([
+          cols[0].innerText.trim(),
+          cols[1].innerText.trim(),
+          cols[2].innerText.trim(),
+          cols[3].innerText.trim(),
+          cols[4].innerText.trim(),
+          cols[5].innerText.trim()
+        ]);
+      }
+    });
+
+    if (rows.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+
+    generateReportPDF({
+      reportTitle: "Waiter Sales Performance & Service Charge Pool",
+      subtitle: `Dine-in Waiter Distribution | Generated: ${dateStr}`,
+      orientation: "portrait",
+      summaryCards: [
+        { label: "Top Waiter", value: document.getElementById("waiterTopPerformerVal")?.innerText || 'N/A', color: "#2563eb" },
+        { label: "Total SC Pool", value: document.getElementById("waiterTotalScPoolVal")?.innerText || 'Rs. 0.00', color: "#7c3aed" },
+        { label: "Tables Served", value: document.getElementById("waiterTotalTablesServedVal")?.innerText || '0 Tables', color: "#16a34a" }
+      ],
+      columns: [
+        { label: "Emp ID", bold: true },
+        { label: "Waiter Name" },
+        { label: "Orders Served", align: "center" },
+        { label: "Total Sales", align: "right", bold: true },
+        { label: "Generated SC", align: "right" },
+        { label: "Avg / Table", align: "right" }
+      ],
+      rows: rows
+    });
+
+  } else if (activeReportTabName === "items") {
+    const rows = [];
+    document.querySelectorAll("#repItemSalesTableBody tr").forEach(r => {
+      const cols = r.querySelectorAll("td");
+      if (cols.length >= 4) {
+        rows.push([
+          cols[0].innerText.trim(),
+          cols[1].innerText.trim(),
+          cols[2].innerText.trim(),
+          cols[3].innerText.trim()
+        ]);
+      }
+    });
+
+    if (rows.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+
+    generateReportPDF({
+      reportTitle: "Item-Wise Sales & Menu Performance",
+      subtitle: `Total Items Sold: ${document.getElementById("repTotalQtySold")?.innerText || '0'} | Revenue: ${document.getElementById("repTotalItemRevenue")?.innerText || '0.00'}`,
+      orientation: "portrait",
+      columns: [
+        { label: "Dish Name", bold: true },
+        { label: "Category" },
+        { label: "Quantity Sold", align: "center" },
+        { label: "Total Revenue (Rs.)", align: "right", bold: true }
+      ],
+      rows: rows
+    });
+
+  } else if (activeReportTabName === "credits") {
+    const list = Object.values(erpState.customerCredits || {});
+    if (list.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට ණය දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+
+    const rows = list.map(c => [
+      c.customerName || "Customer",
+      c.customerPhone || "-",
+      c.date || (c.createdAt ? c.createdAt.split('T')[0] : "-"),
+      c.invoiceNumber || "-",
+      parseFloat(c.amount || 0).toFixed(2),
+      c.status || "Unpaid"
+    ]);
+
+    generateReportPDF({
+      reportTitle: "Customer Credits & Debtors Ledger",
+      subtitle: `Total Outstanding Debt: ${document.getElementById("repTotalCreditOutstanding")?.innerText || 'Rs. 0.00'}`,
+      orientation: "portrait",
+      columns: [
+        { label: "Customer Name", bold: true },
+        { label: "Phone" },
+        { label: "Date" },
+        { label: "Invoice #" },
+        { label: "Credit Amount (Rs.)", align: "right", bold: true },
+        { label: "Status", align: "center" }
+      ],
+      rows: rows
+    });
+  }
+}
+
 // 🔒 UTF-8 BOM CSV EXPORT ENGINE
 export function exportCurrentReportToCSV() {
   const dateStr = getLocalDateString();
@@ -1082,7 +1354,7 @@ export function exportCurrentReportToCSV() {
     rows.forEach(r => {
       const cols = r.querySelectorAll("td");
       if (cols.length >= 6) {
-        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}"\n`;
+        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}","${cols[4].innerText}","${cols[5].innerText}"\n`;
       }
     });
     downloadCSVFile(csv, `Waiter_Sales_Performance_${dateStr}.csv`);
@@ -1311,13 +1583,11 @@ export async function openDayEndModal() {
   const cardVal = document.getElementById("dayEndCardSalesVal");
   const expVal = document.getElementById("dayEndExpectedCashVal");
   
-  // Card Types Breakdown Spans
+  // Card Types Breakdown Spans (System Expected Values)
   const visaVal = document.getElementById("dayEndVisaTotalVal");
   const masterVal = document.getElementById("dayEndMasterTotalVal");
   const amexVal = document.getElementById("dayEndAmexTotalVal");
   const otherCardVal = document.getElementById("dayEndOtherCardTotalVal");
-  const actCardIn = document.getElementById("dayEndActualCardInput");
-  const cardVBox = document.getElementById("dayEndCardVarianceBox");
 
   const pettyBoxVal = document.getElementById("zModalPettyBoxBalance");
   const actIn = document.getElementById("dayEndActualCashInput");
@@ -1335,22 +1605,46 @@ export async function openDayEndModal() {
 
   if (pettyBoxVal) pettyBoxVal.innerText = `Rs. ${currentZReportCalculatedData.pettyNetBalance.toFixed(2)}`;
   
+  // Clear Cash Denominations
   ["5000", "1000", "500", "100", "50", "20", "coins"].forEach(d => {
     const input = document.getElementById(`denom_${d}`);
     if (input) input.value = "";
   });
 
   if (actIn) actIn.value = "";
-  if (actCardIn) actCardIn.value = "";
+
+  // Reset 4 Actual Card Machine Inputs
+  const actVisaIn = document.getElementById("dayEndActualVisaInput");
+  const actMasterIn = document.getElementById("dayEndActualMasterInput");
+  const actAmexIn = document.getElementById("dayEndActualAmexInput");
+  const actOtherIn = document.getElementById("dayEndActualOtherInput");
+
+  if (actVisaIn) actVisaIn.value = "";
+  if (actMasterIn) actMasterIn.value = "";
+  if (actAmexIn) actAmexIn.value = "";
+  if (actOtherIn) actOtherIn.value = "";
+
+  // Reset Individual Card Variance Badges
+  const defaultCardBadgeClass = "text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap";
+  const vVisaBox = document.getElementById("dayEndVisaVarianceBox");
+  const vMasterBox = document.getElementById("dayEndMasterVarianceBox");
+  const vAmexBox = document.getElementById("dayEndAmexVarianceBox");
+  const vOtherBox = document.getElementById("dayEndOtherVarianceBox");
+
+  if (vVisaBox) { vVisaBox.className = defaultCardBadgeClass; vVisaBox.innerText = "Rs. 0.00"; }
+  if (vMasterBox) { vMasterBox.className = defaultCardBadgeClass; vMasterBox.innerText = "Rs. 0.00"; }
+  if (vAmexBox) { vAmexBox.className = defaultCardBadgeClass; vAmexBox.innerText = "Rs. 0.00"; }
+  if (vOtherBox) { vOtherBox.className = defaultCardBadgeClass; vOtherBox.innerText = "Rs. 0.00"; }
 
   if (vBox) {
     vBox.className = "p-3 rounded-xl border text-center font-bold text-xs bg-gray-100 text-gray-600";
     vBox.innerText = "නෝට්ටු ගණන හෝ මුළු මුදල ඇතුළත් කරන්න...";
   }
 
+  const cardVBox = document.getElementById("dayEndCardVarianceBox");
   if (cardVBox) {
-    cardVBox.className = "p-1.5 rounded-lg border text-center font-bold text-[11px] bg-white text-gray-600";
-    cardVBox.innerText = "Card Machine එකේ Settlement Total මුදල ඇතුළත් කරන්න...";
+    cardVBox.className = "text-xs font-black text-gray-700 font-mono";
+    cardVBox.innerText = "Rs. 0.00";
   }
 
   renderZReportModalBreakdowns(currentZReportCalculatedData);
@@ -1408,7 +1702,7 @@ export function calculateDayEndVariance() {
   const expectedCash = currentZReportCalculatedData ? currentZReportCalculatedData.expectedCash : 0;
   const actualCash = parseFloat(document.getElementById("dayEndActualCashInput")?.value || 0);
   const diffCash = actualCash - expectedCash;
-
+  
   const box = document.getElementById("dayEndVarianceBox");
   if (box) {
     if (actualCash === 0 && !document.getElementById("dayEndActualCashInput")?.value) {
@@ -1425,27 +1719,70 @@ export function calculateDayEndVariance() {
       box.innerHTML = `ℹ️ මුදල් වැඩිය (Cash Excess): +Rs. ${diffCash.toFixed(2)}`;
     }
   }
-
-  // 2. 💳 CARD MACHINE RECONCILIATION
-  const expectedCard = currentZReportCalculatedData ? currentZReportCalculatedData.cardSales : 0;
-  const actualCardInput = document.getElementById("dayEndActualCardInput");
-  const actualCard = parseFloat(actualCardInput?.value || 0);
-  const diffCard = actualCard - expectedCard;
-
-  const cardBox = document.getElementById("dayEndCardVarianceBox");
-  if (cardBox) {
-    if (actualCard === 0 && !actualCardInput?.value) {
-      cardBox.className = "p-1.5 rounded-lg border text-center font-bold text-[11px] bg-white text-gray-600";
-      cardBox.innerText = "Card Machine එකේ Settlement Total මුදල ඇතුළත් කරන්න...";
-    } else if (Math.abs(diffCard) < 0.01) {
-      cardBox.className = "p-1.5 rounded-lg border border-green-300 bg-green-50 text-green-800 text-center font-black text-[11px]";
-      cardBox.innerHTML = `✅ Card Match! සම්පූර්ණයෙන්ම සමානයි (Rs. 0.00)`;
-    } else if (diffCard < 0) {
-      cardBox.className = "p-1.5 rounded-lg border border-red-300 bg-red-50 text-red-800 text-center font-black text-[11px]";
-      cardBox.innerHTML = `⚠️ Card හිඟයකි (Card Shortage): -Rs. ${Math.abs(diffCard).toFixed(2)}`;
+  
+  // 2. 💳 CARD MACHINE INDIVIDUAL RECONCILIATION
+  const cb = currentZReportCalculatedData?.cardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+  
+  const inVisa = document.getElementById("dayEndActualVisaInput");
+  const inMaster = document.getElementById("dayEndActualMasterInput");
+  const inAmex = document.getElementById("dayEndActualAmexInput");
+  const inOther = document.getElementById("dayEndActualOtherInput");
+  
+  const boxVisa = document.getElementById("dayEndVisaVarianceBox");
+  const boxMaster = document.getElementById("dayEndMasterVarianceBox");
+  const boxAmex = document.getElementById("dayEndAmexVarianceBox");
+  const boxOther = document.getElementById("dayEndOtherVarianceBox");
+  
+  function evaluateSingleCardVariance(inputEl, varianceBox, expectedVal) {
+    if (!varianceBox) return 0;
+    const strVal = inputEl ? inputEl.value.trim() : "";
+    if (!strVal) {
+      varianceBox.className = "text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap";
+      varianceBox.innerText = "Rs. 0.00";
+      return 0;
+    }
+    
+    const actualVal = parseFloat(strVal || 0);
+    const diff = Math.round((actualVal - expectedVal) * 100) / 100;
+    
+    if (Math.abs(diff) < 0.01) {
+      varianceBox.className = "text-[10px] font-black px-2 py-0.5 rounded-md bg-green-100 text-green-700 border border-green-300 whitespace-nowrap";
+      varianceBox.innerHTML = `✅ Match (0.00)`;
+    } else if (diff < 0) {
+      varianceBox.className = "text-[10px] font-black px-2 py-0.5 rounded-md bg-red-100 text-red-700 border border-red-300 whitespace-nowrap";
+      varianceBox.innerHTML = `⚠️ Short (-Rs. ${Math.abs(diff).toFixed(2)})`;
     } else {
-      cardBox.className = "p-1.5 rounded-lg border border-yellow-300 bg-yellow-50 text-yellow-800 text-center font-black text-[11px]";
-      cardBox.innerHTML = `ℹ️ Card වැඩිය (Card Excess): +Rs. ${diffCard.toFixed(2)}`;
+      varianceBox.className = "text-[10px] font-black px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-800 border border-yellow-300 whitespace-nowrap";
+      varianceBox.innerHTML = `ℹ️ Excess (+Rs. ${diff.toFixed(2)})`;
+    }
+    return actualVal;
+  }
+  
+  const actVisa = evaluateSingleCardVariance(inVisa, boxVisa, cb.visa || 0);
+  const actMaster = evaluateSingleCardVariance(inMaster, boxMaster, cb.master || 0);
+  const actAmex = evaluateSingleCardVariance(inAmex, boxAmex, cb.amex || 0);
+  const actOther = evaluateSingleCardVariance(inOther, boxOther, cb.other || 0);
+  
+  // 3. OVERALL CARD VARIANCE SUMMARY
+  const totalActualCard = actVisa + actMaster + actAmex + actOther;
+  const totalExpectedCard = currentZReportCalculatedData ? parseFloat(currentZReportCalculatedData.cardSales || 0) : 0;
+  const totalCardDiff = Math.round((totalActualCard - totalExpectedCard) * 100) / 100;
+  
+  const totalCardBox = document.getElementById("dayEndCardVarianceBox");
+  if (totalCardBox) {
+    const anyCardEntered = [inVisa, inMaster, inAmex, inOther].some(el => el && el.value.trim() !== "");
+    if (!anyCardEntered) {
+      totalCardBox.className = "text-xs font-black text-gray-700 font-mono";
+      totalCardBox.innerText = `Expected Total: Rs. ${totalExpectedCard.toFixed(2)}`;
+    } else if (Math.abs(totalCardDiff) < 0.01) {
+      totalCardBox.className = "text-xs font-black text-green-700 font-mono";
+      totalCardBox.innerText = `✅ Perfect Match! Total: Rs. ${totalActualCard.toFixed(2)}`;
+    } else if (totalCardDiff < 0) {
+      totalCardBox.className = "text-xs font-black text-red-600 font-mono";
+      totalCardBox.innerText = `⚠️ Total Short: -Rs. ${Math.abs(totalCardDiff).toFixed(2)} (Actual: Rs. ${totalActualCard.toFixed(2)})`;
+    } else {
+      totalCardBox.className = "text-xs font-black text-yellow-700 font-mono";
+      totalCardBox.innerText = `ℹ️ Total Excess: +Rs. ${totalCardDiff.toFixed(2)} (Actual: Rs. ${totalActualCard.toFixed(2)})`;
     }
   }
 }
@@ -1453,23 +1790,48 @@ export function calculateDayEndVariance() {
 // 🔒 SAVE Z-REPORT & SILENT DIRECT HARDWARE PRINT
 export async function printAndSaveZReport() {
   if (!currentZReportCalculatedData) return;
-
+  
+  // 1. Physical Cash Audit
   const actualCash = parseFloat(document.getElementById("dayEndActualCashInput")?.value || 0);
   const varianceCash = actualCash - currentZReportCalculatedData.expectedCash;
-
-  const actualCard = parseFloat(document.getElementById("dayEndActualCardInput")?.value || 0);
-  const varianceCard = actualCard - currentZReportCalculatedData.cardSales;
-
+  
+  // 2. Individual Card Audit (Visa, MasterCard, AMEX, Other)
+  const actualVisa = parseFloat(document.getElementById("dayEndActualVisaInput")?.value || 0);
+  const actualMaster = parseFloat(document.getElementById("dayEndActualMasterInput")?.value || 0);
+  const actualAmex = parseFloat(document.getElementById("dayEndActualAmexInput")?.value || 0);
+  const actualOther = parseFloat(document.getElementById("dayEndActualOtherInput")?.value || 0);
+  
+  const cb = currentZReportCalculatedData.cardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+  const varianceVisa = actualVisa - (cb.visa || 0);
+  const varianceMaster = actualMaster - (cb.master || 0);
+  const varianceAmex = actualAmex - (cb.amex || 0);
+  const varianceOther = actualOther - (cb.other || 0);
+  
+  const totalActualCard = actualVisa + actualMaster + actualAmex + actualOther;
+  const varianceTotalCard = totalActualCard - parseFloat(currentZReportCalculatedData.cardSales || 0);
+  
   const fullZReportPayload = {
     ...currentZReportCalculatedData,
     actualCash: Math.round(actualCash * 100) / 100,
     variance: Math.round(varianceCash * 100) / 100,
-    actualCard: Math.round(actualCard * 100) / 100,
-    cardVariance: Math.round(varianceCard * 100) / 100,
+    actualCardBreakdown: {
+      visa: Math.round(actualVisa * 100) / 100,
+      master: Math.round(actualMaster * 100) / 100,
+      amex: Math.round(actualAmex * 100) / 100,
+      other: Math.round(actualOther * 100) / 100
+    },
+    cardVarianceBreakdown: {
+      visa: Math.round(varianceVisa * 100) / 100,
+      master: Math.round(varianceMaster * 100) / 100,
+      amex: Math.round(varianceAmex * 100) / 100,
+      other: Math.round(varianceOther * 100) / 100
+    },
+    actualCard: Math.round(totalActualCard * 100) / 100,
+    cardVariance: Math.round(varianceTotalCard * 100) / 100,
     timestamp: new Date().toISOString(),
     hotelName: currentTenantInfo?.hotelName || "Restaurant ERP"
   };
-
+  
   try {
     if (dbRef && pushFn && updateFn && currentTenant) {
       const zRef = await pushFn(dbRef(`tenants/${currentTenant}/dayEndReports`), fullZReportPayload);
@@ -1487,6 +1849,10 @@ export async function printAndSaveZReport() {
         cashSales: fullZReportPayload.cashSales,
         cardSales: fullZReportPayload.cardSales,
         cardBreakdown: fullZReportPayload.cardBreakdown,
+        actualCardBreakdown: fullZReportPayload.actualCardBreakdown,
+        cardVarianceBreakdown: fullZReportPayload.cardVarianceBreakdown,
+        actualCard: fullZReportPayload.actualCard,
+        cardVariance: fullZReportPayload.cardVariance,
         transferSales: fullZReportPayload.transferSales,
         creditSales: fullZReportPayload.creditSales,
         totalDiscounts: fullZReportPayload.totalDiscounts,
@@ -1495,7 +1861,7 @@ export async function printAndSaveZReport() {
         updatedAt: new Date().toISOString()
       });
     }
-
+    
     try {
       if (window.electronAPI && window.electronAPI.saveLocalAutoBackup) {
         const localBackupPayload = {
@@ -1509,13 +1875,13 @@ export async function printAndSaveZReport() {
     } catch (backupErr) {
       console.warn("Auto local backup pass:", backupErr);
     }
-
+    
     renderAdvancedThermalZReport(fullZReportPayload);
-
+    
     const pr = erpState.settings?.printers || {};
     const targetPrinter = pr.p1?.device || pr.p4?.device || "";
     await sendDirectSilentPrint(targetPrinter, "", "zReportPrintModal");
-
+    
     closeDayEndModal();
     showLiveToast("📑 Z-Report Completed", "දවසේ සම්පූර්ණ Z-Report එක සාර්ථකව Print වී Local Backup එක සුරැකිණි.", "success", "fa-vault");
   } catch (err) {
@@ -1523,7 +1889,7 @@ export async function printAndSaveZReport() {
   }
 }
 
-// THERMAL PRINTABLE Z-REPORT FORMATTER (WITH CARD AUDIT)
+// THERMAL PRINTABLE Z-REPORT FORMATTER
 function renderAdvancedThermalZReport(z) {
   const zHotel = document.getElementById("zHotelName");
   const zDate = document.getElementById("zReportDate");
@@ -1560,12 +1926,40 @@ function renderAdvancedThermalZReport(z) {
   
   if (zCard) {
     const cb = z.cardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+    const acb = z.actualCardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+    const vcb = z.cardVarianceBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+    
+    function formatCardSlipLine(label, posVal, mchVal, diffVal) {
+      if (posVal === 0 && mchVal === 0 && diffVal === 0) return '';
+      const sign = diffVal > 0 ? '+' : (diffVal < 0 ? '-' : '');
+      const diffStr = Math.abs(diffVal) < 0.01 ? 'Match' : `${sign}Rs.${Math.abs(diffVal).toFixed(0)}`;
+      return `<div>${label}: POS Rs.${posVal.toFixed(0)} | Mch Rs.${mchVal.toFixed(0)} [${diffStr}]</div>`;
+    }
+    
+    const visaLine = formatCardSlipLine("Visa", cb.visa || 0, acb.visa || 0, vcb.visa || 0);
+    const masterLine = formatCardSlipLine("Master", cb.master || 0, acb.master || 0, vcb.master || 0);
+    const amexLine = formatCardSlipLine("AMEX", cb.amex || 0, acb.amex || 0, vcb.amex || 0);
+    const otherLine = formatCardSlipLine("Other", cb.other || 0, acb.other || 0, vcb.other || 0);
+    
+    const hasAnyCard = (z.cardSales > 0 || (z.actualCard || 0) > 0);
+    
     zCard.innerHTML = `
-      <span>Rs. ${z.cardSales.toFixed(2)}</span>
-      <div style="font-size: 8.5px; color: #444; font-weight: normal; margin-top: 2px;">
-        Visa: Rs.${cb.visa.toFixed(0)} | Master: Rs.${cb.master.toFixed(0)}<br>
-        AMEX: Rs.${cb.amex.toFixed(0)} | Other: Rs.${cb.other.toFixed(0)}
-      </div>
+      <span>Rs. ${parseFloat(z.cardSales || 0).toFixed(2)}</span>
+      ${
+        hasAnyCard 
+          ? `
+            <div style="font-size: 8.5px; color: #000000; font-family: monospace; font-weight: normal; margin-top: 2px; border-top: 1px dotted #000; padding-top: 2px;">
+              ${visaLine || '<div>Visa: Rs.0 (Match)</div>'}
+              ${masterLine || '<div>Master: Rs.0 (Match)</div>'}
+              ${amexLine}
+              ${otherLine}
+              <div style="font-weight: bold; border-top: 1px dashed #000; margin-top: 1px; padding-top: 1px;">
+                Mch Total: Rs.${parseFloat(z.actualCard || 0).toFixed(2)} | Var: Rs.${parseFloat(z.cardVariance || 0).toFixed(2)}
+              </div>
+            </div>
+          ` 
+          : ''
+      }
     `;
   }
 
@@ -1616,16 +2010,40 @@ function renderAdvancedThermalZReport(z) {
   if (zPBal) zPBal.innerText = `Rs. ${z.pettyNetBalance.toFixed(2)}`;
 }
 
-// 6. SHIFT HANDOVER (X-REPORT)
+// 6. SHIFT HANDOVER (X-REPORT - BUG #12 FIXED: MIDNIGHT SHIFT COMPLIANT)
 export function openShiftHandoverModal() {
-  const todayLocalStr = getLocalDateString(new Date());
   document.getElementById("shiftHandoverForm")?.reset();
+  const now = new Date();
+
+  // 🛡️ REPAIRED: Compute shift start timestamp accurately (past midnight compliant)
+  let shiftStartTimeMs;
+  if (now.getHours() < 5) {
+    shiftStartTimeMs = now.getTime() - (24 * 60 * 60 * 1000);
+  } else {
+    const todayMorning = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 5, 0, 0);
+    shiftStartTimeMs = todayMorning.getTime();
+  }
+
+  const pastReports = Object.values(erpState.dayEndReports || {});
+  if (pastReports.length > 0) {
+    const validPastTimestamps = pastReports
+      .map(r => new Date(r.auditTime || r.timestamp || r.date).getTime())
+      .filter(t => !isNaN(t) && t < now.getTime());
+
+    if (validPastTimestamps.length > 0) {
+      const lastAuditTimestamp = Math.max(...validPastTimestamps);
+      const hoursSinceLastZ = (now.getTime() - lastAuditTimestamp) / (1000 * 60 * 60);
+      if (hoursSinceLastZ <= 36) {
+        shiftStartTimeMs = lastAuditTimestamp;
+      }
+    }
+  }
 
   let openingFloat = 0;
   Object.values(erpState.pettyCash || {}).forEach(p => {
     if (p.category === "Main Cash Drawer Top-up" && p.type === "in") {
-      const pDate = p.date || (p.timestamp ? getLocalDateString(new Date(p.timestamp)) : '');
-      if (pDate === todayLocalStr) {
+      const floatTime = new Date(p.timestamp).getTime();
+      if (floatTime >= shiftStartTimeMs) {
         openingFloat += parseFloat(p.amount || 0);
       }
     }
@@ -1634,8 +2052,8 @@ export function openShiftHandoverModal() {
   let cashSales = 0;
   Object.values(erpState.invoices || {}).forEach(inv => {
     if (inv.status === "Voided") return;
-    const invDate = inv.date || (inv.createdAt ? getLocalDateString(new Date(inv.createdAt)) : '');
-    if (invDate === todayLocalStr) {
+    const invTime = new Date(inv.createdAt || 0).getTime();
+    if (invTime >= shiftStartTimeMs) {
       const p = inv.payment || { method: "cash" };
       if (p.method === "cash") cashSales += parseFloat(inv.netTotal || 0);
       else if (p.method === "split") cashSales += parseFloat(p.splitCash || 0);
@@ -1703,6 +2121,297 @@ export async function handleShiftHandoverSubmit(e) {
   }
 }
 
+// ==========================================================================
+// 7. DAY-END (Z-REPORT) AUDIT HISTORY & ON-DEMAND LOAD ENGINE
+// ==========================================================================
+
+export function setZHistoryPreset(preset) {
+  const fromEl = document.getElementById("zHistFromDate");
+  const toEl = document.getElementById("zHistToDate");
+  if (!fromEl || !toEl) return;
+  const now = new Date();
+  
+  if (preset === "today") {
+    fromEl.value = getLocalDateString(now);
+    toEl.value = getLocalDateString(now);
+  } else if (preset === "yesterday") {
+    const y = new Date(now.setDate(now.getDate() - 1));
+    fromEl.value = getLocalDateString(y);
+    toEl.value = getLocalDateString(y);
+  } else if (preset === "thisWeek") {
+    const cur = new Date();
+    const first = new Date(cur.setDate(cur.getDate() - cur.getDay()));
+    fromEl.value = getLocalDateString(first);
+    toEl.value = getLocalDateString(new Date());
+  } else if (preset === "thisMonth") {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    fromEl.value = getLocalDateString(first);
+    toEl.value = getLocalDateString(last);
+  } else if (preset === "all") {
+    fromEl.value = "";
+    toEl.value = "";
+  }
+  
+  loadDayEndHistory();
+}
+
+// ⚡ ON-DEMAND LOAD BUTTON
+export async function loadDayEndHistory() {
+  const btn = document.getElementById("btnLoadZHistory");
+  const fromVal = document.getElementById("zHistFromDate")?.value;
+  const toVal = document.getElementById("zHistToDate")?.value;
+  
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Loading...`;
+  }
+  
+  try {
+    if (fbQuery && fbQuery.query && dbRef && currentTenant) {
+      const baseRef = dbRef(`tenants/${currentTenant}/dayEndReports`);
+      let q;
+      if (fromVal && toVal) {
+        q = fbQuery.query(baseRef, fbQuery.orderByChild("date"), fbQuery.startAt(fromVal), fbQuery.endAt(toVal));
+      } else if (fromVal) {
+        q = fbQuery.query(baseRef, fbQuery.orderByChild("date"), fbQuery.startAt(fromVal));
+      } else {
+        q = fbQuery.query(baseRef, fbQuery.limitToLast(100));
+      }
+      const snap = await fbQuery.get(q);
+      if (snap.exists()) {
+        if (!erpState.dayEndReports) erpState.dayEndReports = {};
+        Object.assign(erpState.dayEndReports, snap.val());
+      }
+    }
+  } catch (err) {
+    console.warn("Day-end history fetch fallback to memory:", err.message);
+  }
+  
+  renderDayEndHistoryTable();
+  
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Load Day-End Reports`;
+  }
+}
+
+export function renderDayEndHistoryTable() {
+  const tbody = document.getElementById("dayEndHistoryTableBody");
+  if (!tbody) return;
+  
+  const fromVal = document.getElementById("zHistFromDate")?.value;
+  const toVal = document.getElementById("zHistToDate")?.value;
+  
+  let list = Object.entries(erpState.dayEndReports || {});
+  
+  if (fromVal) {
+    list = list.filter(([id, z]) => (z.date || (z.auditTime ? z.auditTime.split("T")[0] : '')) >= fromVal);
+  }
+  if (toVal) {
+    list = list.filter(([id, z]) => (z.date || (z.auditTime ? z.auditTime.split("T")[0] : '')) <= toVal);
+  }
+  
+  let totalNetSales = 0;
+  let totalCashVariance = 0;
+  let totalCardVariance = 0;
+  
+  list.forEach(([id, z]) => {
+    totalNetSales += parseFloat(z.netSales || 0);
+    totalCashVariance += parseFloat(z.variance || 0);
+    totalCardVariance += parseFloat(z.cardVariance || 0);
+  });
+  
+  const totCountEl = document.getElementById("zHistTotalCount");
+  const netSalesEl = document.getElementById("zHistTotalNetSales");
+  const cashVarEl = document.getElementById("zHistTotalCashVariance");
+  const cardVarEl = document.getElementById("zHistTotalCardVariance");
+  
+  if (totCountEl) totCountEl.innerText = `${list.length} Reports`;
+  if (netSalesEl) netSalesEl.innerText = `Rs. ${totalNetSales.toFixed(2)}`;
+  if (cashVarEl) {
+    cashVarEl.innerText = `Rs. ${totalCashVariance.toFixed(2)}`;
+    cashVarEl.className = totalCashVariance < 0 ? "text-base font-black text-red-600 mt-0.5 block font-mono" : "text-base font-black text-green-700 mt-0.5 block font-mono";
+  }
+  if (cardVarEl) {
+    cardVarEl.innerText = `Rs. ${totalCardVariance.toFixed(2)}`;
+    cardVarEl.className = totalCardVariance < 0 ? "text-base font-black text-red-600 mt-0.5 block font-mono" : "text-base font-black text-purple-700 mt-0.5 block font-mono";
+  }
+  
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">තෝරාගත් කාලසීමාව තුළ Day-End සටහන් හමු නොවීය...</td></tr>`;
+    return;
+  }
+  
+  // Sort descending by auditTime / date
+  list.sort((a, b) => new Date(b[1].auditTime || b[1].timestamp || b[1].date).getTime() - new Date(a[1].auditTime || a[1].timestamp || a[1].date).getTime());
+  
+  tbody.innerHTML = "";
+  
+  list.forEach(([id, z]) => {
+    const shiftStartStr = z.shiftStartTime ? new Date(z.shiftStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+    const auditTimeStr = z.auditTime ? new Date(z.auditTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+    
+    const cashVar = parseFloat(z.variance || 0);
+    const cardVar = parseFloat(z.cardVariance || 0);
+    
+    const cb = z.cardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+    const acb = z.actualCardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
+    
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-gray-50 border-b border-gray-100";
+    tr.innerHTML = `
+      <td class="p-3.5">
+        <span class="font-extrabold text-gray-900 block">${z.date || '--'}</span>
+        <span class="text-[10px] text-gray-400 font-mono font-bold block">${shiftStartStr} - ${auditTimeStr}</span>
+      </td>
+      <td class="p-3.5 text-center font-bold text-gray-700">${z.totalBillsCount || 0}</td>
+      <td class="p-3.5 font-black text-blue-700">Rs. ${parseFloat(z.netSales || 0).toFixed(2)}</td>
+      <td class="p-3.5">
+        <div class="text-[11px]">
+          <span class="text-gray-500 font-bold">Exp: Rs.${parseFloat(z.expectedCash || 0).toFixed(0)} | Act: Rs.${parseFloat(z.actualCash || 0).toFixed(0)}</span>
+          <span class="block text-[10px] font-black ${cashVar < 0 ? 'text-red-600' : (cashVar > 0 ? 'text-yellow-600' : 'text-green-700')}">
+            Var: ${cashVar < 0 ? '-Rs.' + Math.abs(cashVar).toFixed(2) : (cashVar > 0 ? '+Rs.' + cashVar.toFixed(2) : '✅ Match (0.00)')}
+          </span>
+        </div>
+      </td>
+      <td class="p-3.5">
+        <div class="text-[11px]">
+          <span class="text-gray-500 font-bold">POS: Rs.${parseFloat(z.cardSales || 0).toFixed(0)} | Mch: Rs.${parseFloat(z.actualCard || 0).toFixed(0)}</span>
+          <span class="block text-[10px] font-black ${cardVar < 0 ? 'text-red-600' : (cardVar > 0 ? 'text-yellow-600' : 'text-green-700')}">
+            Var: ${cardVar < 0 ? '-Rs.' + Math.abs(cardVar).toFixed(2) : (cardVar > 0 ? '+Rs.' + cardVar.toFixed(2) : '✅ Match (0.00)')}
+          </span>
+          ${
+            (z.cardSales > 0 || (z.actualCard || 0) > 0)
+              ? `<span class="block text-[9px] text-purple-700 font-mono">V: ${cb.visa || 0}/${acb.visa || 0} | M: ${cb.master || 0}/${acb.master || 0}</span>`
+              : ''
+          }
+        </div>
+      </td>
+      <td class="p-3.5 font-bold text-gray-700">Rs. ${parseFloat(z.pettyNetBalance || 0).toFixed(2)}</td>
+      <td class="p-3.5 text-right whitespace-nowrap">
+        <button onclick="reprintPastZReport('${id}')" title="Reprint Thermal Z-Report" class="bg-green-50 text-green-700 hover:bg-green-700 hover:text-white border border-green-200 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ml-auto">
+          <i class="fa-solid fa-print"></i>
+          <span>Reprint Slip</span>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// 🖨️ REPRINT PAST Z-REPORT
+export async function reprintPastZReport(id) {
+  const z = erpState.dayEndReports?.[id];
+  if (!z) {
+    showLiveToast("⚠️ Report Error", "Z-Report දත්ත හමු නොවීය.", "warning", "fa-triangle-exclamation");
+    return;
+  }
+  
+  try {
+    renderAdvancedThermalZReport(z);
+    const pr = erpState.settings?.printers || {};
+    const targetPrinter = pr.p1?.device || pr.p4?.device || "";
+    await sendDirectSilentPrint(targetPrinter, "", "zReportPrintModal");
+    showLiveToast("📑 Z-Report Reprinted", `${z.date} දින Z-Report එක සාර්ථකව Print කරන ලදී.`, "success", "fa-print");
+  } catch (err) {
+    showLiveToast("⚠️ Print Error", "මුද්‍රණයේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
+  }
+}
+
+// 📄 EXPORT DAY-END HISTORY TO PDF
+export function exportDayEndHistoryToPDF() {
+  const fromVal = document.getElementById("zHistFromDate")?.value || "All";
+  const toVal = document.getElementById("zHistToDate")?.value || "All";
+  
+  let list = Object.values(erpState.dayEndReports || {});
+  if (fromVal !== "All") list = list.filter(z => (z.date || (z.auditTime ? z.auditTime.split("T")[0] : '')) >= fromVal);
+  if (toVal !== "All") list = list.filter(z => (z.date || (z.auditTime ? z.auditTime.split("T")[0] : '')) <= toVal);
+  
+  if (list.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Day-End දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  list.sort((a, b) => new Date(b.auditTime || b.timestamp || b.date).getTime() - new Date(a.auditTime || a.timestamp || a.date).getTime());
+
+  let totalNet = 0;
+  let totalCashVar = 0;
+  let totalCardVar = 0;
+
+  const rows = list.map(z => {
+    totalNet += parseFloat(z.netSales || 0);
+    totalCashVar += parseFloat(z.variance || 0);
+    totalCardVar += parseFloat(z.cardVariance || 0);
+
+    const shiftTime = `${z.shiftStartTime ? new Date(z.shiftStartTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''} - ${z.auditTime ? new Date(z.auditTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}`;
+    return [
+      z.date || "-",
+      shiftTime,
+      z.totalBillsCount || 0,
+      parseFloat(z.grossSales || 0).toFixed(2),
+      parseFloat(z.netSales || 0).toFixed(2),
+      parseFloat(z.expectedCash || 0).toFixed(2),
+      parseFloat(z.actualCash || 0).toFixed(2),
+      parseFloat(z.variance || 0).toFixed(2),
+      parseFloat(z.cardSales || 0).toFixed(2),
+      parseFloat(z.cardVariance || 0).toFixed(2),
+      parseFloat(z.pettyNetBalance || 0).toFixed(2)
+    ];
+  });
+
+  generateReportPDF({
+    reportTitle: "Day-End (Z-Report) Audits History",
+    subtitle: `Period: ${fromVal} to ${toVal}`,
+    orientation: "landscape",
+    summaryCards: [
+      { label: "Total Audits", value: `${list.length} Shifts` },
+      { label: "Total Net Sales", value: `Rs. ${totalNet.toFixed(2)}`, color: "#2563eb" },
+      { label: "Net Cash Variance", value: `Rs. ${totalCashVar.toFixed(2)}`, color: totalCashVar < 0 ? "#dc2626" : "#16a34a" },
+      { label: "Net Card Variance", value: `Rs. ${totalCardVar.toFixed(2)}`, color: totalCardVar < 0 ? "#dc2626" : "#7c3aed" }
+    ],
+    columns: [
+      { label: "Date", bold: true },
+      { label: "Shift Duration" },
+      { label: "Bills", align: "center" },
+      { label: "Gross (Rs.)", align: "right" },
+      { label: "Net Sales (Rs.)", align: "right", bold: true },
+      { label: "Exp. Cash", align: "right" },
+      { label: "Act. Cash", align: "right" },
+      { label: "Cash Var.", align: "right", bold: true },
+      { label: "Card Sales", align: "right" },
+      { label: "Card Var.", align: "right" },
+      { label: "Petty Bal.", align: "right" }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 EXPORT DAY-END HISTORY TO CSV
+export function exportDayEndHistoryToCSV() {
+  const fromVal = document.getElementById("zHistFromDate")?.value || "All";
+  const toVal = document.getElementById("zHistToDate")?.value || "All";
+  
+  let list = Object.values(erpState.dayEndReports || {});
+  if (fromVal !== "All") list = list.filter(z => (z.date || (z.auditTime ? z.auditTime.split("T")[0] : '')) >= fromVal);
+  if (toVal !== "All") list = list.filter(z => (z.date || (z.auditTime ? z.auditTime.split("T")[0] : '')) <= toVal);
+  
+  if (list.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Day-End දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+  
+  let csv = `Date,Shift Start,Audit Time,Total Bills,Gross Sales,Net Sales,Cash Sales,Opening Float,Expected Cash,Actual Cash,Cash Variance,POS Card Sales,Actual Card Total,Card Variance,Visa POS,Visa Actual,Master POS,Master Actual,AMEX POS,AMEX Actual,Other POS,Other Actual,Petty Box Balance\n`;
+  
+  list.forEach(z => {
+    const cb = z.cardBreakdown || {};
+    const acb = z.actualCardBreakdown || {};
+    csv += `"${z.date || ''}","${z.shiftStartTime || ''}","${z.auditTime || ''}","${z.totalBillsCount || 0}","${z.grossSales || 0}","${z.netSales || 0}","${z.cashSales || 0}","${z.openingFloat || 0}","${z.expectedCash || 0}","${z.actualCash || 0}","${z.variance || 0}","${z.cardSales || 0}","${z.actualCard || 0}","${z.cardVariance || 0}","${cb.visa || 0}","${acb.visa || 0}","${cb.master || 0}","${acb.master || 0}","${cb.amex || 0}","${acb.amex || 0}","${cb.other || 0}","${acb.other || 0}","${z.pettyNetBalance || 0}"\n`;
+  });
+  
+  downloadCSVFile(csv, `DayEnd_ZReports_History_${fromVal}_to_${toVal}.csv`);
+}
+
 // Global Window Exports
 window.switchReportTab = switchReportTab;
 window.setReportPeriodPreset = setReportPeriodPreset;
@@ -1712,6 +2421,7 @@ window.reprintInvoice = reprintInvoice;
 window.shareWhatsAppInvoice = shareWhatsAppInvoice;
 window.settleCustomerCredit = settleCustomerCredit;
 window.exportCurrentReportToCSV = exportCurrentReportToCSV;
+window.exportCurrentReportToPDF = exportCurrentReportToPDF;
 window.renderPnLStatement = renderPnLStatement;
 window.renderHourlyVelocityReport = renderHourlyVelocityReport;
 window.renderWaiterSalesReport = renderWaiterSalesReport;
@@ -1728,3 +2438,12 @@ window.printAndSaveZReport = printAndSaveZReport;
 window.openShiftHandoverModal = openShiftHandoverModal;
 window.closeShiftHandoverModal = closeShiftHandoverModal;
 window.handleShiftHandoverSubmit = handleShiftHandoverSubmit;
+
+// Day-End History Exports
+window.setZHistoryPreset = setZHistoryPreset;
+window.loadDayEndHistory = loadDayEndHistory;
+window.renderDayEndHistoryTable = renderDayEndHistoryTable;
+window.reprintPastZReport = reprintPastZReport;
+window.exportDayEndHistoryToCSV = exportDayEndHistoryToCSV;
+window.exportDayEndHistoryToPDF = exportDayEndHistoryToPDF;
+
