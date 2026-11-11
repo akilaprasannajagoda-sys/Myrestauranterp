@@ -3,7 +3,7 @@
 // 🎨 ARCHITECTURAL RESTAURANT FLOOR PLAN ENGINE (EXACT CLIENT PHOTO REPLICA)
 // 100% COMPATIBLE WITH EXISTING POS, BILLING & REALTIME FIREBASE LOGIC
 // 🔴 100% REAL-TIME OCCUPIED RED HIGHLIGHT + TOUCH SCREEN & MOUSE EDIT ENGINE
-// 🔒 DYNAMIC TABLE ORDER MODE ACTIVATION (METHOD 01)
+// 🔒 DYNAMIC TABLE ORDER MODE ACTIVATION & ALL 36 TABLES INCLUDED
 // ==========================================================================
 
 import { erpState, currentTenant, currentAreaFilter, setCurrentAreaFilter, setActiveBillId } from './state.js';
@@ -220,7 +220,6 @@ export function editTableByNumber(numStr) {
   if (foundEntry) {
     openTableModal('edit', foundEntry[0]);
   } else {
-    // If not registered in database yet, open Add Table modal with pre-filled number
     openTableModal('add');
     const noIn = document.getElementById("tableNoInput");
     if (noIn) noIn.value = numStr;
@@ -231,6 +230,7 @@ export function closeTableModal() {
   document.getElementById("tableModal")?.classList.add("hidden");
 }
 
+// 🛡️ REPAIRED (BUG #23 FIXED): Clean single-reference table creation without duplicates
 export async function handleTableSubmit(e) {
   e.preventDefault();
   const editId = document.getElementById("editTableId")?.value;
@@ -250,21 +250,26 @@ export async function handleTableSubmit(e) {
     return;
   }
   
-  const targetId = editId || ("tbl_" + Date.now());
-  if (!erpState.tables) erpState.tables = {};
-  erpState.tables[targetId] = tableData;
-
-  closeTableModal();
-  renderTablesFloorGrid();
-
   try {
     if (dbRef && currentTenant && navigator.onLine) {
       if (editId && updateFn) {
         await updateFn(dbRef(`tenants/${currentTenant}/tables/${editId}`), tableData);
+        if (erpState.tables && erpState.tables[editId]) {
+          Object.assign(erpState.tables[editId], tableData);
+        }
       } else if (pushFn) {
-        await pushFn(dbRef(`tenants/${currentTenant}/tables`), tableData);
+        const newRef = await pushFn(dbRef(`tenants/${currentTenant}/tables`), tableData);
+        if (!erpState.tables) erpState.tables = {};
+        erpState.tables[newRef.key] = tableData;
       }
+    } else {
+      const targetId = editId || ("tbl_" + Date.now());
+      if (!erpState.tables) erpState.tables = {};
+      erpState.tables[targetId] = tableData;
     }
+
+    closeTableModal();
+    renderTablesFloorGrid();
     showLiveToast("🍽️ Table Saved", `Table ${tableData.tableNo} සාර්ථකව සේව් විය.`, "success", "fa-chair");
   } catch (err) {
     showLiveToast("⚠️ දෝෂයකි", "මේසය සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
@@ -310,7 +315,6 @@ export function renderTablesFloorGrid() {
   const tablesObj = erpState.tables || {};
   const kitchenOrders = erpState.kitchenOrders || {};
 
-  // 🛡️ Helper: Matches '01' with '1', 'Table 01', 'T-01' etc.
   function getTableData(numStr) {
     const cleanNum = extractTableNum(numStr);
     const foundEntry = Object.entries(tablesObj).find(([id, t]) => {
@@ -336,7 +340,7 @@ export function renderTablesFloorGrid() {
     const targetNum = extractTableNum(tableData.tableNo);
     if (targetNum === null) return { isMergedSource: false, isMergedTarget: false, mergedInto: "", mergedWith: [] };
 
-    // 1. Check if this table was merged INTO another table (Source)
+    // 1. Check if merged INTO another table (Source)
     if (tableData.status === "Merged" && tableData.mergedInto) {
       return { isMergedSource: true, isMergedTarget: false, mergedInto: tableData.mergedInto, mergedWith: [] };
     }
@@ -351,7 +355,7 @@ export function renderTablesFloorGrid() {
       }
     }
 
-    // 2. Check if this table HAS other tables merged into it (Target / Host)
+    // 2. Check if this table HAS other tables merged into it (Host)
     if (tableData.mergedWith && Array.isArray(tableData.mergedWith) && tableData.mergedWith.length > 0) {
       return { isMergedSource: false, isMergedTarget: true, mergedInto: "", mergedWith: tableData.mergedWith };
     }
@@ -365,15 +369,13 @@ export function renderTablesFloorGrid() {
     return { isMergedSource: false, isMergedTarget: false, mergedInto: "", mergedWith: [] };
   }
 
-  // 🔴 100% BULLETPROOF REAL-TIME OCCUPANCY CHECK
+  // 🔴 100% REAL-TIME OCCUPANCY CHECK
   function isTableOccupied(tableData) {
     const targetNum = extractTableNum(tableData.tableNo);
     if (targetNum === null) return false;
 
-    // 1. Status marked Occupied in Database
     if (tableData.status === "Occupied") return true;
 
-    // 2. Active Bills check (if cart has items for this table)
     for (const b of Object.values(activeBills)) {
       const bNum = extractTableNum(b.tableNo);
       if (bNum === targetNum && b.cart && b.cart.length > 0) {
@@ -381,7 +383,6 @@ export function renderTablesFloorGrid() {
       }
     }
 
-    // 3. Kitchen Orders check (if any order is currently Cooking for this table)
     for (const k of Object.values(kitchenOrders)) {
       const kNum = extractTableNum(k.tableNo);
       if (kNum === targetNum && k.status === "Cooking") {
@@ -392,7 +393,7 @@ export function renderTablesFloorGrid() {
     return false;
   }
 
-  // 📐 36 TABLES EXACT BLUEPRINT COORDINATES (viewBox="0 0 940 480")
+  // 📐 36 TABLES EXACT BLUEPRINT COORDINATES (BUG #6 FIXED: TABLE 15 INCLUDED)
   const tableLayoutConfig = [
     // Top-Left Booths (01-03 over 04-06)
     { no: "01", type: "booth", x: 42,  y: 45 },
@@ -416,8 +417,9 @@ export function renderTablesFloorGrid() {
     { no: "11", type: "booth", x: 92,  y: 395 },
     { no: "12", type: "booth", x: 142, y: 395 },
 
-    // Special Tables: 13 (Horizontal), 14 (Family 4-Seater), 16 (Round 6-Seater)
+    // Special Tables (13, 14, 15, 16 - BUG #6 FIXED: 15 ADDED AT x:265, y:300)
     { no: "13", type: "horiz-2", x: 205, y: 300 },
+    { no: "15", type: "horiz-2", x: 265, y: 300 },
     { no: "14", type: "family-4", x: 205, y: 375 },
     { no: "16", type: "round-6", x: 310, y: 410 },
 
@@ -434,7 +436,7 @@ export function renderTablesFloorGrid() {
     { no: "23", type: "cross-4", x: 585, y: 185 },
     { no: "24", type: "cross-4", x: 675, y: 185 },
 
-    // Row 3: 29, 30 (Vertical Rect), 31, 32
+    // Row 3: 29, 30, 31, 32
     { no: "29", type: "cross-4", x: 405, y: 395 },
     { no: "30", type: "rect-4",  x: 495, y: 395 },
     { no: "31", type: "cross-4", x: 585, y: 395 },
@@ -447,7 +449,6 @@ export function renderTablesFloorGrid() {
     { no: "36", type: "cross-4", x: 805, y: 395 }
   ];
 
-  // 🪑 GENERATE SVG SHAPE (HIGHLIGHTS MERGED PURPLE & OCCUPIED RED)
   function generateTableSvg(tCfg, tData, occupied, matchesArea, mergeInfo) {
     const { no, type, x, y } = tCfg;
     const { isMergedSource, isMergedTarget, mergedInto, mergedWith } = mergeInfo;
@@ -481,7 +482,6 @@ export function renderTablesFloorGrid() {
     const textColor = (isMergedSource || occupied) ? "#ffffff" : "#0f172a";
     const opacityAttr = matchesArea ? "1" : "0.3";
 
-    // 🔗 Visual Merge Indicator Badge
     const mergeBadgeText = isMergedSource 
       ? `🔗 T-${mergedInto}` 
       : isMergedTarget 
@@ -504,7 +504,7 @@ export function renderTablesFloorGrid() {
         </g>
       `;
     }
-    // 2. HORIZONTAL 2-SEATER (TABLE 13)
+    // 2. HORIZONTAL 2-SEATER (TABLE 13, 15)
     else if (type === "horiz-2") {
       shapes = `
         <g class="cursor-pointer transition-transform duration-100 hover:opacity-85" opacity="${opacityAttr}" onclick="handleTableClick('${no}')" oncontextmenu="event.preventDefault(); editTableByNumber('${no}')">
@@ -590,7 +590,6 @@ export function renderTablesFloorGrid() {
     return shapes;
   }
 
-  // 🖼️ RENDER ALL 36 TABLES DIRECTLY INTO THE UNIFIED VECTOR CANVAS
   let allSvgElements = "";
   tableLayoutConfig.forEach(cfg => {
     const tData = getTableData(cfg.no);
@@ -618,7 +617,7 @@ export function renderTablesFloorGrid() {
       </svg>
     </div>
 
-    <!-- BOTTOM CONTROLS & MODE TOGGLE (BILLING VS EDIT) -->
+    <!-- BOTTOM CONTROLS & MODE TOGGLE -->
     <div class="mt-4 pt-3 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs font-bold text-slate-500 gap-3">
       
       <!-- OCCUPANCY & MERGE LEGEND -->
@@ -639,7 +638,6 @@ export function renderTablesFloorGrid() {
 
       <!-- TOUCH POS MODE SELECTOR & ACTIONS -->
       <div class="flex items-center gap-2.5">
-        <!-- MODE TOGGLE (ORDER VS EDIT) -->
         <div class="flex bg-slate-200 p-1 rounded-2xl text-[11px] font-bold">
           <button type="button" onclick="setFloorPlanMode('order')" id="fpModeOrderBtn" class="px-3 py-1 rounded-xl transition ${currentFloorPlanMode === 'order' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'} cursor-pointer">
             🍽️ Order Mode
@@ -669,11 +667,10 @@ if (typeof document !== "undefined") {
 }
 
 // ==========================================================================
-// 4. INSTANT TABLE-TO-POS LINK & ACTIONS ENGINE (AUTO-MERGE ROUTING)
+// 4. INSTANT TABLE-TO-POS LINK & ACTIONS ENGINE
 // ==========================================================================
 
 export function linkTableToPos(tableNo) {
-  // 🛡️ Table එකෙන් POS එකට යනවිට Print Bill / WhatsApp Bill සඟවයි (Method 01)
   if (window.setTableOrderMode) {
     window.setTableOrderMode(true);
   }
@@ -681,7 +678,6 @@ export function linkTableToPos(tableNo) {
   if (!erpState.activeBills) erpState.activeBills = {};
   const targetNum = extractTableNum(tableNo);
   
-  // 🛡️ Auto-redirect to parent table if this table was merged
   let actualTableNo = tableNo;
   const matchedTbl = Object.values(erpState.tables || {}).find(t => extractTableNum(t.tableNo) === targetNum);
   if (matchedTbl && matchedTbl.status === "Merged" && matchedTbl.mergedInto) {
@@ -768,7 +764,7 @@ export async function deleteTable(id) {
 }
 
 // ==========================================================================
-// 5. MERGE TABLES ENGINE (SPECIFIC MERGE TRACKING & PERSISTENCE)
+// 5. MERGE TABLES ENGINE
 // ==========================================================================
 
 export function openMergeTableModal() {
@@ -875,7 +871,6 @@ export async function handleMergeTables(e) {
     
     tgtBill.cart = mergedCart;
     
-    // 🔗 Track merged tables in active bill
     const existingMerged = Array.isArray(tgtBill.mergedTables) ? tgtBill.mergedTables : [];
     const updatedMerged = Array.from(new Set([...existingMerged, srcTableNo]));
     tgtBill.mergedTables = updatedMerged;
@@ -938,9 +933,7 @@ export async function handleMergeTables(e) {
   }
 }
 
-// ==========================================================================
-// 6. GLOBAL WINDOW EXPORTS
-// ==========================================================================
+// Global Window Exports
 window.openAreaModal = openAreaModal;
 window.closeAreaModal = closeAreaModal;
 window.handleAddAreaSubmit = handleAddAreaSubmit;
