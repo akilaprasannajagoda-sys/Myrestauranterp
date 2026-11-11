@@ -1,6 +1,7 @@
 // ==========================================================================
 // MODULE 06: MENU, DISHES, PORTIONS & BOM RECIPES ENGINE (KOT / BOT STATION SAFE)
 // 🛡️ XSS & SPECIAL CHARACTER SAFE MENU ENGINE
+// ⚡ STRICT INPUT VALIDATION & REALTIME MEMORY SYNC READY
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
@@ -20,7 +21,7 @@ export function initMenuContext(dbRefInstance, pushMethod, updateMethod, removeM
   renderPosDishesCallback = renderPosDishesFn;
 }
 
-// 🔒 GET COMPATIBLE UNIT FAMILY (නොගැලපෙන ඒකක වැළැක්වීම)
+// 🔒 GET COMPATIBLE UNIT FAMILY
 export function getCompatibleUnits(baseUnit) {
   const u = (baseUnit || "").toLowerCase().trim();
   if (u === "kg" || u === "g") return ["kg", "g"];
@@ -48,14 +49,13 @@ export function convertRecipeQtyToBaseUnit(rawItemUnit, recipeQty, recipeUnit) {
   return rQty;
 }
 
-// 🍹 DISH එක KITCHEN (KOT) ද BAR (BOT) ද යන්න 100% ක් නිවැරදිව හඳුනාගැනීමේ එන්ජිම
+// 🍹 DISH STATION TARGET IDENTIFIER (KOT VS BOT)
 export function getDishStationTarget(dishId) {
   const dish = erpState.dishes?.[dishId];
   if (!dish) return "kitchen";
 
   const catName = (dish.category || "").toLowerCase().trim();
 
-  // 1. Category Object එකේ station එක පරීක්ෂා කිරීම (Explicit Configuration)
   const matchedCat = Object.values(erpState.dishCategories || {}).find(
     c => (c.name || "").toLowerCase().trim() === catName
   );
@@ -64,7 +64,6 @@ export function getDishStationTarget(dishId) {
     return matchedCat.station.toLowerCase().trim() === "bar" ? "bar" : "kitchen";
   }
 
-  // 2. Smart Auto-Fallback: නමේ Bar / Drink / Liquor වචන තිබේදැයි ස්වයංක්‍රීයව බැලීම
   const barKeywords = [
     "bar", "beverage", "beverages", "liquor", "beer", "beers", 
     "wine", "wines", "juice", "juices", "drink", "drinks", 
@@ -80,6 +79,7 @@ export function getDishStationTarget(dishId) {
 // 2. DISH CATEGORIES (WITH KITCHEN / BAR STATION SELECTION)
 export function openCategoryModal() {
   document.getElementById("categoryModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("newCategoryName")?.focus(), 50);
 }
 
 export function closeCategoryModal() {
@@ -88,19 +88,29 @@ export function closeCategoryModal() {
 
 export async function handleAddCategorySubmit(e) {
   e.preventDefault();
-  const name = document.getElementById("newCategoryName")?.value.trim();
+  const nameInput = document.getElementById("newCategoryName");
+  const name = nameInput?.value.trim();
   const station = document.getElementById("newCategoryStation")?.value || "kitchen";
   
-  if (!name || !dbRef || !pushFn || !currentTenant) return;
+  if (!name) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර Category නම ඇතුළත් කරන්න.", "warning", "fa-tags");
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  if (!dbRef || !pushFn || !currentTenant) return;
   
-  await pushFn(dbRef(`tenants/${currentTenant}/dishCategories`), { 
+  const newCatRef = await pushFn(dbRef(`tenants/${currentTenant}/dishCategories`), { 
     name, 
-    station // 'kitchen' හෝ 'bar' ලෙස සුරැකේ
+    station
   });
+
+  if (!erpState.dishCategories) erpState.dishCategories = {};
+  erpState.dishCategories[newCatRef.key] = { name, station };
   
-  const input = document.getElementById("newCategoryName");
-  if (input) input.value = "";
+  if (nameInput) nameInput.value = "";
   showLiveToast("🍽️ Category Added", `"${name}" (${station === 'bar' ? 'Bar BOT' : 'Kitchen KOT'}) කාණ්ඩය සාර්ථකව එකතු විය.`, "success", "fa-tags");
+  renderDishCategoryListUI();
 }
 
 export function renderDishCategoryListUI() {
@@ -127,6 +137,9 @@ export function renderDishCategoryListUI() {
 
 export async function deleteDishCategory(id) {
   if (confirm("මෙම Category එක මකා දැමීමට අවශ්‍යද?")) {
+    if (erpState.dishCategories) delete erpState.dishCategories[id];
+    renderDishCategoryListUI();
+
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/dishCategories/${id}`));
       showLiveToast("🗑️ Category Removed", "Category එක සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
@@ -179,6 +192,7 @@ export function openDishModal(mode, dishId = null) {
   
   calculateDishCostAndMargin();
   modal?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("dishName")?.focus(), 50);
 }
 
 export function closeDishModal() {
@@ -270,11 +284,32 @@ export function calculateDishCostAndMargin() {
   return totalCost;
 }
 
+// 🛡️ REPAIRED (BUG #19 FIXED): STRICT INPUT VALIDATION & OPTIMISTIC SAVE
 export async function handleDishSubmit(e) {
   e.preventDefault();
   const dishId = document.getElementById("editDishId")?.value;
+  const nameInput = document.getElementById("dishName");
+  const priceInput = document.getElementById("dishPrice");
+
+  const name = nameInput?.value.trim() || "";
+  const price = parseFloat(priceInput?.value || 0);
+
+  if (!name) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර කෑම වර්ගයේ නම ඇතුළත් කරන්න.", "warning", "fa-bowl-food");
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  if (isNaN(price) || price <= 0) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර වලංගු විකුණුම් මිලක් (Selling Price) ඇතුළත් කරන්න.", "warning", "fa-tag");
+    if (priceInput) {
+      priceInput.focus();
+      priceInput.select();
+    }
+    return;
+  }
+
   const ingredients = [];
-  
   document.querySelectorAll(".ingredient-row").forEach(r => {
     const rawId = r.querySelector(".ing-select")?.value;
     const qty = parseFloat(r.querySelector(".ing-qty")?.value || 0);
@@ -286,26 +321,37 @@ export async function handleDishSubmit(e) {
   
   const foodCost = calculateDishCostAndMargin();
   const dishData = {
-    name: document.getElementById("dishName")?.value.trim() || "",
-    category: document.getElementById("dishCategory")?.value || "",
-    price: parseFloat(document.getElementById("dishPrice")?.value || 0),
+    name: name,
+    category: document.getElementById("dishCategory")?.value || "General",
+    price: price,
     foodCost: foodCost,
-    ingredients: ingredients
+    ingredients: ingredients,
+    updatedAt: new Date().toISOString()
   };
   
-  if (dbRef && currentTenant) {
-    if (dishId && updateFn) {
-      await updateFn(dbRef(`tenants/${currentTenant}/dishes/${dishId}`), dishData);
-      showLiveToast("🍽️ Dish Updated", `${dishData.name} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-bowl-food");
-    } else if (pushFn) {
-      await pushFn(dbRef(`tenants/${currentTenant}/dishes`), dishData);
-      showLiveToast("🍽️ Dish Saved", `${dishData.name} සහ Recipe එක සාර්ථකව සේව් විය.`, "success", "fa-bowl-food");
+  try {
+    if (dbRef && currentTenant) {
+      if (dishId && updateFn) {
+        await updateFn(dbRef(`tenants/${currentTenant}/dishes/${dishId}`), dishData);
+        if (erpState.dishes && erpState.dishes[dishId]) {
+          Object.assign(erpState.dishes[dishId], dishData);
+        }
+        showLiveToast("🍽️ Dish Updated", `${dishData.name} සාර්ථකව යාවත්කාලීන විය.`, "success", "fa-bowl-food");
+      } else if (pushFn) {
+        const newRef = await pushFn(dbRef(`tenants/${currentTenant}/dishes`), dishData);
+        if (!erpState.dishes) erpState.dishes = {};
+        erpState.dishes[newRef.key] = dishData;
+        showLiveToast("🍽️ Dish Saved", `${dishData.name} සහ Recipe එක සාර්ථකව සේව් විය.`, "success", "fa-bowl-food");
+      }
     }
+    closeDishModal();
+    renderMenuDishesTable();
+  } catch (err) {
+    showLiveToast("⚠️ දෝෂයකි", "Dish සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
-  closeDishModal();
 }
 
-// 🔍 SEARCHABLE MENU DISHES TABLE ENGINE (XSS IMMUNE)
+// 🔍 SEARCHABLE MENU DISHES TABLE ENGINE
 export function onMenuSearchInput() {
   renderMenuDishesTable();
 }
@@ -319,7 +365,6 @@ export function renderMenuDishesTable() {
   
   let list = Object.entries(erpState.dishes || {});
   
-  // Instant Search by Dish Name or Category
   if (query) {
     list = list.filter(([id, dish]) => {
       const name = (dish.name || "").toLowerCase();
@@ -372,6 +417,9 @@ export function renderMenuDishesTable() {
 
 export async function deleteDish(id) {
   if (confirm("මෙම Dish එක මකා දැමීමට අවශ්‍යද?")) {
+    if (erpState.dishes) delete erpState.dishes[id];
+    renderMenuDishesTable();
+
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/dishes/${id}`));
       showLiveToast("🗑️ Dish Deleted", "කෑම වර්ගය සාර්ථකව ඉවත් කරන ලදී.", "warning", "fa-trash");
