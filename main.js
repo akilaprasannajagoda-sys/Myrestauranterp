@@ -36,7 +36,23 @@ function getLocalIpAddress() {
   return '127.0.0.1';
 }
 
-// 📡 1.2 OFFLINE LOCAL LAN HTTP PRINT SERVER
+// 🛡️ 1.2 UNIVERSAL WINDOWS FOCUS RECOVERY HELPER (UNFREEZES TEXTBOXES IN 1MS)
+function restoreWindowNativeFocus() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (process.platform === 'win32') {
+      mainWindow.blur();
+    }
+    mainWindow.focus();
+    mainWindow.webContents.focus();
+  }
+}
+
+// 📡 IPC LISTENER TO FIX FROZEN INPUTS
+ipcMain.on('fix-focus', () => {
+  restoreWindowNativeFocus();
+});
+
+// 📡 1.3 OFFLINE LOCAL LAN HTTP PRINT SERVER
 function startLocalLanPrintServer() {
   if (localHttpServer) return;
 
@@ -128,8 +144,7 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-      mainWindow.webContents.focus();
+      restoreWindowNativeFocus();
     }
   });
   
@@ -249,10 +264,7 @@ function createWindow() {
   mainWindow.loadFile('index.html');
 
   mainWindow.on('restore', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.focus();
-      mainWindow.webContents.focus();
-    }
+    restoreWindowNativeFocus();
   });
   
   mainWindow.webContents.on('devtools-opened', () => {
@@ -284,6 +296,7 @@ function createWindow() {
 
       if (choice === 1) {
         e.preventDefault();
+        restoreWindowNativeFocus(); // Fix focus after cancel
       } else {
         app.isQuitting = true;
       }
@@ -331,11 +344,13 @@ autoUpdater.on('update-downloaded', (info) => {
   }).then((result) => {
     if (result.response === 0) {
       autoUpdater.quitAndInstall();
+    } else {
+      restoreWindowNativeFocus();
     }
   });
 });
 
-// 📄 DIRECT PDF GENERATION & SAVE IPC ENGINE (100% VECTOR HIGH-RES)
+// 📄 DIRECT PDF GENERATION & SAVE IPC ENGINE (WITH AUTO FOCUS RESTORE)
 ipcMain.handle('save-pdf', async (event, { htmlContent, filename = "Report.pdf", orientation = "portrait" }) => {
   let pdfWin = null;
   try {
@@ -385,6 +400,8 @@ ipcMain.handle('save-pdf', async (event, { htmlContent, filename = "Report.pdf",
     if (pdfWin && !pdfWin.isDestroyed()) {
       pdfWin.destroy();
     }
+    // 🛡️ CRITICAL UNFREEZE: Restore focus after Windows Save Dialog closes
+    restoreWindowNativeFocus();
   }
 });
 
@@ -404,6 +421,8 @@ ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   } catch (err) {
     console.error("Local backup write failed:", err);
     return { success: false, error: err.message };
+  } finally {
+    restoreWindowNativeFocus();
   }
 });
 
@@ -431,10 +450,7 @@ ipcMain.handle('print-silent', async (event, printArgs) => {
       } catch (err) {
         resolve({ success: false, error: err.message || "Print execution failed" });
       } finally {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.focus();
-          mainWindow.webContents.focus();
-        }
+        restoreWindowNativeFocus();
       }
     });
   });
