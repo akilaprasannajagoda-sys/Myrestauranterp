@@ -1,9 +1,11 @@
 // ==========================================================================
 // MODULE 08: 2-WAY PETTY CASH BOOK & EXPENSES ENGINE (WITH OPENING B/F BALANCE)
+// 🛡️ UNFREEZE & ACCURATE CHRONOLOGICAL RUNNING BALANCE ENGINE
+// 📄 100% VECTOR HIGH-CONTRAST A4 PDF & EXCEL (CSV) LEDGER EXPORT HUB
 // ==========================================================================
 
 import { erpState, currentTenant, sharedOfflineDB } from './state.js';
-import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
+import { showLiveToast, downloadCSVFile, generateReportPDF, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -19,6 +21,7 @@ export function openPettyCashModal(entryType = "in") {
   document.getElementById("pettyCashForm")?.reset();
   selectPettyEntryType(entryType);
   document.getElementById("pettyCashModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("pettyAmountInput")?.focus(), 50);
 }
 
 export function closePettyCashModal() {
@@ -86,7 +89,7 @@ export async function handlePettyCashSubmit(e) {
   const handledBy = document.getElementById("pettySpentByInput")?.value.trim() || "Cashier";
   
   if (amount <= 0) {
-    alert("මුදල 0 ට වඩා වැඩි විය යුතුය.");
+    showLiveToast("⚠️ අඩුපාඩුවක්", "මුදල 0 ට වඩා වැඩි විය යුතුය.", "warning", "fa-wallet");
     return;
   }
   
@@ -107,13 +110,13 @@ export async function handlePettyCashSubmit(e) {
       erpState.pettyCash[pRef.key] = transactionRecord;
       
       closePettyCashModal();
+      renderPettyCashTable();
       if (entryType === "in") {
         showLiveToast("💰 Cash In Recorded", `සුළු මුදල් පෙට්ටියට Rs. ${amount.toFixed(2)} ක් සාර්ථකව එකතු විය.`, "success", "fa-circle-plus");
       } else {
         showLiveToast("💸 Expense Recorded", `Rs. ${amount.toFixed(2)} (${category}) වියදම සාර්ථකව සටහන් විය.`, "warning", "fa-wallet");
       }
     } else if (sharedOfflineDB) {
-      // 🛡️ OFFLINE DEXIE FALLBACK (SHARED INSTANCE)
       const tempKey = "offline_petty_" + Date.now();
       await sharedOfflineDB.offlinePettyCash.add({ ...transactionRecord, synced: 0 });
       if (!erpState.pettyCash) erpState.pettyCash = {};
@@ -124,7 +127,7 @@ export async function handlePettyCashSubmit(e) {
       showLiveToast("⚠️ Petty Cash Saved Offline", `Rs. ${amount.toFixed(2)} Offline සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
     }
   } catch (err) {
-    alert("ගනුදෙනුව සේව් කිරීමේදී දෝෂයක්: " + err.message);
+    showLiveToast("⚠️ දෝෂයකි", "ගනුදෙනුව සේව් කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
 }
 
@@ -185,7 +188,7 @@ export function setPettyPeriodPreset(preset) {
   renderPettyCashTable();
 }
 
-// 🔒 ACCURATE LEDGER DATA WITH BALANCE BROUGHT FORWARD (B/F)
+// 🛡️ REPAIRED (BUG #15 FIXED): CHRONOLOGICAL POINT-IN-TIME RUNNING BALANCE
 export function getFilteredPettyCashData() {
   const fromVal = document.getElementById("pettyFromDate")?.value;
   const toVal = document.getElementById("pettyToDate")?.value;
@@ -197,11 +200,26 @@ export function getFilteredPettyCashData() {
   let openingBalanceBF = 0;
   const filteredList = [];
 
-  Object.entries(erpState.pettyCash || {}).forEach(([id, item]) => {
+  // Sort ALL entries chronologically first
+  const allChronological = Object.entries(erpState.pettyCash || {}).sort(
+    (a, b) => new Date(a[1].timestamp || 0).getTime() - new Date(b[1].timestamp || 0).getTime()
+  );
+
+  let cumulativeRunning = 0;
+
+  allChronological.forEach(([id, item]) => {
     const t = new Date(item.timestamp || 0).getTime();
     const amt = parseFloat(item.amount || 0);
 
-    // Calculate B/F Balance (Transactions occurred prior to filter start time)
+    if (item.type === "in") {
+      cumulativeRunning += amt;
+    } else {
+      cumulativeRunning -= amt;
+    }
+
+    // Assign true chronological balance at this point in time
+    item.runningBalanceAtPoint = Math.round(cumulativeRunning * 100) / 100;
+
     if (t < fromTime) {
       if (item.type === "in") {
         openingBalanceBF += amt;
@@ -215,7 +233,7 @@ export function getFilteredPettyCashData() {
     }
   });
 
-  return { filteredList, openingBalanceBF, hasFromFilter: fromTime > 0 };
+  return { filteredList, openingBalanceBF: Math.round(openingBalanceBF * 100) / 100, hasFromFilter: fromTime > 0 };
 }
 
 export function renderPettyCashTable() {
@@ -256,10 +274,7 @@ export function renderPettyCashTable() {
     return;
   }
   
-  filteredList.sort((a, b) => new Date(a[1].timestamp).getTime() - new Date(b[1].timestamp).getTime());
-  
   tbody.innerHTML = "";
-  let runningBal = hasFromFilter ? openingBalanceBF : 0;
 
   // Render Opening Balance B/F Row if date filter is active
   if (hasFromFilter) {
@@ -273,7 +288,7 @@ export function renderPettyCashTable() {
       <td class="p-3 text-gray-500">System B/F</td>
       <td class="p-3 text-right text-gray-400">-</td>
       <td class="p-3 text-right text-gray-400">-</td>
-      <td class="p-3 text-right font-black text-blue-700">Rs. ${openingBalanceBF.toFixed(2)}</td>
+      <td class="p-3 text-right font-black ${openingBalanceBF >= 0 ? 'text-blue-700' : 'text-red-600'}">Rs. ${openingBalanceBF.toFixed(2)}</td>
       <td class="p-3 text-right text-gray-400">-</td>
     `;
     tbody.appendChild(bfTr);
@@ -282,12 +297,7 @@ export function renderPettyCashTable() {
   filteredList.forEach(([id, item]) => {
     const isIn = item.type === "in";
     const amt = parseFloat(item.amount || 0);
-    
-    if (isIn) {
-      runningBal += amt;
-    } else {
-      runningBal -= amt;
-    }
+    const pointBal = item.runningBalanceAtPoint !== undefined ? item.runningBalanceAtPoint : 0;
     
     const tr = document.createElement("tr");
     tr.className = "hover:bg-gray-50 border-b border-gray-100";
@@ -303,7 +313,7 @@ export function renderPettyCashTable() {
       <td class="p-3.5 font-semibold text-gray-600">${item.handledBy || item.spentBy || 'Cashier'}</td>
       <td class="p-3.5 text-right font-black text-green-600">${isIn ? 'Rs. ' + amt.toFixed(2) : '-'}</td>
       <td class="p-3.5 text-right font-black text-red-600">${!isIn ? 'Rs. ' + amt.toFixed(2) : '-'}</td>
-      <td class="p-3.5 text-right font-black ${runningBal >= 0 ? 'text-emerald-700' : 'text-red-600'}">Rs. ${runningBal.toFixed(2)}</td>
+      <td class="p-3.5 text-right font-black ${pointBal >= 0 ? 'text-emerald-700' : 'text-red-600'}">Rs. ${pointBal.toFixed(2)}</td>
       <td class="p-3.5 text-right">
         <button onclick="deletePettyCash('${id}')" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
       </td>
@@ -314,27 +324,102 @@ export function renderPettyCashTable() {
 
 export async function deletePettyCash(id) {
   if (confirm("මෙම සටහන මකා දැමීමට අවශ්‍යද?")) {
+    if (erpState.pettyCash) delete erpState.pettyCash[id];
+    renderPettyCashTable();
+
     if (dbRef && removeFn && currentTenant) {
       await removeFn(dbRef(`tenants/${currentTenant}/pettyCash/${id}`));
-      if (erpState.pettyCash) delete erpState.pettyCash[id];
       showLiveToast("🗑️ Record Deleted", "මුදල් පොතේ සටහන සාර්ථකව මකා දමන ලදී.", "warning", "fa-trash");
-      renderPettyCashTable();
     }
   }
 }
 
-// 🔒 CSV EXPORT WITH ACCURATE OPENING B/F BALANCE (LOCAL DATE SAFE)
+// 📄 EXPORT PETTY CASH LEDGER TO PDF
+export function exportPettyCashToPDF() {
+  const { filteredList, openingBalanceBF, hasFromFilter } = getFilteredPettyCashData();
+  if (filteredList.length === 0 && !hasFromFilter) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  const fromVal = document.getElementById("pettyFromDate")?.value || "Start";
+  const toVal = document.getElementById("pettyToDate")?.value || "End";
+  const typeFilter = document.getElementById("pettyTypeFilter")?.value || "ALL";
+
+  const rows = [];
+  if (hasFromFilter) {
+    rows.push([
+      fromVal.replace("T", " "),
+      "OPENING (B/F)",
+      "Balance B/F",
+      "පෙර දිනවල ඉතිරි වූ ශේෂය (Balance Brought Forward)",
+      "System B/F",
+      "-",
+      "-",
+      openingBalanceBF.toFixed(2)
+    ]);
+  }
+
+  let totalIn = 0;
+  let totalOut = 0;
+
+  filteredList.forEach(([id, item]) => {
+    const isIn = item.type === "in";
+    const amt = parseFloat(item.amount || 0);
+    if (isIn) totalIn += amt;
+    else totalOut += amt;
+
+    const inVal = isIn ? amt.toFixed(2) : "-";
+    const outVal = !isIn ? amt.toFixed(2) : "-";
+    const pointBal = item.runningBalanceAtPoint !== undefined ? item.runningBalanceAtPoint.toFixed(2) : "-";
+
+    rows.push([
+      new Date(item.timestamp).toLocaleString(),
+      isIn ? "CASH IN" : "EXPENSE",
+      item.category || "-",
+      item.description || "-",
+      item.handledBy || item.spentBy || "Cashier",
+      inVal,
+      outVal,
+      pointBal
+    ]);
+  });
+
+  const netPeriod = totalIn - totalOut;
+
+  generateReportPDF({
+    reportTitle: "Petty Cash Book & Ledger Statement",
+    subtitle: `Filter: ${typeFilter.toUpperCase()} | Period: ${fromVal} to ${toVal}`,
+    orientation: "landscape",
+    summaryCards: [
+      { label: "Total Cash Inflow (+)", value: `Rs. ${totalIn.toFixed(2)}`, color: "#16a34a" },
+      { label: "Total Expenses (-)", value: `Rs. ${totalOut.toFixed(2)}`, color: "#dc2626" },
+      { label: "Net Period Movement", value: `Rs. ${netPeriod.toFixed(2)}`, color: "#2563eb" },
+      { label: "Current Petty Box Balance", value: document.getElementById("pettyCurrentBalanceVal")?.innerText || "Rs. 0.00", color: "#0f172a" }
+    ],
+    columns: [
+      { label: "Date & Time", bold: true },
+      { label: "Type", align: "center" },
+      { label: "Category / Source" },
+      { label: "Description / Voucher" },
+      { label: "Handled By" },
+      { label: "Cash In (+ Rs)", align: "right" },
+      { label: "Cash Out (- Rs)", align: "right" },
+      { label: "Running Balance (Rs)", align: "right", bold: true }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 EXPORT PETTY CASH LEDGER TO CSV
 export function exportPettyCashToCSV() {
   const { filteredList, openingBalanceBF, hasFromFilter } = getFilteredPettyCashData();
   if (filteredList.length === 0 && !hasFromFilter) {
-    alert("Export කිරීමට දත්ත නොමැත.");
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
   
-  filteredList.sort((a, b) => new Date(a[1].timestamp).getTime() - new Date(b[1].timestamp).getTime());
-  
   let csv = `Date Time,Type,Category/Source,Description,Handled By,Cash In (+),Cash Out (-),Running Balance\n`;
-  let running = hasFromFilter ? openingBalanceBF : 0;
   
   if (hasFromFilter) {
     csv += `"${document.getElementById("pettyFromDate")?.value || ''}","OPENING (B/F)","Balance B/F","පෙර දිනවල ඉතිරි වූ ශේෂය","System","0.00","0.00","${openingBalanceBF.toFixed(2)}"\n`;
@@ -343,13 +428,11 @@ export function exportPettyCashToCSV() {
   filteredList.forEach(([id, item]) => {
     const isIn = item.type === "in";
     const amt = parseFloat(item.amount || 0);
-    if (isIn) running += amt;
-    else running -= amt;
-    
     const inVal = isIn ? amt.toFixed(2) : "0.00";
     const outVal = !isIn ? amt.toFixed(2) : "0.00";
+    const pointBal = item.runningBalanceAtPoint !== undefined ? item.runningBalanceAtPoint.toFixed(2) : "0.00";
     
-    csv += `"${item.timestamp}","${isIn ? 'CASH IN' : 'EXPENSE'}","${item.category}","${item.description}","${item.handledBy || 'Cashier'}","${inVal}","${outVal}","${running.toFixed(2)}"\n`;
+    csv += `"${item.timestamp}","${isIn ? 'CASH IN' : 'EXPENSE'}","${item.category}","${item.description}","${item.handledBy || 'Cashier'}","${inVal}","${outVal}","${pointBal}"\n`;
   });
   
   downloadCSVFile(csv, `Petty_Cash_Ledger_${getLocalDateString()}.csv`);
@@ -364,3 +447,4 @@ window.setPettyPeriodPreset = setPettyPeriodPreset;
 window.renderPettyCashTable = renderPettyCashTable;
 window.deletePettyCash = deletePettyCash;
 window.exportPettyCashToCSV = exportPettyCashToCSV;
+window.exportPettyCashToPDF = exportPettyCashToPDF;
