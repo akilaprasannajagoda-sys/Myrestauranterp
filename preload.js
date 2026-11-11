@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printSilent: (options) => ipcRenderer.invoke('print-silent', options),
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   
+  // 🛡️ Windows Textbox Freeze-Fix Bridge (Issues #31917 & #41602 Permanent Solution)
+  fixFocus: () => ipcRenderer.send('fix-focus'),
+  
   // 📄 Direct Native Vector PDF Generator & Downloader
   savePdf: (options) => ipcRenderer.invoke('save-pdf', options),
   
