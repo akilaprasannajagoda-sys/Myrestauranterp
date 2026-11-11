@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printSilent: (options) => ipcRenderer.invoke('print-silent', options),
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   
+  // 📄 Direct Native Vector PDF Generator & Downloader
+  savePdf: (options) => ipcRenderer.invoke('save-pdf', options),
+  
   // 💾 Local Automatic Hard-Disk Backup API
   saveLocalAutoBackup: (backupData) => ipcRenderer.invoke('save-local-auto-backup', backupData),
   
