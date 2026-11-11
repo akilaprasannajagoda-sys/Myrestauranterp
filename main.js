@@ -164,7 +164,7 @@ function initPrintWorkerWindow() {
   return printWorkerWindow;
 }
 
-// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD - BUG FIX: NEVER STEALS MAIN FOCUS)
+// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD)
 function createOrUpdateCustomerDisplay() {
   try {
     const displays = screen.getAllDisplays();
@@ -180,7 +180,7 @@ function createOrUpdateCustomerDisplay() {
           fullscreen: true,
           frame: false,
           show: false,
-          focusable: false, // 🛡️ Never steals keyboard focus from main window
+          focusable: false,
           autoHideMenuBar: true,
           title: "Customer Facing Display",
           webPreferences: {
@@ -197,7 +197,7 @@ function createOrUpdateCustomerDisplay() {
 
         customerWindow.once('ready-to-show', () => {
           if (customerWindow && !customerWindow.isDestroyed()) {
-            customerWindow.showInactive(); // 🛡️ Shows without stealing window focus!
+            customerWindow.showInactive();
           }
         });
 
@@ -259,7 +259,6 @@ function createWindow() {
     mainWindow.webContents.closeDevTools();
   });
   
-  // 🛡️ REPAIRED (TEXTBOX FREEZE FIX): Do not preventDefault on Alt key which desynchronizes Windows OS message loop!
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (
       input.key === 'F12' ||
@@ -336,6 +335,59 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
+// 📄 DIRECT PDF GENERATION & SAVE IPC ENGINE (100% VECTOR HIGH-RES)
+ipcMain.handle('save-pdf', async (event, { htmlContent, filename = "Report.pdf", orientation = "portrait" }) => {
+  let pdfWin = null;
+  try {
+    const isLandscape = orientation === "landscape";
+    pdfWin = new BrowserWindow({
+      show: false,
+      frame: false,
+      focusable: false,
+      skipTaskbar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+    const pdfBuffer = await pdfWin.webContents.printToPDF({
+      landscape: isLandscape,
+      pageSize: 'A4',
+      printBackground: true,
+      margins: {
+        marginType: 'custom',
+        top: 0.3,
+        bottom: 0.3,
+        left: 0.3,
+        right: 0.3
+      }
+    });
+
+    const defaultPath = path.join(app.getPath('downloads'), filename);
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save PDF Report (PDF වාර්තාව සුරකින්න)',
+      defaultPath: defaultPath,
+      filters: [{ name: 'PDF Document (*.pdf)', extensions: ['pdf'] }]
+    });
+
+    if (!canceled && filePath) {
+      fs.writeFileSync(filePath, pdfBuffer);
+      return { success: true, filePath };
+    }
+    return { success: false, canceled: true };
+  } catch (err) {
+    console.error("PDF generation failed:", err);
+    return { success: false, error: err.message };
+  } finally {
+    if (pdfWin && !pdfWin.isDestroyed()) {
+      pdfWin.destroy();
+    }
+  }
+});
+
 // 💾 5. LOCAL AUTOMATIC HARD-DISK BACKUP ENGINE
 ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   try {
@@ -355,7 +407,7 @@ ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   }
 });
 
-// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (TEXTBOX FREEZE IMMUNE)
+// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE
 let lastPrintTimestamp = 0;
 let lastPrintedSignature = "";
 
@@ -379,7 +431,6 @@ ipcMain.handle('print-silent', async (event, printArgs) => {
       } catch (err) {
         resolve({ success: false, error: err.message || "Print execution failed" });
       } finally {
-        // 🛡️ REPAIRED (NATIVE OS FOCUS RESTORATION): Restores both HWND and WebContents focus
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.focus();
           mainWindow.webContents.focus();
@@ -640,4 +691,3 @@ ipcMain.handle('close-app', () => {
     mainWindow.close();
   }
 });
-
