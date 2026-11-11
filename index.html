@@ -31,14 +31,12 @@
         -webkit-print-color-adjust: exact !important;
       }
       body * { visibility: hidden !important; }
-      #receiptModal, #receiptModal *, 
-      #kotPrintModal, #kotPrintModal *, 
-      #payslipThermalModal, #payslipThermalModal *, 
-      #zReportPrintModal, #zReportPrintModal *, 
-      #xReportPrintModal, #xReportPrintModal * { 
-        visibility: visible !important; 
-      }
-      #receiptModal, #kotPrintModal, #payslipThermalModal, #zReportPrintModal, #xReportPrintModal { 
+      #receiptModal:not([style*="display: none"]),
+      #kotPrintModal:not([style*="display: none"]),
+      #payslipThermalModal:not([style*="display: none"]),
+      #zReportPrintModal:not([style*="display: none"]),
+      #xReportPrintModal:not([style*="display: none"]) { 
+        visibility: visible !important;
         position: absolute !important; 
         left: 0 !important; 
         top: 0 !important; 
@@ -55,9 +53,23 @@
         display: block !important;
         text-align: left !important;
       }
+      #receiptModal:not([style*="display: none"]) *,
+      #kotPrintModal:not([style*="display: none"]) *,
+      #payslipThermalModal:not([style*="display: none"]) *,
+      #zReportPrintModal:not([style*="display: none"]) *,
+      #xReportPrintModal:not([style*="display: none"]) * {
+        visibility: visible !important;
+      }
+      #receiptModal[style*="display: none"],
+      #kotPrintModal[style*="display: none"],
+      #payslipThermalModal[style*="display: none"],
+      #zReportPrintModal[style*="display: none"],
+      #xReportPrintModal[style*="display: none"] {
+        display: none !important;
+        visibility: hidden !important;
+      }
       .no-print { display: none !important; }
     }
-
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -854,9 +866,12 @@ to { transform: translateY(0); opacity: 1; }
                   <button onclick="renderStoreIssueHistoryTable()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                     <i class="fa-solid fa-filter text-xs"></i> Filter Notes
                   </button>
-                  <button onclick="exportStoreIssuesToCSV()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
-                  </button>
+             <button type="button" onclick="exportStoreIssuesToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-pdf text-xs"></i> Export PDF
+</button>
+<button type="button" onclick="exportStoreIssuesToCSV()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
+</button>
                 </div>
               </div>
             </div>
@@ -1064,9 +1079,12 @@ to { transform: translateY(0); opacity: 1; }
                 </button>
               </div>
 
-              <button onclick="exportGrnToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer">
-                <i class="fa-solid fa-file-excel"></i> Export to Excel (CSV)
-              </button>
+           <button type="button" onclick="exportGrnToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-pdf text-xs"></i> Export PDF
+</button>
+<button type="button" onclick="exportGrnToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
+</button>
             </div>
 
             <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1103,9 +1121,12 @@ to { transform: translateY(0); opacity: 1; }
             </div>
 
             <div class="flex items-center gap-2">
-              <button onclick="exportCustomersToCSV()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer">
-                <i class="fa-solid fa-file-excel"></i> Export Excel (CSV)
-              </button>
+         <button type="button" onclick="exportCustomersToPDF()" class="bg-red-600 hover:bg-red-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer">
+  <i class="fa-solid fa-file-pdf"></i> Export PDF
+</button>
+<button type="button" onclick="exportCustomersToCSV()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer">
+  <i class="fa-solid fa-file-excel"></i> Export Excel (CSV)
+</button>
               <button onclick="openCustomerModal('add')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-md flex items-center gap-2 transition cursor-pointer">
                 <i class="fa-solid fa-user-plus"></i> + Add Customer
               </button>
@@ -1215,9 +1236,12 @@ to { transform: translateY(0); opacity: 1; }
                 <button onclick="renderPettyCashTable()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                   <i class="fa-solid fa-filter text-xs"></i> Filter
                 </button>
-                <button onclick="exportPettyCashToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
-                </button>
+           <button type="button" onclick="exportPettyCashToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-pdf text-xs"></i> Export PDF
+</button>
+<button type="button" onclick="exportPettyCashToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
+</button>
               </div>
             </div>
           </div>
@@ -1440,9 +1464,12 @@ to { transform: translateY(0); opacity: 1; }
                   <button onclick="renderAttendanceLogsTable()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                     <i class="fa-solid fa-filter text-xs"></i> Filter
                   </button>
-                  <button onclick="exportAttendanceToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
-                  </button>
+            <button type="button" onclick="exportAttendanceToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-pdf text-xs"></i> Export PDF
+</button>
+<button type="button" onclick="exportAttendanceToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
+</button>
                 </div>
               </div>
             </div>
@@ -1502,14 +1529,20 @@ to { transform: translateY(0); opacity: 1; }
                 </button>
               </div>
 
-              <div class="flex items-center gap-2">
-                <button onclick="openSalaryAdvanceModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-hand-holding-dollar"></i> Record Advance / Deduction
-                </button>
-                <button onclick="exportPayrollToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-file-excel text-xs"></i> Export Payroll (CSV)
-                </button>
-              </div>
+    <div class="flex flex-wrap items-center gap-2">
+  <button type="button" onclick="openSalaryAdjustmentModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+    <i class="fa-solid fa-scale-balanced"></i> + Monthly Adjustment (+/-)
+  </button>
+  <button type="button" onclick="openSalaryAdvanceModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+    <i class="fa-solid fa-hand-holding-dollar"></i> Record Advance
+  </button>
+<button type="button" onclick="exportPayrollToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-pdf text-xs"></i> Export PDF
+</button>
+<button type="button" onclick="exportPayrollToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-excel text-xs"></i> Export Payroll (CSV)
+</button>
+</div>
             </div>
 
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
@@ -1567,26 +1600,29 @@ to { transform: translateY(0); opacity: 1; }
               <p class="text-xs text-gray-400">100% ක් නිවැරදි Server-side Date Query පදනම් කරගත් විකුණුම්, P&L, පැයෙන් පැය වාර්තා සහ වේටර් දායකත්වය</p>
             </div>
 
-            <div class="flex flex-wrap bg-gray-100 p-1 rounded-xl text-xs font-bold gap-1">
-              <button onclick="switchReportTab('invoices')" id="repTab-invoices" class="px-3 py-1.5 rounded-lg bg-green-600 text-white shadow-sm font-bold cursor-pointer">
-                🧾 Invoices
-              </button>
-              <button onclick="switchReportTab('pnl')" id="repTab-pnl" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-                📊 Profit & Loss (P&L)
-              </button>
-              <button onclick="switchReportTab('hourly')" id="repTab-hourly" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-                ⏱️ Peak Hours (Hourly)
-              </button>
-              <button onclick="switchReportTab('waiters')" id="repTab-waiters" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-                👔 Waiter Sales & SC
-              </button>
-              <button onclick="switchReportTab('items')" id="repTab-items" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-                🍽️ Item Sales
-              </button>
-              <button onclick="switchReportTab('credits')" id="repTab-credits" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-                💳 Customer Credits
-              </button>
-            </div>
+         <div class="flex flex-wrap bg-gray-100 p-1 rounded-xl text-xs font-bold gap-1">
+  <button onclick="switchReportTab('invoices')" id="repTab-invoices" class="px-3 py-1.5 rounded-lg bg-green-600 text-white shadow-sm font-bold cursor-pointer">
+    🧾 Invoices
+  </button>
+  <button onclick="switchReportTab('pnl')" id="repTab-pnl" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+    📊 Profit & Loss (P&L)
+  </button>
+  <button onclick="switchReportTab('hourly')" id="repTab-hourly" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+    ⏱️ Peak Hours (Hourly)
+  </button>
+  <button onclick="switchReportTab('waiters')" id="repTab-waiters" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+    👔 Waiter Sales & SC
+  </button>
+  <button onclick="switchReportTab('items')" id="repTab-items" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+    🍽️ Item Sales
+  </button>
+  <button onclick="switchReportTab('credits')" id="repTab-credits" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+    💳 Customer Credits
+  </button>
+  <button onclick="switchReportTab('dayEndHistory')" id="repTab-dayEndHistory" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+    📑 Day-End History
+  </button>
+</div>
           </div>
 
           <div id="repDateFilterBar" class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3 text-xs font-bold">
@@ -1625,9 +1661,12 @@ to { transform: translateY(0); opacity: 1; }
                 <button onclick="applyReportDateFilter()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                   <i class="fa-solid fa-filter text-xs"></i> Apply Filter
                 </button>
-                <button onclick="exportCurrentReportToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
-                </button>
+              <button type="button" onclick="exportCurrentReportToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-pdf text-xs"></i> Export PDF
+</button>
+<button type="button" onclick="exportCurrentReportToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+  <i class="fa-solid fa-file-excel text-xs"></i> Export Excel (CSV)
+</button>
               </div>
             </div>
           </div>
@@ -1901,12 +1940,106 @@ to { transform: translateY(0); opacity: 1; }
                       <th class="p-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody id="repCreditsTableBody" class="divide-y divide-gray-100 font-medium text-gray-700 whitespace-nowrap">
+           <tbody id="repCreditsTableBody" class="divide-y divide-gray-100 font-medium text-gray-700 whitespace-nowrap">
                     <tr><td colspan="7" class="text-center py-10 text-gray-400">ණයට ලබාදුන් බිල්පත් නොමැත...</td></tr>
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
+
+          <!-- TAB 7: DAY-END (Z-REPORT) AUDIT HISTORY -->
+          <div id="reportSection-dayEndHistory" class="hidden space-y-4">
+            
+            <!-- Date Filter & On-Demand Load Bar -->
+            <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3 text-xs font-bold">
+              <div class="flex items-center gap-1.5 border-b border-gray-100 pb-2.5 overflow-x-auto no-scrollbar">
+                <span class="text-gray-400 font-semibold whitespace-nowrap mr-1">Quick Select:</span>
+                <button type="button" onclick="setZHistoryPreset('today')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg whitespace-nowrap cursor-pointer">අද (Today)</button>
+                <button type="button" onclick="setZHistoryPreset('yesterday')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg whitespace-nowrap cursor-pointer">ඊයේ (Yesterday)</button>
+                <button type="button" onclick="setZHistoryPreset('thisWeek')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg whitespace-nowrap cursor-pointer">මේ සතිය (This Week)</button>
+                <button type="button" onclick="setZHistoryPreset('thisMonth')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg whitespace-nowrap cursor-pointer">මේ මාසය (This Month)</button>
+                <button type="button" onclick="setZHistoryPreset('all')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg whitespace-nowrap cursor-pointer">සියල්ල (All)</button>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-gray-400 font-semibold">From:</span>
+                    <input type="date" id="zHistFromDate" class="p-2 border rounded-xl outline-none bg-gray-50 text-xs font-bold">
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-gray-400 font-semibold">To:</span>
+                    <input type="date" id="zHistToDate" class="p-2 border rounded-xl outline-none bg-gray-50 text-xs font-bold">
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <!-- Load Button (On-Demand Filtering) -->
+                  <button type="button" id="btnLoadZHistory" onclick="loadDayEndHistory()" class="bg-green-600 hover:bg-green-700 text-white font-black px-5 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer text-xs">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>Load Day-End Reports</span>
+                  </button>
+                 <button type="button" onclick="exportDayEndHistoryToPDF()" class="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer text-xs">
+  <i class="fa-solid fa-file-pdf"></i>
+  <span>Export PDF</span>
+</button>
+<button type="button" onclick="exportDayEndHistoryToCSV()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer text-xs">
+  <i class="fa-solid fa-file-excel"></i>
+  <span>Export Excel</span>
+</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary KPI Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Loaded Audits</span>
+                <span id="zHistTotalCount" class="text-base font-black text-gray-800 mt-0.5 block">0 Reports</span>
+              </div>
+              <div class="bg-white p-3.5 rounded-2xl border border-blue-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Total Net Revenue</span>
+                <span id="zHistTotalNetSales" class="text-base font-black text-blue-700 mt-0.5 block font-mono">Rs. 0.00</span>
+              </div>
+              <div class="bg-white p-3.5 rounded-2xl border border-green-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Net Cash Variance</span>
+                <span id="zHistTotalCashVariance" class="text-base font-black text-green-700 mt-0.5 block font-mono">Rs. 0.00</span>
+              </div>
+              <div class="bg-white p-3.5 rounded-2xl border border-purple-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Net Card Variance</span>
+                <span id="zHistTotalCardVariance" class="text-base font-black text-purple-700 mt-0.5 block font-mono">Rs. 0.00</span>
+              </div>
+            </div>
+
+            <!-- Day End History Table -->
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div class="p-3.5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <span class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <i class="fa-solid fa-vault text-green-600"></i> Past Day-End (Z-Report) History
+                </span>
+                <span class="text-[10px] text-gray-400 font-bold">Shift & Reconciliation Log</span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-100 whitespace-nowrap">
+                    <tr>
+                      <th class="p-3.5">Date & Shift Time</th>
+                      <th class="p-3.5 text-center">Bills</th>
+                      <th class="p-3.5">Net Sales</th>
+                      <th class="p-3.5">Cash Audit (Expected / Counted)</th>
+                      <th class="p-3.5">Card Audit (POS / Machine)</th>
+                      <th class="p-3.5">Petty Box</th>
+                      <th class="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dayEndHistoryTableBody" class="divide-y divide-gray-100 font-medium text-gray-700 whitespace-nowrap">
+                    <tr><td colspan="7" class="text-center py-10 text-gray-400">කරුණාකර දින පරාසය තෝරා "Load Day-End Reports" බටන් එක ඔබන්න...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -2468,49 +2601,78 @@ to { transform: translateY(0); opacity: 1; }
           </div>
         </div>
         
-        <!-- 💳 Card Payment Breakdown & Machine Reconciliation Box -->
-        <div class="p-2.5 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2">
-          <div class="flex justify-between items-center">
-            <span class="text-[11px] font-black text-purple-950 uppercase flex items-center gap-1.5">
-              <i class="fa-solid fa-credit-card text-purple-600"></i> Card Payment System Breakdown
-            </span>
-            <span class="text-[9px] text-purple-700 font-extrabold">POS vs Card Machine</span>
-          </div>
-          
-          <!-- Card Breakdown 4 Grid (Plenty of room - no text wrapping) -->
-          <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex justify-between items-center">
-              <span class="font-bold text-gray-600">Visa:</span>
-              <span id="dayEndVisaTotalVal" class="font-black text-purple-900 font-mono">Rs. 0.00</span>
-            </div>
-            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex justify-between items-center">
-              <span class="font-bold text-gray-600">MasterCard:</span>
-              <span id="dayEndMasterTotalVal" class="font-black text-purple-900 font-mono">Rs. 0.00</span>
-            </div>
-            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex justify-between items-center">
-              <span class="font-bold text-gray-600">AMEX:</span>
-              <span id="dayEndAmexTotalVal" class="font-black text-purple-900 font-mono">Rs. 0.00</span>
-            </div>
-            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex justify-between items-center">
-              <span class="font-bold text-gray-600">Other/FriMi:</span>
-              <span id="dayEndOtherCardTotalVal" class="font-black text-purple-900 font-mono">Rs. 0.00</span>
-            </div>
-          </div>
-          
-          <!-- 🌟 WIDE & PROMINENT ACTUAL CARD MACHINE INPUT (දැන් Type කරන්න පහසුයි) -->
-          <div class="p-2.5 bg-white rounded-xl border-2 border-purple-300 shadow-xs space-y-1.5">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <label for="dayEndActualCardInput" class="text-xs font-black text-purple-950 uppercase block">Card Machine Settlement Total:</label>
-                <span class="text-[10px] text-gray-400 font-semibold block">Card මැෂිමේ Batch Slip එකේ Total එක</span>
-              </div>
-              <input type="number" step="0.01" id="dayEndActualCardInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-36 p-1.5 border-2 border-purple-400 rounded-xl text-xs font-black text-purple-900 text-right bg-purple-50 outline-none font-mono focus:bg-white focus:border-purple-600 transition">
-            </div>
-            <div id="dayEndCardVarianceBox" class="p-1.5 rounded-lg border text-center font-bold text-[10.5px] bg-gray-50 text-gray-600">
-              Card Machine එකේ Settlement Total මුදල ඇතුළත් කරන්න...
-            </div>
-          </div>
-        </div>
+     <!-- 💳 Card Payment Breakdown & Machine Reconciliation Box (වෙන වෙනම Card Settlement) -->
+<div class="p-2.5 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2.5">
+  <div class="flex justify-between items-center border-b border-purple-200/60 pb-1.5">
+    <span class="text-[11px] font-black text-purple-950 uppercase flex items-center gap-1.5">
+      <i class="fa-solid fa-credit-card text-purple-600"></i> Card Machine Batch Reconciliation (වෙන වෙනම විගණනය)
+    </span>
+    <span class="text-[9.5px] text-purple-700 font-extrabold bg-purple-100 px-2 py-0.5 rounded-md">POS vs Machine</span>
+  </div>
+  
+  <!-- 4 Card Types with Individual Actual Inputs & Variances -->
+  <div class="space-y-1.5 text-xs">
+    
+    <!-- 1. Visa -->
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
+      <div class="w-28 shrink-0">
+        <span class="font-extrabold text-gray-800 text-xs block">Visa Card:</span>
+        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndVisaTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
+        <input type="number" step="0.01" id="dayEndActualVisaInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
+      </div>
+      <span id="dayEndVisaVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
+    </div>
+    
+    <!-- 2. MasterCard -->
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
+      <div class="w-28 shrink-0">
+        <span class="font-extrabold text-gray-800 text-xs block">MasterCard:</span>
+        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndMasterTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
+        <input type="number" step="0.01" id="dayEndActualMasterInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
+      </div>
+      <span id="dayEndMasterVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
+    </div>
+    
+    <!-- 3. AMEX -->
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
+      <div class="w-28 shrink-0">
+        <span class="font-extrabold text-gray-800 text-xs block">AMEX:</span>
+        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndAmexTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
+        <input type="number" step="0.01" id="dayEndActualAmexInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
+      </div>
+      <span id="dayEndAmexVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
+    </div>
+    
+    <!-- 4. Other / FriMi / Genie -->
+    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
+      <div class="w-28 shrink-0">
+        <span class="font-extrabold text-gray-800 text-xs block">Other / FriMi:</span>
+        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndOtherCardTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
+        <input type="number" step="0.01" id="dayEndActualOtherInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
+      </div>
+      <span id="dayEndOtherVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
+    </div>
+    
+  </div>
+  
+  <!-- Total Card Machine Variance Summary -->
+  <div class="p-2 bg-white rounded-xl border border-purple-300 flex justify-between items-center">
+    <span class="text-[10.5px] font-extrabold text-purple-950 uppercase">Total Card Variance:</span>
+    <span id="dayEndCardVarianceBox" class="text-xs font-black text-gray-700 font-mono">Rs. 0.00</span>
+  </div>
+</div>
         
         <!-- Petty Cash Balance Box -->
         <div class="p-2.5 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between text-xs">
@@ -3348,9 +3510,14 @@ to { transform: translateY(0); opacity: 1; }
       <div class="border border-gray-200 rounded-xl overflow-hidden shadow-xs">
         <div class="p-2.5 bg-gray-50 border-b border-gray-100 flex justify-between items-center text-xs">
           <span class="font-bold text-gray-600">ගිණුම් ප්‍රකාශනය (Transaction Statement)</span>
-          <button onclick="exportSupplierLedgerToCSV()" class="bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-3 py-1 rounded-lg cursor-pointer">
-            <i class="fa-solid fa-file-excel mr-1"></i> Export Ledger CSV
-          </button>
+        <div class="flex items-center gap-1.5">
+  <button type="button" onclick="exportSupplierLedgerToPDF()" class="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition">
+    <i class="fa-solid fa-file-pdf mr-1"></i> Export PDF
+  </button>
+  <button type="button" onclick="exportSupplierLedgerToCSV()" class="bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition">
+    <i class="fa-solid fa-file-excel mr-1"></i> Export Ledger CSV
+  </button>
+</div>
         </div>
         <div class="overflow-x-auto max-h-64 overflow-y-auto">
           <table class="w-full text-left text-xs">
@@ -3394,43 +3561,96 @@ to { transform: translateY(0); opacity: 1; }
     </div>
   </div>
 
-  <!-- MODAL: SALARY ADVANCES -->
-  <div id="salaryAdvanceModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-3">
-    <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 p-5 space-y-4">
-      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-        <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-          <i class="fa-solid fa-hand-holding-dollar text-purple-600"></i> Record Salary Advance
-        </h3>
-        <button onclick="closeSalaryAdvanceModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <form id="salaryAdvanceForm" class="space-y-3">
-        <div>
-          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">සේවකයා තෝරන්න (Employee)</label>
-          <select id="advEmployeeSelect" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold"></select>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">දිනය (Date)</label>
-            <input type="date" id="advDate" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold">
-          </div>
-          <div>
-            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">මුදල (Amount Rs.)</label>
-            <input type="number" step="100" id="advAmount" required placeholder="5000" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold text-red-600">
-          </div>
-        </div>
-        <div>
-          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">හේතුව / විස්තරය (Reason / Description)</label>
-          <input type="text" id="advReason" placeholder="Medical advance / Festival loan" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50">
-        </div>
-        <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
-          <button type="button" onclick="closeSalaryAdvanceModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
-          <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
-            <i class="fa-solid fa-floppy-disk"></i> Save Advance
-          </button>
-        </div>
-      </form>
+<!-- MODAL 1: SALARY ADVANCES -->
+<div id="salaryAdvanceModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-3">
+  <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 p-5 space-y-4">
+    <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+      <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
+        <i class="fa-solid fa-hand-holding-dollar text-purple-600"></i> Record Salary Advance
+      </h3>
+      <button type="button" onclick="closeSalaryAdvanceModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
     </div>
+    <form id="salaryAdvanceForm" class="space-y-3">
+      <div>
+        <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">සේවකයා තෝරන්න (Employee)</label>
+        <select id="advEmployeeSelect" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold"></select>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">දිනය (Date)</label>
+          <input type="date" id="advDate" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold">
+        </div>
+        <div>
+          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">මුදල (Amount Rs.)</label>
+          <input type="number" step="100" id="advAmount" required placeholder="5000" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold text-red-600">
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">හේතුව / විස්තරය (Reason / Description)</label>
+        <input type="text" id="advReason" placeholder="Medical advance / Festival loan" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50">
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+        <button type="button" onclick="closeSalaryAdvanceModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-floppy-disk"></i> Save Advance
+        </button>
+      </div>
+    </form>
   </div>
+</div>
+
+<!-- MODAL 2: MONTHLY SALARY ADJUSTMENT (VARIABLE ALLOWANCES & DEDUCTIONS) -->
+<div id="salaryAdjustmentModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-3">
+  <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 p-5 space-y-4">
+    <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+      <div>
+        <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
+          <i class="fa-solid fa-scale-balanced text-indigo-600"></i> Monthly Salary Adjustment (+ / -)
+        </h3>
+        <p class="text-xs text-gray-400">අදාළ මාසයට පමණක් බලපාන අමතර දීමනා, බෝනස් හෝ අඩු කිරීම්</p>
+      </div>
+      <button type="button" onclick="closeSalaryAdjustmentModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    
+    <form id="salaryAdjustmentForm" onsubmit="handleSalaryAdjustmentSubmit(event)" class="space-y-3 text-xs font-bold">
+      <div>
+        <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">සේවකයා තෝරන්න (Select Employee)</label>
+        <select id="adjEmployeeSelect" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold"></select>
+      </div>
+      
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">වර්ගය (Adjustment Type)</label>
+          <select id="adjTypeSelect" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-white font-black text-indigo-950">
+            <option value="allowance">➕ Allowance / Bonus (එකතු කිරීම්)</option>
+            <option value="deduction">➖ Deduction / Penalty (අඩු කිරීම්)</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">දිනය / මාසය (Date)</label>
+          <input type="date" id="adjDate" required class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-bold">
+        </div>
+      </div>
+      
+      <div>
+        <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">මුදල (Adjustment Amount Rs.)</label>
+        <input type="number" step="100" id="adjAmount" required placeholder="2500.00" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-black text-base font-mono">
+      </div>
+      
+      <div>
+        <label class="text-[11px] font-bold text-gray-500 uppercase block mb-1">හේතුව / විස්තරය (Reason / Note)</label>
+        <input type="text" id="adjReason" required placeholder="උදා: Attendance Bonus, Festival Incentive, Uniform deduction" class="w-full p-2.5 border rounded-xl text-xs outline-none bg-gray-50 font-normal">
+      </div>
+      
+      <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+        <button type="button" onclick="closeSalaryAdjustmentModal()" class="px-4 py-2 rounded-xl border text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer">Cancel</button>
+        <button type="submit" id="saveSalaryAdjBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-floppy-disk"></i> Save Adjustment
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 
   <!-- MODAL: EMPLOYEE PAYSLIP PREVIEW -->
   <div id="payslipModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-3">
