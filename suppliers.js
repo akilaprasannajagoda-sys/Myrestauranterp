@@ -2,10 +2,11 @@
 // MODULE 07: SUPPLIERS, GRN SUPPLY CHAIN & CASH-BOOK LEDGER ENGINE
 // 🛡️ UNFREEZE READY & ZERO-COLLISION ARCHITECTURE
 // 📅 SUPPLIER LEDGER DATE RANGE SEARCH (FROM & TO DATES WITH BALANCE B/F)
+// 📄 100% VECTOR HIGH-CONTRAST A4 PDF & EXCEL (CSV) LEDGER EXPORT
 // ==========================================================================
 
 import { erpState, currentTenant, activeSupplierLedgerId, setActiveSupplierLedgerId } from './state.js';
-import { showLiveToast, downloadCSVFile, getLocalDateString } from './utils.js';
+import { showLiveToast, downloadCSVFile, generateReportPDF, getLocalDateString } from './utils.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -18,7 +19,7 @@ export function initSuppliersContext(dbRefInstance, pushMethod, updateMethod) {
   updateFn = updateMethod;
 }
 
-// 🔒 COLLISION-PROOF UNIQUE GRN NUMBER GENERATOR (LOCAL TIME SAFE)
+// 🔒 COLLISION-PROOF UNIQUE GRN NUMBER GENERATOR
 export function generateCollisionProofGRNNumber() {
   const dStr = getLocalDateString().replace(/-/g, '').slice(2);
   const now = new Date();
@@ -316,7 +317,6 @@ export function renderSupplierLedgerTable(supId) {
   tbody.innerHTML = "";
   let runningBalance = openingBalanceBF;
 
-  // Render Opening Balance B/F if a From Date is set
   if (fromVal && openingBalanceBF !== 0) {
     const bfTr = document.createElement("tr");
     bfTr.className = "bg-purple-50/60 font-bold border-b border-purple-100 text-purple-950";
@@ -354,6 +354,61 @@ export function openSupPayFromLedger() {
   openSupplierPayModal(activeSupplierLedgerId, creditBalance);
 }
 
+// 📄 EXPORT SUPPLIER LEDGER TO PDF
+export function exportSupplierLedgerToPDF() {
+  if (!activeSupplierLedgerId) return;
+  const sup = erpState.suppliers[activeSupplierLedgerId];
+  if (!sup) return;
+
+  const fromVal = document.getElementById("supLedgerFromDate")?.value || "Start";
+  const toVal = document.getElementById("supLedgerToDate")?.value || "End";
+
+  const rows = [];
+  document.querySelectorAll("#supLedgerTableBody tr").forEach(r => {
+    const cols = r.querySelectorAll("td");
+    if (cols.length >= 6) {
+      rows.push([
+        cols[0].innerText.trim(),
+        cols[1].innerText.trim(),
+        cols[2].innerText.trim(),
+        cols[3].innerText.trim(),
+        cols[4].innerText.trim(),
+        cols[5].innerText.trim()
+      ]);
+    }
+  });
+
+  if (rows.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Ledger දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  const pur = document.getElementById("supLedgerTotalPurchases")?.innerText || "Rs. 0.00";
+  const paid = document.getElementById("supLedgerTotalPaid")?.innerText || "Rs. 0.00";
+  const out = document.getElementById("supLedgerOutstanding")?.innerText || "Rs. 0.00";
+
+  generateReportPDF({
+    reportTitle: `Supplier Cash-Book Ledger: ${sup.name}`,
+    subtitle: `Contact: ${sup.phone || '-'} | Period: ${fromVal} to ${toVal}`,
+    orientation: "landscape",
+    summaryCards: [
+      { label: "Total Purchases", value: pur, color: "#7c3aed" },
+      { label: "Total Paid", value: paid, color: "#16a34a" },
+      { label: "Outstanding Balance (ණය)", value: out, color: "#dc2626" }
+    ],
+    columns: [
+      { label: "Date", bold: true },
+      { label: "Type & Description" },
+      { label: "Ref / Invoice #" },
+      { label: "Debit (Paid Rs)", align: "right" },
+      { label: "Credit (Purchased Rs)", align: "right" },
+      { label: "Running Balance (ණය Rs)", align: "right", bold: true }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 EXPORT SUPPLIER LEDGER TO CSV
 export function exportSupplierLedgerToCSV() {
   if (!activeSupplierLedgerId) return;
   const sup = erpState.suppliers[activeSupplierLedgerId];
@@ -375,7 +430,7 @@ export function exportSupplierLedgerToCSV() {
   downloadCSVFile(csv, `Ledger_${sup.name.replace(/\s+/g, '_')}_${fromVal}_to_${toVal}.csv`);
 }
 
-// 3. ZERO-FREEZE SEARCHABLE GRN BUILDER
+// 3. SEARCHABLE GRN BUILDER
 export function addGrnItemRow() {
   const container = document.getElementById("grnItemsContainer");
   if (!container) return;
@@ -530,10 +585,10 @@ export async function handleGrnSubmit(e) {
     const cost = parseFloat(row.querySelector(".grn-cost")?.value || 0);
     if (rawId && qty > 0) {
       items.push({
-        rawId: rawId,
+        rawId,
         rawName: erpState.rawItems[rawId]?.name || "Material",
-        qty: qty,
-        cost: cost,
+        qty,
+        cost,
         total: qty * cost
       });
     }
@@ -563,7 +618,9 @@ export async function handleGrnSubmit(e) {
 
   try {
     if (dbRef && currentTenant && pushFn && updateFn) {
-      await pushFn(dbRef(`tenants/${currentTenant}/grns`), grnRecord);
+      const gRef = await pushFn(dbRef(`tenants/${currentTenant}/grns`), grnRecord);
+      if (!erpState.grns) erpState.grns = {};
+      erpState.grns[gRef.key] = grnRecord;
 
       for (const it of items) {
         const currentStock = parseFloat(erpState.rawItems[it.rawId]?.stock || 0);
@@ -660,6 +717,57 @@ export function closeGrnDetailModal() {
   document.getElementById("grnDetailModal")?.classList.add("hidden");
 }
 
+// 📄 EXPORT GRN TO PDF
+export function exportGrnToPDF() {
+  const fromDate = document.getElementById("grnHistoryFromDate")?.value;
+  const toDate = document.getElementById("grnHistoryToDate")?.value;
+
+  let list = Object.values(erpState.grns || {});
+  if (fromDate) list = list.filter(g => (g.date || g.createdAt?.split("T")[0]) >= fromDate);
+  if (toDate) list = list.filter(g => (g.date || g.createdAt?.split("T")[0]) <= toDate);
+
+  if (list.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට GRN දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  list.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+
+  let grandTotal = 0;
+  const rows = list.map(g => {
+    const net = parseFloat(g.netTotal || 0);
+    grandTotal += net;
+    return [
+      g.grnNumber || "GRN",
+      g.date || (g.createdAt ? g.createdAt.split("T")[0] : "-"),
+      g.supplierName || "-",
+      g.invoiceNo || "-",
+      (g.paymentMethod || "cash").toUpperCase(),
+      net.toFixed(2)
+    ];
+  });
+
+  generateReportPDF({
+    reportTitle: "Goods Received Note (GRN) Supply Chain Report",
+    subtitle: `Period: ${fromDate || 'Start'} to ${toDate || 'End'}`,
+    orientation: "portrait",
+    summaryCards: [
+      { label: "Total GRNs", value: `${list.length} Notes` },
+      { label: "Total Purchases Value", value: `Rs. ${grandTotal.toFixed(2)}`, color: "#7c3aed" }
+    ],
+    columns: [
+      { label: "GRN #", bold: true },
+      { label: "Date" },
+      { label: "Supplier Name" },
+      { label: "Supplier Inv #" },
+      { label: "Payment Method", align: "center" },
+      { label: "Net Amount (Rs.)", align: "right", bold: true }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 EXPORT GRN TO CSV
 export function exportGrnToCSV() {
   const list = Object.values(erpState.grns || {});
   if (list.length === 0) {
@@ -708,6 +816,7 @@ export function onSupPayMethodChange() {
   if ((method === "transfer" || method === "card") && refBox) refBox.classList.remove("hidden");
 }
 
+// 🛡️ REPAIRED (BUG #8 FIXED): Updates erpState.supplierPayments immediately in local memory
 export async function handleSupplierPaySubmit(e) {
   e.preventDefault();
   const supId = document.getElementById("supPaySupplierId")?.value;
@@ -736,8 +845,15 @@ export async function handleSupplierPaySubmit(e) {
 
   try {
     if (dbRef && pushFn && currentTenant) {
-      await pushFn(dbRef(`tenants/${currentTenant}/supplierPayments`), payRecord);
+      const pRef = await pushFn(dbRef(`tenants/${currentTenant}/supplierPayments`), payRecord);
+      if (!erpState.supplierPayments) erpState.supplierPayments = {};
+      erpState.supplierPayments[pRef.key] = payRecord;
+    } else {
+      const tempKey = "local_sup_pay_" + Date.now();
+      if (!erpState.supplierPayments) erpState.supplierPayments = {};
+      erpState.supplierPayments[tempKey] = payRecord;
     }
+
     closeSupplierPayModal();
     renderSuppliersDirectoryTable();
     if (activeSupplierLedgerId) {
@@ -761,6 +877,7 @@ window.resetSupplierLedgerDateFilter = resetSupplierLedgerDateFilter;
 window.renderSupplierLedgerTable = renderSupplierLedgerTable;
 window.openSupPayFromLedger = openSupPayFromLedger;
 window.exportSupplierLedgerToCSV = exportSupplierLedgerToCSV;
+window.exportSupplierLedgerToPDF = exportSupplierLedgerToPDF;
 window.addGrnItemRow = addGrnItemRow;
 window.filterGrnRowSelect = filterGrnRowSelect;
 window.onGrnRawSelectChange = onGrnRawSelectChange;
@@ -771,6 +888,7 @@ window.renderGRNHistoryTable = renderGRNHistoryTable;
 window.viewGrnDetail = viewGrnDetail;
 window.closeGrnDetailModal = closeGrnDetailModal;
 window.exportGrnToCSV = exportGrnToCSV;
+window.exportGrnToPDF = exportGrnToPDF;
 window.openSupplierPayModal = openSupplierPayModal;
 window.closeSupplierPayModal = closeSupplierPayModal;
 window.onSupPayMethodChange = onSupPayMethodChange;
