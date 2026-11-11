@@ -1,6 +1,7 @@
 // ==========================================================================
 // MODULE 03: KITCHEN DISPLAY SYSTEM (KDS) & LIVE ELAPSED TIMER ENGINE
 // 🛡️ XSS & SPECIAL CHARACTER NOTE-SAFE ARCHITECTURE
+// ⚡ LEAK-FREE INTERVAL TICKER & DYNAMIC COLOR ALERT ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant } from './state.js';
@@ -19,6 +20,14 @@ export function initKdsContext(dbRefInstance, updateMethod) {
   kdsTimerInterval = setInterval(() => {
     updateKDSElapsedTimersUI();
   }, 1000);
+}
+
+// 🛡️ REPAIRED (BUG #22 FIXED): CLEANUP INTERVAL TIMER TO PREVENT MEMORY LEAK
+export function stopKDSTimer() {
+  if (kdsTimerInterval) {
+    clearInterval(kdsTimerInterval);
+    kdsTimerInterval = null;
+  }
 }
 
 // 1. RENDER KDS ORDERS GRID WITH ITEM-BY-ITEM STRIKE-THROUGH
@@ -52,10 +61,8 @@ export function renderKDSOrdersGrid() {
     card.setAttribute("data-order-id", id);
     card.setAttribute("data-order-time", order.timestamp);
     
-    // Check if all items are prepared
     const allItemsPrepared = (order.items || []).length > 0 && (order.items || []).every(i => i.isPrepared);
     
-    // 🛡️ FIX: escapeHTML යොදා ඇති බැවින් <No spicy>, <Less Sugar> සටහන් කුස්සියේ Display එකේ කිසිවිටෙකත් සැඟවී නොයයි!
     const itemsHtml = (order.items || []).map((i, idx) => {
       const isCancelled = i.isCancelled;
       const isPrepared = i.isPrepared;
@@ -114,6 +121,7 @@ export function renderKDSOrdersGrid() {
 // 2. LIVE ELAPSED TIMER TICKER (GREEN -> ORANGE -> RED DELAY)
 export function updateKDSElapsedTimersUI() {
   const cards = document.querySelectorAll(".kds-ticket-card");
+  if (cards.length === 0) return;
   const nowMs = Date.now();
   
   cards.forEach(card => {
@@ -133,7 +141,6 @@ export function updateKDSElapsedTimersUI() {
     
     timerEl.innerText = formatted;
     
-    // Dynamic Color Alert based on preparation duration
     if (mins >= 20) {
       timerEl.className = "text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-red-600 text-white animate-pulse";
       card.className = "bg-white p-4 rounded-2xl border-2 border-red-500 shadow-lg flex flex-col justify-between space-y-3 kds-ticket-card";
@@ -146,7 +153,7 @@ export function updateKDSElapsedTimersUI() {
   });
 }
 
-// 3. TOGGLE SINGLE ITEM PREPARED / COOKED STATUS (LINE-THROUGH)
+// 3. TOGGLE SINGLE ITEM PREPARED / COOKED STATUS
 export async function toggleKDSItemPrepared(orderId, itemIndex) {
   if (!dbRef || !updateFn || !currentTenant) return;
   const order = erpState.kitchenOrders[orderId];
@@ -176,8 +183,9 @@ export async function completeKitchenOrder(id) {
   showLiveToast("🛎️ Order Ready!", `Table ${order ? order.tableNo : ''} කෑම පිළියෙල කර අවසන්!`, "kitchen", "fa-bell-concierge");
 }
 
-// Window Global Exports
+// Global Window Exports
 window.completeKitchenOrder = completeKitchenOrder;
 window.toggleKDSItemPrepared = toggleKDSItemPrepared;
 window.renderKDSOrdersGrid = renderKDSOrdersGrid;
 window.updateKDSElapsedTimersUI = updateKDSElapsedTimersUI;
+window.stopKDSTimer = stopKDSTimer;
