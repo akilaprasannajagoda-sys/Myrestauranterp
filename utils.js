@@ -2,6 +2,7 @@
 // MODULE 02: UTILITIES (AUDIO, TOASTS, DIRECT WHATSAPP, HASHING, CSV & PDF ENGINE)
 // 🛡️ XSS & SPECIAL CHARACTER ESCAPING IMMUNE ARCHITECTURE
 // 📄 ENTERPRISE 100% VECTOR HIGH-CONTRAST OFFLINE PDF REPORT GENERATOR
+// 🛡️ PERMANENT WINDOWS FOCUS SHIELD WRAPPER (ISSUES #31917 & #41602 FIX)
 // ==========================================================================
 
 import { erpState, currentTenantInfo } from './state.js';
@@ -324,7 +325,7 @@ export async function generateReportPDF({
   const cleanTitle = (reportTitle || "Report").replace(/[^\w\s\u0D80-\u0DFF-]/g, "").replace(/\s+/g, "_");
   const defaultFilename = `${cleanTitle}_${getLocalDateString()}.pdf`;
 
-  // 1. ELECTRON NATIVE DIRECT PDF DOWNLOAD VIA CHROMIUM ENGINE
+  // 1. ELECTRON NATIVE DIRECT PDF DOWNLOAD
   if (window.electronAPI && window.electronAPI.savePdf) {
     try {
       showLiveToast("⏳ Generating PDF", "PDF ගොනුව සකස් කරමින් පවතී...", "info", "fa-spinner fa-spin");
@@ -443,6 +444,9 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
 
     const cleanup = (resultVal) => {
       overlay.remove();
+      if (window.electronAPI && window.electronAPI.fixFocus) {
+        window.electronAPI.fixFocus();
+      }
       resolve(resultVal);
     };
 
@@ -586,6 +590,27 @@ export async function verifyPin(enteredPin, storedHashOrPlain) {
   }
   
   return enteredClean === storedClean;
+}
+
+// 🛡️ 11. ELECTRON WINDOWS DIALOG FOCUS-FREEZE PERMANENT SHIELD
+if (typeof window !== 'undefined') {
+  const _origConfirm = window.confirm;
+  window.confirm = function(msg) {
+    const res = _origConfirm.call(window, msg);
+    // As soon as user clicks OK/Cancel, immediately auto-restore OS window focus!
+    if (window.electronAPI && window.electronAPI.fixFocus) {
+      window.electronAPI.fixFocus();
+    }
+    return res;
+  };
+
+  // Convert native blocking window.alert into live toast and restore focus
+  window.alert = function(msg) {
+    showLiveToast("⚠️ දැනුම්දීමයි", String(msg), "warning", "fa-circle-exclamation");
+    if (window.electronAPI && window.electronAPI.fixFocus) {
+      window.electronAPI.fixFocus();
+    }
+  };
 }
 
 // 🛡️ Global Window Assignments
