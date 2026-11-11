@@ -3,10 +3,11 @@
 // 5-YEAR ZERO-FREEZE HARDENED ARCHITECTURE (100% ALERT-FREE & TOAST-SAFE)
 // 🇱🇰 COMPLETE SRI LANKAN PAYROLL ENGINE (EPF 8%, ETF 3%, EMPLOYER EPF 12%)
 // 💵 ALLOWANCES & OTHER DEDUCTIONS INTEGRATED FULL PAYSLIP ENGINE
+// 📄 100% VECTOR HIGH-CONTRAST A4 PDF & EXCEL (CSV) PAYROLL EXPORT HUB
 // ==========================================================================
 
 import { erpState, currentTenant, kioskCameraStream, setKioskCameraStream, todayLiveScans, sharedOfflineDB } from './state.js';
-import { showLiveToast, downloadCSVFile, getLocalDateString, hashPin, verifyPin } from './utils.js';
+import { showLiveToast, downloadCSVFile, generateReportPDF, getLocalDateString, hashPin, verifyPin } from './utils.js';
 import { printThermalPayslip } from './printer.js';
 
 let dbRef = null;
@@ -104,7 +105,6 @@ export function kioskKeypadBackspace() {
   if (input) input.value = input.value.slice(0, -1);
 }
 
-// 🔥 ULTRA-MICRO COMPRESSION SNAPSHOT ENGINE
 export function captureInstantCameraSnapshot() {
   const videoEl = document.getElementById("kioskCameraVideo");
   const canvasEl = document.getElementById("kioskSnapshotCanvas");
@@ -121,7 +121,7 @@ export function captureInstantCameraSnapshot() {
   }
 }
 
-// 🔒 ROBUST ATTENDANCE ENGINE (NON-BLOCKING ZERO-FREEZE)
+// 🔒 ROBUST ATTENDANCE ENGINE
 export async function submitKioskAttendance(mode) {
   const pinInput = document.getElementById("kioskPinInput");
   const enteredPin = (pinInput?.value || "").trim();
@@ -132,7 +132,6 @@ export async function submitKioskAttendance(mode) {
     return;
   }
 
-  // SHA-256 HASH COMPLIANT PIN MATCHING
   let matchedEmpEntry = null;
   for (const entry of Object.entries(erpState.employees || {})) {
     const [id, emp] = entry;
@@ -160,7 +159,7 @@ export async function submitKioskAttendance(mode) {
   const stdShift = parseFloat(erpState.settings?.shiftHours || 8.0);
 
   const openAttendanceEntries = Object.entries(erpState.attendance || {}).filter(([k, a]) => {
-    if (a.employeeId !== empKey) return false;
+    if (a.employeeId !== empKey && a.empId !== emp.empId) return false;
     if (a.status !== "Present" || a.outTime) return false;
     const inTimeMs = new Date(a.inTimestamp || (a.date + " " + (a.inTime || "00:00"))).getTime();
     if (isNaN(inTimeMs)) return false;
@@ -203,7 +202,7 @@ export async function submitKioskAttendance(mode) {
         showLiveToast("🟢 Check-In Successful", `${emp.name} (${emp.role}) පැමිණීම සටහන් විය.`, "success", "fa-circle-check");
       } else if (sharedOfflineDB) {
         const tempKey = "offline_att_" + Date.now();
-        await sharedOfflineDB.offlineAttendance.add({ ...newRecord, synced: 0 });
+        await sharedOfflineDB.offlineAttendance.add({ ...newRecord, synced: 0, offlineId: tempKey });
         if (!erpState.attendance) erpState.attendance = {};
         erpState.attendance[tempKey] = newRecord;
         showLiveToast("⚠️ Check-In Saved Offline", `${emp.name} පැමිණීම Offline සුරැකිණි. Internet ලැබුණු පසු Cloud Sync වේ.`, "warning", "fa-floppy-disk");
@@ -239,11 +238,18 @@ export async function submitKioskAttendance(mode) {
         }
         showLiveToast("🔴 Check-Out Successful", `${emp.name} පිටවීම සටහන් විය. (${workedHours.toFixed(1)} hrs worked)`, "success", "fa-door-open");
       } else if (sharedOfflineDB) {
-        await sharedOfflineDB.offlineAttendance.add({
-          ...attRec,
-          ...updateData,
-          synced: 0
-        });
+        if (existingAttKey.startsWith("offline_att_")) {
+          const offRec = await sharedOfflineDB.offlineAttendance.where("offlineId").equals(existingAttKey).first();
+          if (offRec) {
+            await sharedOfflineDB.offlineAttendance.update(offRec.id, { ...updateData });
+          }
+        } else {
+          await sharedOfflineDB.offlineAttendance.add({
+            ...attRec,
+            ...updateData,
+            synced: 0
+          });
+        }
         if (erpState.attendance && erpState.attendance[existingAttKey]) {
           Object.assign(erpState.attendance[existingAttKey], updateData);
         }
@@ -279,6 +285,7 @@ export async function syncOfflineAttendanceToCloud() {
       const cleanRec = { ...rec };
       delete cleanRec.id;
       delete cleanRec.synced;
+      delete cleanRec.offlineId;
       await pushFn(dbRef(`tenants/${currentTenant}/attendance`), cleanRec);
       await sharedOfflineDB.offlineAttendance.delete(rec.id);
     }
@@ -381,7 +388,6 @@ export function openEmployeeModal(mode, empId = null) {
     if (otIn) otIn.value = e.otRate || "";
     if (addrIn) addrIn.value = e.address || "";
 
-    // 🇱🇰 EPF & Allowances
     if (epfNoIn) epfNoIn.value = e.epfNo || "";
     if (epfEligibleIn) epfEligibleIn.value = e.epfEligible || "yes";
     if (allowanceIn) allowanceIn.value = e.allowances || "";
@@ -419,7 +425,6 @@ export function closeEmployeeModal() {
   document.getElementById("employeeModal")?.classList.add("hidden");
 }
 
-// 🔒 SAVE EMPLOYEE (WITH SRI LANKAN EPF / ETF & ALLOWANCES)
 export async function handleEmployeeSubmit(e) {
   e.preventDefault();
   const editId = document.getElementById("editEmployeeId")?.value;
@@ -489,7 +494,7 @@ export async function handleEmployeeSubmit(e) {
   }
 }
 
-// 4. ADVANCED USER MANAGEMENT & ACCESS PERMISSIONS
+// 4. USER MANAGEMENT & ACCESS PERMISSIONS
 export const systemModulesList = [
   { id: "pos", name: "POS & Billing", icon: "fa-cash-register" },
   { id: "tables", name: "Floor Plan & Tables", icon: "fa-chair" },
@@ -830,7 +835,7 @@ export function renderAttendanceLogsTable() {
 
   if (fromVal) list = list.filter(([id, a]) => a.date >= fromVal);
   if (toVal) list = list.filter(([id, a]) => a.date <= toVal);
-  if (empVal !== "ALL") list = list.filter(([id, a]) => a.employeeId === empVal);
+  if (empVal !== "ALL") list = list.filter(([id, a]) => a.employeeId === empVal || a.empId === empVal);
 
   let totalWorkedHours = 0;
   let totalOtHours = 0;
@@ -897,6 +902,69 @@ export async function deleteAttendanceRecord(id) {
   }
 }
 
+// 📄 EXPORT ATTENDANCE TO PDF
+export function exportAttendanceToPDF() {
+  const fromVal = document.getElementById("attFilterFromDate")?.value;
+  const toVal = document.getElementById("attFilterToDate")?.value;
+  const empVal = document.getElementById("attFilterEmpSelect")?.value || "ALL";
+
+  let list = Object.entries(erpState.attendance || {});
+  if (fromVal) list = list.filter(([id, a]) => a.date >= fromVal);
+  if (toVal) list = list.filter(([id, a]) => a.date <= toVal);
+  if (empVal !== "ALL") list = list.filter(([id, a]) => a.employeeId === empVal || a.empId === empVal);
+
+  if (list.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Attendance දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  list.sort((a, b) => new Date(b[1].inTimestamp || (b[1].date + " " + (b[1].inTime || "00:00"))).getTime() - new Date(a[1].inTimestamp || (a[1].date + " " + (a[1].inTime || "00:00"))).getTime());
+
+  let totalHrs = 0;
+  let totalOt = 0;
+  const rows = list.map(([id, a]) => {
+    const worked = parseFloat(a.totalWorkedHours || 0);
+    const ot = parseFloat(a.otHours || 0);
+    totalHrs += worked;
+    totalOt += ot;
+    return [
+      a.date || "-",
+      a.empId || "EMP",
+      a.employeeName || "-",
+      a.role || "-",
+      a.inTime || "--:--",
+      a.outTime || "--:--",
+      worked ? `${worked.toFixed(1)} hrs` : "In Progress",
+      ot ? `+${ot.toFixed(1)} hrs` : "-",
+      a.outTime ? "Completed" : "On Shift"
+    ];
+  });
+
+  generateReportPDF({
+    reportTitle: "Staff Attendance & Work Shift Logs",
+    subtitle: `Period: ${fromVal || 'Start'} to ${toVal || 'End'}`,
+    orientation: "landscape",
+    summaryCards: [
+      { label: "Total Shifts", value: `${list.length} Records` },
+      { label: "Total Hours Worked", value: `${totalHrs.toFixed(1)} hrs`, color: "#2563eb" },
+      { label: "Total Overtime (OT)", value: `${totalOt.toFixed(1)} hrs`, color: "#d97706" }
+    ],
+    columns: [
+      { label: "Date", bold: true },
+      { label: "Emp ID" },
+      { label: "Employee Name", bold: true },
+      { label: "Role" },
+      { label: "Check-In", align: "center" },
+      { label: "Check-Out", align: "center" },
+      { label: "Worked", align: "right" },
+      { label: "OT", align: "right", bold: true },
+      { label: "Status", align: "center" }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 EXPORT ATTENDANCE TO CSV
 export function exportAttendanceToCSV() {
   const rows = document.querySelectorAll("#attendanceLogsTableBody tr");
   if (rows.length === 0) {
@@ -915,7 +983,7 @@ export function exportAttendanceToCSV() {
   downloadCSVFile(csv, `Attendance_Logs_${getLocalDateString()}.csv`);
 }
 
-// 6. SALARY ADVANCES & FULL SRI LANKAN MONTHLY PAYROLL
+// 6. SALARY ADVANCES & MONTHLY SALARY ADJUSTMENTS
 export function openSalaryAdvanceModal() {
   document.getElementById("salaryAdvanceForm")?.reset();
   const dIn = document.getElementById("advDate");
@@ -945,13 +1013,13 @@ export async function handleSalaryAdvanceSubmit(e) {
   const amtIn = document.getElementById("advAmount");
   const amount = parseFloat(amtIn?.value || 0);
   const reason = document.getElementById("advReason")?.value.trim() || "";
-
+  
   if (!empId || amount <= 0) {
     showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර සේවකයෙකු සහ වලංගු මුදලක් ඇතුළත් කරන්න.", "warning", "fa-hand-holding-dollar");
     if (amtIn) amtIn.focus();
     return;
   }
-
+  
   const advRecord = {
     employeeId: empId,
     employeeName: erpState.employees[empId]?.name || "Employee",
@@ -960,14 +1028,19 @@ export async function handleSalaryAdvanceSubmit(e) {
     reason: reason,
     createdAt: new Date().toISOString()
   };
-
+  
   try {
     if (dbRef && pushFn && currentTenant) {
       const advRef = await pushFn(dbRef(`tenants/${currentTenant}/salaryAdvances`), advRecord);
       if (!erpState.salaryAdvances) erpState.salaryAdvances = {};
       erpState.salaryAdvances[advRef.key] = advRecord;
+    } else {
+      const tempKey = "local_adv_" + Date.now();
+      if (!erpState.salaryAdvances) erpState.salaryAdvances = {};
+      erpState.salaryAdvances[tempKey] = advRecord;
     }
     closeSalaryAdvanceModal();
+    renderMonthlyPayrollSheet();
     showLiveToast("💸 Advance Recorded", `Rs. ${amount.toFixed(2)} ක වැටුප් අත්තිකාරම් මුදල සාර්ථකව සටහන් විය.`, "success", "fa-hand-holding-dollar");
   } catch (err) {
     let errMsg = err.message || "දෝෂයක් මතු විය";
@@ -978,7 +1051,97 @@ export async function handleSalaryAdvanceSubmit(e) {
   }
 }
 
-// 🇱🇰 COMPLETE SRI LANKAN MONTHLY PAYROLL SHEET (EPF 8%, ETF 3%, EMPLOYER 12%)
+// ⚖️ 6.1 MONTH-SPECIFIC SALARY ADJUSTMENTS
+export function openSalaryAdjustmentModal(defaultEmpId = null) {
+  document.getElementById("salaryAdjustmentForm")?.reset();
+  const dIn = document.getElementById("adjDate");
+  const monthInput = document.getElementById("payrollMonthSelect");
+  
+  if (dIn) {
+    if (monthInput && monthInput.value) {
+      dIn.value = `${monthInput.value}-01`;
+    } else {
+      dIn.value = getLocalDateString();
+    }
+  }
+  
+  populateSalaryAdjustmentEmployeeDropdown();
+  
+  if (defaultEmpId) {
+    const sel = document.getElementById("adjEmployeeSelect");
+    if (sel) sel.value = defaultEmpId;
+  }
+  
+  document.getElementById("salaryAdjustmentModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("adjAmount")?.focus(), 50);
+}
+
+export function closeSalaryAdjustmentModal() {
+  document.getElementById("salaryAdjustmentModal")?.classList.add("hidden");
+}
+
+export function populateSalaryAdjustmentEmployeeDropdown() {
+  const sel = document.getElementById("adjEmployeeSelect");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">-- සේවකයා තෝරන්න (Select Employee) --</option>`;
+  Object.entries(erpState.employees || {}).forEach(([id, emp]) => {
+    sel.innerHTML += `<option value="${id}">${emp.name} (${emp.empId || 'EMP'} - ${emp.role})</option>`;
+  });
+}
+
+export async function handleSalaryAdjustmentSubmit(e) {
+  e.preventDefault();
+  const empId = document.getElementById("adjEmployeeSelect")?.value;
+  const type = document.getElementById("adjTypeSelect")?.value || "allowance";
+  const date = document.getElementById("adjDate")?.value || getLocalDateString();
+  const amtIn = document.getElementById("adjAmount");
+  const amount = parseFloat(amtIn?.value || 0);
+  const reason = document.getElementById("adjReason")?.value.trim() || "";
+  
+  if (!empId || amount <= 0) {
+    showLiveToast("⚠️ අඩුපාඩුවක්", "කරුණාකර සේවකයෙකු සහ වලංගු මුදලක් ඇතුළත් කරන්න.", "warning", "fa-scale-balanced");
+    if (amtIn) amtIn.focus();
+    return;
+  }
+  
+  const empName = erpState.employees[empId]?.name || "Employee";
+  const monthStr = date.substring(0, 7);
+  
+  const adjRecord = {
+    employeeId: empId,
+    employeeName: empName,
+    date: date,
+    month: monthStr,
+    type: type,
+    amount: amount,
+    reason: reason,
+    createdAt: new Date().toISOString()
+  };
+  
+  try {
+    if (dbRef && pushFn && currentTenant) {
+      const adjRef = await pushFn(dbRef(`tenants/${currentTenant}/salaryAdjustments`), adjRecord);
+      if (!erpState.salaryAdjustments) erpState.salaryAdjustments = {};
+      erpState.salaryAdjustments[adjRef.key] = adjRecord;
+    } else {
+      if (!erpState.salaryAdjustments) erpState.salaryAdjustments = {};
+      erpState.salaryAdjustments["local_adj_" + Date.now()] = adjRecord;
+    }
+    
+    closeSalaryAdjustmentModal();
+    renderMonthlyPayrollSheet();
+    const typeLabel = type === "allowance" ? "අමතර දීමනාවක් (+ Allowance)" : "අඩු කිරීමක් (- Deduction)";
+    showLiveToast("⚖️ Adjustment Saved", `${empName} සඳහා Rs. ${amount.toFixed(2)} ක ${typeLabel} සාර්ථකව සටහන් විය.`, "success", "fa-scale-balanced");
+  } catch (err) {
+    let errMsg = err.message || "දෝෂයක් මතු විය";
+    if (errMsg.includes("Permission denied")) {
+      errMsg = "වැටුප් ගැලපීම් සටහන් කිරීමට අවසර ඇත්තේ Owner හට පමණි.";
+    }
+    showLiveToast("⚠️ අසාර්ථකයි", errMsg, "warning", "fa-lock");
+  }
+}
+
+// 🇱🇰 COMPLETE SRI LANKAN MONTHLY PAYROLL SHEET
 export function renderMonthlyPayrollSheet() {
   const tbody = document.getElementById("payrollTableBody");
   if (!tbody) return;
@@ -1004,37 +1167,63 @@ export function renderMonthlyPayrollSheet() {
   allStaff.forEach(([empId, emp]) => {
     const basicSalary = parseFloat(emp.salary || 0);
     const otRate = parseFloat(emp.otRate || 0);
-    const allowances = parseFloat(emp.allowances || 0);
-    const otherDeductions = parseFloat(emp.otherDeductions || 0);
+    const fixedAllowances = parseFloat(emp.allowances || 0);
+    const fixedOtherDeductions = parseFloat(emp.otherDeductions || 0);
     const isEpfEligible = (emp.epfEligible !== "no");
 
     let daysWorked = 0;
     let totalOtHours = 0;
 
+    // 1. Attendance & OT (BUG #16 REPAIRED: Robust matching)
     Object.values(erpState.attendance || {}).forEach(att => {
-      if (att.employeeId === empId && att.date && att.date.startsWith(selectedMonth)) {
+      const isMatch = (att.employeeId === empId) || (att.empId && att.empId === emp.empId);
+      if (isMatch && att.date && att.date.startsWith(selectedMonth)) {
         daysWorked += 1;
         totalOtHours += parseFloat(att.otHours || 0);
       }
     });
 
     const otAmount = totalOtHours * otRate;
-    const grossSalary = basicSalary + otAmount + allowances;
 
-    // 🇱🇰 EPF 8% (Employee) & EPF 12% / ETF 3% (Employer)
+    // 2. Month-Specific Variable Allowances & Deductions
+    let monthVarAllowances = 0;
+    let monthVarDeductions = 0;
+
+    Object.values(erpState.salaryAdjustments || {}).forEach(adj => {
+      const isMatch = (adj.employeeId === empId) || (adj.employeeName === emp.name);
+      if (isMatch) {
+        const isMatchMonth = (adj.month === selectedMonth) || (adj.date && adj.date.startsWith(selectedMonth));
+        if (isMatchMonth) {
+          if (adj.type === "allowance") {
+            monthVarAllowances += parseFloat(adj.amount || 0);
+          } else if (adj.type === "deduction") {
+            monthVarDeductions += parseFloat(adj.amount || 0);
+          }
+        }
+      }
+    });
+
+    const totalAllowances = fixedAllowances + monthVarAllowances;
+    const grossSalary = basicSalary + otAmount + totalAllowances;
+
+    // 3. EPF 8% (Employee) & EPF 12% / ETF 3% (Employer)
     const epfBase = basicSalary;
     const epfEmployee = isEpfEligible ? Math.round(epfBase * 0.08 * 100) / 100 : 0;
     const epfEmployer = isEpfEligible ? Math.round(epfBase * 0.12 * 100) / 100 : 0;
     const etfEmployer = isEpfEligible ? Math.round(epfBase * 0.03 * 100) / 100 : 0;
 
+    // 4. Advances
     let totalAdvances = 0;
     Object.values(erpState.salaryAdvances || {}).forEach(adv => {
-      if (adv.employeeId === empId && adv.date && adv.date.startsWith(selectedMonth)) {
+      const isMatch = (adv.employeeId === empId) || (adv.employeeName === emp.name);
+      if (isMatch && adv.date && adv.date.startsWith(selectedMonth)) {
         totalAdvances += parseFloat(adv.amount || 0);
       }
     });
 
-    const totalDeductions = totalAdvances + epfEmployee + otherDeductions;
+    // 5. Total Deductions & Net
+    const totalOtherDeductions = fixedOtherDeductions + monthVarDeductions;
+    const totalDeductions = totalAdvances + epfEmployee + totalOtherDeductions;
     const netSalary = Math.max(0, grossSalary - totalDeductions);
 
     grandBasic += basicSalary;
@@ -1054,17 +1243,25 @@ export function renderMonthlyPayrollSheet() {
       <td class="p-3.5 font-bold text-center">${daysWorked} Days</td>
       <td class="p-3.5 font-bold text-gray-800">
         Rs. ${basicSalary.toFixed(2)}
-        ${allowances > 0 ? `<span class="block text-[9.5px] text-green-700 font-semibold">+Rs.${allowances.toFixed(0)} Allw</span>` : ''}
+        ${
+          totalAllowances > 0 
+            ? `<span class="block text-[9.5px] text-green-700 font-semibold">+Rs.${totalAllowances.toFixed(0)} Allw ${monthVarAllowances > 0 ? '(+Var: ' + monthVarAllowances.toFixed(0) + ')' : ''}</span>` 
+            : ''
+        }
       </td>
       <td class="p-3.5 font-bold text-yellow-600 text-center">${totalOtHours.toFixed(1)} hrs</td>
       <td class="p-3.5 font-bold text-green-600">Rs. ${otAmount.toFixed(2)}</td>
       <td class="p-3.5 font-bold text-red-600">
         -Rs. ${totalAdvances.toFixed(2)}
         ${epfEmployee > 0 ? `<span class="block text-[9.5px] text-purple-700 font-semibold">-Rs.${epfEmployee.toFixed(0)} EPF(8%)</span>` : ''}
+        ${totalOtherDeductions > 0 ? `<span class="block text-[9px] text-rose-600 font-semibold">-Rs.${totalOtherDeductions.toFixed(0)} Deduct</span>` : ''}
       </td>
       <td class="p-3.5 font-black text-emerald-700 text-sm">Rs. ${netSalary.toFixed(2)}</td>
-      <td class="p-3.5 text-right">
-        <button onclick="printEmployeePayslip('${empId}', '${selectedMonth}', ${daysWorked}, ${basicSalary}, ${totalOtHours}, ${otRate}, ${otAmount}, ${allowances}, ${grossSalary}, ${epfEmployee}, ${epfEmployer}, ${etfEmployer}, ${totalAdvances}, ${otherDeductions}, ${netSalary})" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+      <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+        <button onclick="openSalaryAdjustmentModal('${empId}')" title="Record Monthly Adjustment (+/-)" class="bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-200 px-2 py-1 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer">
+          <i class="fa-solid fa-scale-balanced mr-0.5"></i> + Adj
+        </button>
+        <button onclick="printEmployeePayslip('${empId}', '${selectedMonth}', ${daysWorked}, ${basicSalary}, ${totalOtHours}, ${otRate}, ${otAmount}, ${fixedAllowances}, ${monthVarAllowances}, ${totalAllowances}, ${grossSalary}, ${epfEmployee}, ${epfEmployer}, ${etfEmployer}, ${totalAdvances}, ${fixedOtherDeductions}, ${monthVarDeductions}, ${totalOtherDeductions}, ${netSalary})" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer">
           <i class="fa-solid fa-receipt mr-1"></i> Payslip
         </button>
       </td>
@@ -1083,16 +1280,20 @@ export function renderMonthlyPayrollSheet() {
   if (netEl) netEl.innerText = `Rs. ${grandNet.toFixed(2)}`;
 }
 
-// 7. PAYSLIP MODAL PREVIEW & DEDICATED 80MM / 58MM THERMAL PRINT
+// 7. PAYSLIP MODAL PREVIEW & DEDICATED THERMAL PRINT
 export function printEmployeePayslip(
   empId, monthStr, daysWorked, basic, otHours, otRate, otAmount,
-  allowances = 0, grossSalary = 0, epfEmployee = 0, epfEmployer = 0, etfEmployer = 0,
-  advances = 0, otherDeductions = 0, netSalary = 0
+  fixedAllowances = 0, monthVarAllowances = 0, totalAllowances = 0, grossSalary = 0, 
+  epfEmployee = 0, epfEmployer = 0, etfEmployer = 0,
+  advances = 0, fixedDeductions = 0, monthVarDeductions = 0, totalOtherDeductions = 0, netSalary = 0
 ) {
   const emp = erpState.employees[empId];
   if (!emp) return;
 
-  const actualGross = grossSalary || (basic + otAmount + allowances);
+  const actualTotalAllowances = totalAllowances || (fixedAllowances + monthVarAllowances);
+  const actualTotalDeductions = totalOtherDeductions || (fixedDeductions + monthVarDeductions);
+  const actualGross = grossSalary || (basic + otAmount + actualTotalAllowances);
+  const allDeductions = advances + epfEmployee + actualTotalDeductions;
 
   activePayslipData = {
     empId: emp.empId || 'EMP',
@@ -1105,14 +1306,18 @@ export function printEmployeePayslip(
     otHours: otHours,
     otRate: otRate,
     otAmount: otAmount,
-    allowances: allowances,
+    allowances: actualTotalAllowances,
+    fixedAllowances: fixedAllowances,
+    monthVarAllowances: monthVarAllowances,
     grossSalary: actualGross,
     epfEmployee: epfEmployee,
     epfEmployer: epfEmployer,
     etfEmployer: etfEmployer,
     advances: advances,
-    otherDeductions: otherDeductions,
-    totalDeductions: (advances + epfEmployee + otherDeductions),
+    otherDeductions: actualTotalDeductions,
+    fixedDeductions: fixedDeductions,
+    monthVarDeductions: monthVarDeductions,
+    totalDeductions: allDeductions,
     netSalary: netSalary
   };
 
@@ -1146,9 +1351,13 @@ export function printEmployeePayslip(
   if (rOtR) rOtR.innerText = otRate.toFixed(2);
   if (rOtPay) rOtPay.innerText = `+ Rs. ${otAmount.toFixed(2)}`;
 
-  if (allowances > 0) {
+  if (actualTotalAllowances > 0) {
     if (rAllowanceBox) rAllowanceBox.classList.remove("hidden");
-    if (rAllowance) rAllowance.innerText = `+ Rs. ${allowances.toFixed(2)}`;
+    let allowDesc = `+ Rs. ${actualTotalAllowances.toFixed(2)}`;
+    if (monthVarAllowances > 0) {
+      allowDesc += ` (Fix: Rs.${fixedAllowances.toFixed(0)} + Var: Rs.${monthVarAllowances.toFixed(0)})`;
+    }
+    if (rAllowance) rAllowance.innerText = allowDesc;
   } else if (rAllowanceBox) {
     rAllowanceBox.classList.add("hidden");
   }
@@ -1164,9 +1373,13 @@ export function printEmployeePayslip(
 
   if (rAdv) rAdv.innerText = `- Rs. ${advances.toFixed(2)}`;
 
-  if (otherDeductions > 0) {
+  if (actualTotalDeductions > 0) {
     if (rOtherDeductBox) rOtherDeductBox.classList.remove("hidden");
-    if (rOtherDeduct) rOtherDeduct.innerText = `- Rs. ${otherDeductions.toFixed(2)}`;
+    let deductDesc = `- Rs. ${actualTotalDeductions.toFixed(2)}`;
+    if (monthVarDeductions > 0) {
+      deductDesc += ` (Fix: Rs.${fixedDeductions.toFixed(0)} + Var: Rs.${monthVarDeductions.toFixed(0)})`;
+    }
+    if (rOtherDeduct) rOtherDeduct.innerText = deductDesc;
   } else if (rOtherDeductBox) {
     rOtherDeductBox.classList.add("hidden");
   }
@@ -1193,49 +1406,176 @@ export function closePayslipModal() {
   document.getElementById("payslipModal")?.classList.add("hidden");
 }
 
-export function exportPayrollToCSV() {
+// 📄 EXPORT MONTHLY PAYROLL TO PDF
+export function exportPayrollToPDF() {
   const month = document.getElementById("payrollMonthSelect")?.value || getLocalDateString().substring(0, 7);
-  const rows = document.querySelectorAll("#payrollTableBody tr");
+  const allStaff = Object.entries(erpState.employees || {});
 
-  if (rows.length === 0) {
+  if (allStaff.length === 0) {
     showLiveToast("ℹ️ Export Notice", "Export කිරීමට Payroll දත්ත නොමැත.", "info", "fa-circle-info");
     return;
   }
 
-  let csv = "Emp ID,Employee Name,Role,EPF No,Days Worked,Basic Salary,OT Hours,OT Amount,Allowances,Gross Salary,EPF Employee (8%),Advances,Other Deductions,Net Salary,Employer EPF (12%),Employer ETF (3%)\n";
+  let grandGross = 0;
+  let grandDeduct = 0;
+  let grandNet = 0;
 
-  Object.values(erpState.employees || {}).forEach(emp => {
+  const rows = allStaff.map(([key, emp]) => {
     const basic = parseFloat(emp.salary || 0);
     const otRate = parseFloat(emp.otRate || 0);
-    const allowances = parseFloat(emp.allowances || 0);
-    const otherDeductions = parseFloat(emp.otherDeductions || 0);
+    const fixedAllowances = parseFloat(emp.allowances || 0);
+    const fixedDeductions = parseFloat(emp.otherDeductions || 0);
     const isEpf = (emp.epfEligible !== "no");
 
     let daysWorked = 0;
     let otHours = 0;
     Object.values(erpState.attendance || {}).forEach(att => {
-      if (att.empId === emp.empId && att.date && att.date.startsWith(month)) {
+      const isMatch = (att.employeeId === key) || (att.empId && att.empId === emp.empId);
+      if (isMatch && att.date && att.date.startsWith(month)) {
         daysWorked++;
         otHours += parseFloat(att.otHours || 0);
       }
     });
 
     const otAmt = otHours * otRate;
-    const gross = basic + otAmt + allowances;
+
+    let monthVarAllowances = 0;
+    let monthVarDeductions = 0;
+    Object.values(erpState.salaryAdjustments || {}).forEach(adj => {
+      const isMatch = (adj.employeeId === key) || (adj.employeeName === emp.name);
+      if (isMatch) {
+        if (adj.month === month || (adj.date && adj.date.startsWith(month))) {
+          if (adj.type === "allowance") monthVarAllowances += parseFloat(adj.amount || 0);
+          else if (adj.type === "deduction") monthVarDeductions += parseFloat(adj.amount || 0);
+        }
+      }
+    });
+
+    const totalAllowances = fixedAllowances + monthVarAllowances;
+    const gross = basic + otAmt + totalAllowances;
+    const epfEmp = isEpf ? Math.round(basic * 0.08 * 100) / 100 : 0;
+
+    let adv = 0;
+    Object.values(erpState.salaryAdvances || {}).forEach(a => {
+      const isMatch = (a.employeeId === key) || (a.employeeName === emp.name);
+      if (isMatch && a.date && a.date.startsWith(month)) {
+        adv += parseFloat(a.amount || 0);
+      }
+    });
+
+    const totalOtherDeductions = fixedDeductions + monthVarDeductions;
+    const totalDeductions = adv + epfEmp + totalOtherDeductions;
+    const net = Math.max(0, gross - totalDeductions);
+
+    grandGross += gross;
+    grandDeduct += totalDeductions;
+    grandNet += net;
+
+    return [
+      emp.empId || "EMP",
+      emp.name || "-",
+      emp.role || "Staff",
+      daysWorked,
+      basic.toFixed(2),
+      `${otHours.toFixed(1)}h (+Rs.${otAmt.toFixed(0)})`,
+      totalAllowances.toFixed(2),
+      gross.toFixed(2),
+      epfEmp.toFixed(2),
+      adv.toFixed(2),
+      totalDeductions.toFixed(2),
+      net.toFixed(2)
+    ];
+  });
+
+  generateReportPDF({
+    reportTitle: `Monthly Official Payroll Sheet: ${month}`,
+    subtitle: `Total Employees: ${allStaff.length} | Sri Lankan EPF/ETF Compliant`,
+    orientation: "landscape",
+    summaryCards: [
+      { label: "Total Gross Payroll", value: `Rs. ${grandGross.toFixed(2)}`, color: "#2563eb" },
+      { label: "Total Deductions & EPF", value: `Rs. ${grandDeduct.toFixed(2)}`, color: "#dc2626" },
+      { label: "Grand Net Payable", value: `Rs. ${grandNet.toFixed(2)}`, color: "#16a34a" }
+    ],
+    columns: [
+      { label: "Emp ID", bold: true },
+      { label: "Employee Name", bold: true },
+      { label: "Role" },
+      { label: "Days", align: "center" },
+      { label: "Basic (Rs.)", align: "right" },
+      { label: "OT Pay", align: "right" },
+      { label: "Allowances", align: "right" },
+      { label: "Gross (Rs.)", align: "right", bold: true },
+      { label: "EPF (8%)", align: "right" },
+      { label: "Advances", align: "right" },
+      { label: "Total Deduct", align: "right" },
+      { label: "Net Salary (Rs.)", align: "right", bold: true }
+    ],
+    rows: rows
+  });
+}
+
+// 📊 8. EXPORT MONTHLY PAYROLL TO CSV (BUG #16 REPAIRED)
+export function exportPayrollToCSV() {
+  const month = document.getElementById("payrollMonthSelect")?.value || getLocalDateString().substring(0, 7);
+  const allStaff = Object.entries(erpState.employees || {});
+
+  if (allStaff.length === 0) {
+    showLiveToast("ℹ️ Export Notice", "Export කිරීමට Payroll දත්ත නොමැත.", "info", "fa-circle-info");
+    return;
+  }
+
+  let csv = "Emp ID,Employee Name,Role,EPF No,Days Worked,Basic Salary,OT Hours,OT Amount,Fixed Allowances,Month Var Allowances,Total Allowances,Gross Salary,EPF Employee (8%),Advances,Fixed Deductions,Month Var Deductions,Total Deductions,Net Salary,Employer EPF (12%),Employer ETF (3%)\n";
+
+  allStaff.forEach(([key, emp]) => {
+    const basic = parseFloat(emp.salary || 0);
+    const otRate = parseFloat(emp.otRate || 0);
+    const fixedAllowances = parseFloat(emp.allowances || 0);
+    const fixedDeductions = parseFloat(emp.otherDeductions || 0);
+    const isEpf = (emp.epfEligible !== "no");
+
+    let daysWorked = 0;
+    let otHours = 0;
+    Object.values(erpState.attendance || {}).forEach(att => {
+      const isMatch = (att.employeeId === key) || (att.empId && att.empId === emp.empId);
+      if (isMatch && att.date && att.date.startsWith(month)) {
+        daysWorked++;
+        otHours += parseFloat(att.otHours || 0);
+      }
+    });
+
+    const otAmt = otHours * otRate;
+
+    let monthVarAllowances = 0;
+    let monthVarDeductions = 0;
+    Object.values(erpState.salaryAdjustments || {}).forEach(adj => {
+      const isMatch = (adj.employeeId === key) || (adj.employeeName === emp.name);
+      if (isMatch) {
+        if (adj.month === month || (adj.date && adj.date.startsWith(month))) {
+          if (adj.type === "allowance") monthVarAllowances += parseFloat(adj.amount || 0);
+          else if (adj.type === "deduction") monthVarDeductions += parseFloat(adj.amount || 0);
+        }
+      }
+    });
+
+    const totalAllowances = fixedAllowances + monthVarAllowances;
+    const gross = basic + otAmt + totalAllowances;
     const epfEmp = isEpf ? (basic * 0.08) : 0;
     const epfEmpr = isEpf ? (basic * 0.12) : 0;
     const etfEmpr = isEpf ? (basic * 0.03) : 0;
 
     let adv = 0;
     Object.values(erpState.salaryAdvances || {}).forEach(a => {
-      if (a.employeeName === emp.name && a.date && a.date.startsWith(month)) {
+      const isMatch = (a.employeeId === key) || (a.employeeName === emp.name);
+      if (isMatch && a.date && a.date.startsWith(month)) {
         adv += parseFloat(a.amount || 0);
       }
     });
 
-    const net = Math.max(0, gross - (adv + epfEmp + otherDeductions));
+    const totalOtherDeductions = fixedDeductions + monthVarDeductions;
+    const totalDeductions = adv + epfEmp + totalOtherDeductions;
+    const net = Math.max(0, gross - totalDeductions);
 
-    csv += `"${emp.empId || ''}","${emp.name}","${emp.role || ''}","${emp.epfNo || ''}","${daysWorked}","${basic.toFixed(2)}","${otHours.toFixed(1)}","${otAmt.toFixed(2)}","${allowances.toFixed(2)}","${gross.toFixed(2)}","${epfEmp.toFixed(2)}","${adv.toFixed(2)}","${otherDeductions.toFixed(2)}","${net.toFixed(2)}","${epfEmpr.toFixed(2)}","${etfEmpr.toFixed(2)}"\n`;
+    csv += `"${emp.empId || ''}","${emp.name}","${emp.role || ''}","${emp.epfNo || ''}","${daysWorked}","${basic.toFixed(2)}","${otHours.toFixed(1)}","${otAmt.toFixed(2)}","${fixedAllowances.toFixed(2)}","${monthVarAllowances.toFixed(2)}","${totalAllowances.toFixed(2)}","${gross.toFixed(2)}","${epfEmp.toFixed(2)}","${adv.toFixed(2)}","${fixedDeductions.toFixed(2)}","${monthVarDeductions.toFixed(2)}","${totalDeductions.toFixed(2)}","${net.toFixed(2)}","${epfEmpr.toFixed(2)}","${etfEmpr.toFixed(2)}"\n`;
   });
 
   downloadCSVFile(csv, `Monthly_Payroll_${month}.csv`);
@@ -1259,11 +1599,16 @@ window.setAttendancePeriodPreset = setAttendancePeriodPreset;
 window.renderAttendanceLogsTable = renderAttendanceLogsTable;
 window.deleteAttendanceRecord = deleteAttendanceRecord;
 window.exportAttendanceToCSV = exportAttendanceToCSV;
+window.exportAttendanceToPDF = exportAttendanceToPDF;
 window.openSalaryAdvanceModal = openSalaryAdvanceModal;
 window.closeSalaryAdvanceModal = closeSalaryAdvanceModal;
 window.handleSalaryAdvanceSubmit = handleSalaryAdvanceSubmit;
+window.openSalaryAdjustmentModal = openSalaryAdjustmentModal;
+window.closeSalaryAdjustmentModal = closeSalaryAdjustmentModal;
+window.handleSalaryAdjustmentSubmit = handleSalaryAdjustmentSubmit;
 window.renderMonthlyPayrollSheet = renderMonthlyPayrollSheet;
 window.printEmployeePayslip = printEmployeePayslip;
 window.printActiveThermalPayslip = printActiveThermalPayslip;
 window.closePayslipModal = closePayslipModal;
 window.exportPayrollToCSV = exportPayrollToCSV;
+window.exportPayrollToPDF = exportPayrollToPDF;
