@@ -6,7 +6,6 @@ const http = require('http');
 const os = require('os');
 
 // 🛡️ CRITICAL FIX 1: Electron Application Menu එක සම්පූර්ණයෙන්ම ඉවත් කිරීම
-// Windows OS හි Alt key එක එබූ විට menu bar එකට focus වී textboxes freeze වීම 100% වළකයි
 Menu.setApplicationMenu(null);
 
 let mainWindow = null;
@@ -29,7 +28,6 @@ function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
   for (const ifaceName in interfaces) {
     for (const iface of interfaces[ifaceName]) {
-      // IPv4 ලිපිනයක් සහ internal (127.0.0.1) නොවන සැබෑ LAN IP එක තෝරාගැනීම
       if (iface.family === 'IPv4' && !iface.internal) {
         return iface.address;
       }
@@ -38,18 +36,16 @@ function getLocalIpAddress() {
   return '127.0.0.1';
 }
 
-// 📡 1.2 OFFLINE LOCAL LAN HTTP PRINT SERVER (MOBILE APK DIRECT COMMUNICATION)
+// 📡 1.2 OFFLINE LOCAL LAN HTTP PRINT SERVER
 function startLocalLanPrintServer() {
   if (localHttpServer) return;
 
   try {
     localHttpServer = http.createServer((req, res) => {
-      // 🛡️ Full CORS Headers (Android APK එකෙන් කෙලින්ම Data Fetch කළ හැකි වන සේ)
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-      // Preflight OPTIONS Request handling
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
@@ -58,7 +54,6 @@ function startLocalLanPrintServer() {
 
       const url = req.url || '';
 
-      // Health Check / Connection Test Endpoint (Mobile App එකට Server එක On ද බැලීමට)
       if (req.method === 'GET' && (url === '/' || url === '/api/status' || url === '/api/info')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -71,7 +66,6 @@ function startLocalLanPrintServer() {
         return;
       }
 
-      // 📥 Direct KOT/BOT Order Receiving Endpoint from Mobile Waiter APK
       if (req.method === 'POST' && (url === '/api/order' || url === '/api/kot')) {
         let body = '';
         req.on('data', chunk => {
@@ -89,7 +83,6 @@ function startLocalLanPrintServer() {
 
             console.log(`📥 [LAN Server] Offline Order Received from Mobile for Table: ${orderData.tableNo || 'N/A'}`);
 
-            // ⚡ Main Window එකට දත්ත යවා KOT/BOT Auto-Print කිරීම සහ තිරයේ යාවත්කාලීන කිරීම
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('lan-order-received', orderData);
             }
@@ -110,7 +103,6 @@ function startLocalLanPrintServer() {
         return;
       }
 
-      // Not found for unknown routes
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Endpoint not found' }));
     });
@@ -144,14 +136,14 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createWindow();
     initPrintWorkerWindow();
-    startLocalLanPrintServer(); // 👈 Start LAN Offline Server on startup
+    startLocalLanPrintServer();
     setTimeout(() => {
       createOrUpdateCustomerDisplay();
     }, 1500);
   });
 }
 
-// 🖨️ 3. NON-FOCUSABLE SILENT PRINT WORKER (PREVENTS TEXTBOX FOCUS FREEZE)
+// 🖨️ 3. NON-FOCUSABLE SILENT PRINT WORKER
 function initPrintWorkerWindow() {
   if (!printWorkerWindow || printWorkerWindow.isDestroyed()) {
     printWorkerWindow = new BrowserWindow({
@@ -159,7 +151,7 @@ function initPrintWorkerWindow() {
       height: 600,
       show: false,
       frame: false,
-      focusable: false, // 🛡️ CRITICAL: Never steals keyboard focus from Cashier textboxes!
+      focusable: false,
       skipTaskbar: true,
       webPreferences: {
         nodeIntegration: false,
@@ -172,7 +164,7 @@ function initPrintWorkerWindow() {
   return printWorkerWindow;
 }
 
-// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD)
+// 🖥️ 4. DUAL SCREEN / CUSTOMER-FACING DISPLAY (CFD - BUG FIX: NEVER STEALS MAIN FOCUS)
 function createOrUpdateCustomerDisplay() {
   try {
     const displays = screen.getAllDisplays();
@@ -187,8 +179,8 @@ function createOrUpdateCustomerDisplay() {
           height: secondaryDisplay.bounds.height,
           fullscreen: true,
           frame: false,
-          show: true,
-          focusable: false, // 🛡️ Secondary screen never steals keyboard focus
+          show: false,
+          focusable: false, // 🛡️ Never steals keyboard focus from main window
           autoHideMenuBar: true,
           title: "Customer Facing Display",
           webPreferences: {
@@ -203,13 +195,19 @@ function createOrUpdateCustomerDisplay() {
         customerWindow.setMenu(null);
         customerWindow.loadFile('customer-display.html');
 
+        customerWindow.once('ready-to-show', () => {
+          if (customerWindow && !customerWindow.isDestroyed()) {
+            customerWindow.showInactive(); // 🛡️ Shows without stealing window focus!
+          }
+        });
+
         customerWindow.on('closed', () => {
           customerWindow = null;
         });
       } else {
         customerWindow.setBounds(secondaryDisplay.bounds);
         customerWindow.setFullScreen(true);
-        customerWindow.show();
+        customerWindow.showInactive();
       }
     }
   } catch (err) {
@@ -229,15 +227,15 @@ app.whenReady().then(() => {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-      width: 1366,
-      height: 768,
-      minWidth: 1024,
-      minHeight: 700,
-      title: "Restaurant ERP - SME Enterprise Edition",
-      frame: false, // 🛡️ Windows Title Bar & Borders සම්පූර්ණයෙන්ම ඉවත් කරයි
-      fullscreen: true, // 🛡️ මුළු තිරය පුරාම Full Screen ධාවනය කරයි
-      autoHideMenuBar: true,
-      webPreferences: {
+    width: 1366,
+    height: 768,
+    minWidth: 1024,
+    minHeight: 700,
+    title: "Restaurant ERP - SME Enterprise Edition",
+    frame: false,
+    fullscreen: true,
+    autoHideMenuBar: true,
+    webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
@@ -246,13 +244,10 @@ function createWindow() {
     }
   });
   
-  // 🛡️ CRITICAL FIX 2: Window මට්ටමින් Menu Bar එක සම්පූර්ණයෙන්ම ඉවත් කිරීම
   mainWindow.setMenu(null);
-  
   mainWindow.maximize();
   mainWindow.loadFile('index.html');
 
-  // 🛡️ RECOVER NATIVE FOCUS CLEANLY (WITHOUT BLURRING ACTIVE TEXTBOX)
   mainWindow.on('restore', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.focus();
@@ -264,7 +259,7 @@ function createWindow() {
     mainWindow.webContents.closeDevTools();
   });
   
-  // 🛡️ CRITICAL FIX 3: Alt key එකෙන් Windows native menu navigation loop එක activate වීම වැළැක්වීම
+  // 🛡️ REPAIRED (TEXTBOX FREEZE FIX): Do not preventDefault on Alt key which desynchronizes Windows OS message loop!
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (
       input.key === 'F12' ||
@@ -274,13 +269,8 @@ function createWindow() {
     ) {
       event.preventDefault();
     }
-    // Alt key එක තනිව එබූ විට OS menu එකට Focus යාම නවත්වයි
-    if (input.key === 'Alt') {
-      event.preventDefault();
-    }
   });
 
-  // 🛡️ CASHIER ACCIDENTAL CLOSE GUARD (අත්වැරදීමකින් මෘදුකාංගය වැසීම වැළැක්වීම)
   mainWindow.on('close', (e) => {
     if (!app.isQuitting) {
       const choice = dialog.showMessageBoxSync(mainWindow, {
@@ -365,9 +355,9 @@ ipcMain.handle('save-local-auto-backup', async (event, backupData) => {
   }
 });
 
-// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (WITH DUAL 80MM & 58MM ADAPTATION)
+// 🖨️ 6. ROCK-SOLID DIRECT PRINT ENGINE (TEXTBOX FREEZE IMMUNE)
 let lastPrintTimestamp = 0;
-let lastPrintedContentHash = "";
+let lastPrintedSignature = "";
 
 function computeStringHash(str) {
   let hash = 0;
@@ -389,8 +379,9 @@ ipcMain.handle('print-silent', async (event, printArgs) => {
       } catch (err) {
         resolve({ success: false, error: err.message || "Print execution failed" });
       } finally {
-        // 🛡️ CRITICAL UNFREEZE: Print එකෙන් පසු WebContents Focus එක නැවත සක්‍රීය කිරීම
+        // 🛡️ REPAIRED (NATIVE OS FOCUS RESTORATION): Restores both HWND and WebContents focus
         if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.focus();
           mainWindow.webContents.focus();
         }
       }
@@ -419,15 +410,6 @@ async function executeSinglePrintTask({ printerName, htmlContent, paperWidth = "
         return resolve({ success: false, error: "Print content is empty" });
       }
 
-      const nowMs = Date.now();
-      const contentHash = computeStringHash(htmlContent);
-      if (contentHash === lastPrintedContentHash && (nowMs - lastPrintTimestamp) < 1000) {
-        clearTimeout(timeoutTimer);
-        return resolve({ success: true, duplicateIgnored: true });
-      }
-      lastPrintTimestamp = nowMs;
-      lastPrintedContentHash = contentHash;
-      
       const printers = await mainWindow.webContents.getPrintersAsync();
       let targetDevice = "";
       
@@ -451,10 +433,20 @@ async function executeSinglePrintTask({ printerName, htmlContent, paperWidth = "
         clearTimeout(timeoutTimer);
         return resolve({ success: false, error: "පරිගණකයට කිසිදු Printer එකක් සම්බන්ධ කර නොමැත." });
       }
+
+      const nowMs = Date.now();
+      const contentHash = computeStringHash(htmlContent);
+      const printSignature = `${targetDevice}_${contentHash}`;
+
+      if (printSignature === lastPrintedSignature && (nowMs - lastPrintTimestamp) < 300) {
+        clearTimeout(timeoutTimer);
+        return resolve({ success: true, duplicateIgnored: true });
+      }
+      lastPrintTimestamp = nowMs;
+      lastPrintedSignature = printSignature;
       
       const pWin = initPrintWorkerWindow();
       
-      // 🛡️ DUAL PAPER WIDTH DYNAMIC CONFIGURATION (80mm vs 58mm)
       const is58mm = (paperWidth === "58mm");
       const pageSize = is58mm ? "58mm auto" : "80mm auto";
       const bodyWidth = is58mm ? "48mm" : "68mm";
@@ -642,9 +634,10 @@ app.on('activate', () => {
     createWindow();
   }
 });
-// 🚪 Custom Exit Button Handler
+
 ipcMain.handle('close-app', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.close();
   }
 });
+
