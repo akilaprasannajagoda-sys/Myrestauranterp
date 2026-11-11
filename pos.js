@@ -5,6 +5,8 @@
 // 🛡️ DUAL-LAYER MULTI-DEVICE KOT/BOT DE-DUPLICATION ENGINE
 // 🔒 DYNAMIC TABLE-ORDER CHECKOUT HIDING GUARD (METHOD 01)
 // 💳 MULTI-CARD (VISA/MASTER/AMEX/FRIMI) RECONCILIATION READY
+// ⚡ ZERO-RACE-CONDITION BILL RESETS & OFFLINE FLOAT ENGINE
+// 🚫 100% GHOST-CUSTOMER IMMUNE PERSISTENCE ENGINE
 // ==========================================================================
 
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
@@ -23,7 +25,7 @@ let transactionFn = null;
 let isOfflineSyncInProgress = false;
 export let currentDiscountType = "fixed";
 
-// 🔒 TABLE ORDER TAKING MODE (TABLE එකකින් එන විට PRINT BILL / WHATSAPP BILL සඟවයි)
+// 🔒 TABLE ORDER TAKING MODE
 export let isTableOrderMode = false;
 
 export function setTableOrderMode(val) {
@@ -33,7 +35,6 @@ export function setTableOrderMode(val) {
 
 export function updateCheckoutButtonsVisibility() {
   const btnPay = document.getElementById("btnCheckout");
-  const btnWACheckout = document.getElementById("btnWhatsAppCheckout");
   const checkoutRow = btnPay?.parentElement;
   let noticeEl = document.getElementById("posTableOrderModeNotice");
 
@@ -54,14 +55,14 @@ export function updateCheckoutButtonsVisibility() {
   }
 }
 
-// Sidebar එකේ "POS & Billing" ක්ලික් කළ විට Cashier Mode එකට හැරවීම
+// Sidebar Listener
 setTimeout(() => {
   document.getElementById("nav-pos")?.addEventListener("click", () => {
     setTableOrderMode(false);
   });
-}, 500);
+}, 300);
 
-// 🛡️ Helper: Firebase Auth Session එක සක්‍රීයදැයි පරීක්ෂා කිරීම (PERMISSION_DENIED වැළැක්වීමට)
+// Helper: Check Firebase Auth Session
 function isAuthReady() {
   return !!(window.authInstance && window.authInstance.currentUser);
 }
@@ -69,10 +70,10 @@ function isAuthReady() {
 // Dual-Screen Web BroadcastChannel Fallback
 const cfdBroadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel("restaurant_customer_display") : null;
 
-// Lock timer to keep settled payment details visible on CFD for 10 seconds
+// Lock timer for Customer Display
 let cfdSettledHoldUntil = 0;
 
-// 🛡️ BACKGROUND FIFO PRINT QUEUE (ZERO UI FREEZE & ZERO SPOOLER COLLISION)
+// 🛡️ BACKGROUND FIFO PRINT QUEUE
 let printJobQueue = [];
 let isProcessingPrintQueue = false;
 
@@ -110,7 +111,7 @@ export function initPosContext(dbRefInstance, pushMethod, updateMethod, removeMe
   transactionFn = runTransactionMethod;
 }
 
-// 🖥️ DUAL SCREEN LIVE SYNC DISPATCHER (ELECTRON IPC + WEB BROADCAST)
+// 🖥️ DUAL SCREEN LIVE SYNC DISPATCHER
 export function syncLiveCustomerDisplay(isSettled = false, paymentData = null) {
   const nowMs = Date.now();
 
@@ -155,7 +156,7 @@ export function syncLiveCustomerDisplay(isSettled = false, paymentData = null) {
   }
 }
 
-// 🔒 COLLISION-PROOF UNIQUE INVOICE & ESTIMATE NUMBER GENERATORS
+// 🔒 UNIQUE NUMBER GENERATORS
 export function generateCollisionProofInvoiceNumber() {
   const dStr = getLocalDateString().replace(/-/g, '').slice(2);
   const now = new Date();
@@ -239,6 +240,7 @@ export async function persistActiveBillToCloud(updatedObj) {
 }
 
 export async function addNewBillTab() {
+  cfdSettledHoldUntil = 0;
   setTableOrderMode(false);
   const keys = Object.keys(erpState.activeBills || {});
   const nextNum = keys.length + 1;
@@ -274,13 +276,13 @@ export async function addNewBillTab() {
 }
 
 export function switchBillTab(key) {
+  cfdSettledHoldUntil = 0;
   setTableOrderMode(false);
   setActiveBillId(key);
   renderBillTabsBar();
   syncActiveBillToFormUI();
 }
 
-// 🛡️ Helper: Extract Table Pure Numbers
 function extractTableNum(val) {
   if (!val) return null;
   const digits = String(val).replace(/\D/g, '');
@@ -302,7 +304,6 @@ export async function closeBillTab(key, ev) {
     }
   }
   
-  // 🔗 Release both target table and all merged tables
   if (b && b.tableNo) {
     const allTablesToRelease = [b.tableNo, ...(b.mergedTables || [])];
     allTablesToRelease.forEach(tblNumStr => {
@@ -386,7 +387,7 @@ export function renderBillTabsBar() {
   });
 }
 
-// 🛡️ SYNC BILL TO FORM UI WITH ACTIVE FOCUS GUARD
+// 🛡️ SYNC BILL TO FORM UI (100% GHOST CUSTOMER RESET FIXED)
 export function syncActiveBillToFormUI() {
   const currentBill = getActiveBillData();
   const oType = document.getElementById("orderType");
@@ -407,7 +408,7 @@ export function syncActiveBillToFormUI() {
   if (bTitle) bTitle.innerHTML = `<i class="fa-solid fa-receipt text-blue-600"></i> ${label}`;
   if (bSub) bSub.innerText = `${currentBill.orderType} (Table: ${currentBill.tableNo || 'N/A'}${currentBill.waiterName ? ' | ' + currentBill.waiterName : ''})`;
 
-  // Sync Customer CRM Linking
+  // 🛡️ REPAIRED: Clean Customer CRM Linking (No stale text retention)
   const badgeContainer = document.getElementById("posSelectedCustomerBadge");
   const nameLabel = document.getElementById("posSelectedCustomerName");
   const pointsBadge = document.getElementById("posSelectedCustomerPoints");
@@ -427,9 +428,12 @@ export function syncActiveBillToFormUI() {
       redeemInput.max = cust.loyaltyPoints || 0;
     }
   } else {
+    // 🛡️ WIPE EVERYTHING COMPLETELY
     if (badgeContainer) badgeContainer.classList.add("hidden");
     if (redeemBox) redeemBox.classList.add("hidden");
     if (hiddenId) hiddenId.value = "";
+    if (nameLabel) nameLabel.innerText = "";
+    if (pointsBadge) pointsBadge.innerText = "";
     if (redeemInput && activeEl !== redeemInput) redeemInput.value = "";
   }
 
@@ -511,7 +515,6 @@ export function renderDishCategoriesFilterUI() {
   });
 }
 
-// CHECK DISH STOCK AVAILABILITY
 export function checkDishStockAvailability(dish) {
   if (erpState.settings?.inventoryMode === "issue") {
     return { isAvailable: true, portionsLeft: 999, outMaterialName: "" };
@@ -547,7 +550,6 @@ export function checkDishStockAvailability(dish) {
   };
 }
 
-// 🛡️ CRITICAL FIX: SEARCH DISHES ACROSS ALL CATEGORIES PROPERLY
 export function renderPOSDishesGrid() {
   const container = document.getElementById("posGrid");
   const searchInput = document.getElementById("posSearchInput");
@@ -632,8 +634,8 @@ export function renderPOSDishesGrid() {
   });
 }
 
-// ⚡ OPTIMISTIC IMMEDIATE IN-MEMORY CART MUTATIONS
 export async function addDishToActiveCart(dishId, dish) {
+  cfdSettledHoldUntil = 0;
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
   const foundItem = cartList.find(i => i.dishId === dishId);
@@ -670,6 +672,7 @@ export async function addDishToActiveCart(dishId, dish) {
 }
 
 export async function changeCartQty(dishId, stepDelta) {
+  cfdSettledHoldUntil = 0;
   const currentBill = getActiveBillData();
   let cartList = currentBill.cart ? [...currentBill.cart] : [];
   const targetItem = cartList.find(i => i.dishId === dishId);
@@ -692,7 +695,6 @@ export async function changeCartQty(dishId, stepDelta) {
   syncLiveCustomerDisplay();
 }
 
-// 🔒 CRASH-PROOF KITCHEN NOTE EDITOR
 export async function updateCartItemNote(dishId) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -702,7 +704,9 @@ export async function updateCartItemNote(dishId) {
   const newNote = await showCustomInputModal(
     `Order Note: ${targetItem.name}`,
     "උදා: Less Spicy, No Ice, Extra Gravy",
-    targetItem.note || ""
+    targetItem.note || "",
+    "කුස්සියට යැවිය යුතු සටහන ඇතුළත් කරන්න",
+    "fa-note-sticky"
   );
 
   if (newNote !== null) {
@@ -808,7 +812,6 @@ export function renderCartItemsUI() {
   updateCheckoutButtonsVisibility();
 }
 
-// ⭐ 100% ACCURATE ORDER TOTALS & LOYALTY POINT-TO-RUPEE CONVERSION ENGINE
 export function calculateOrderTotals(cartList = [], discType = "fixed", discValue = 0, orderType = "Dine-in", loyaltyPointsRedeemed = 0) {
   const subtotal = cartList.reduce((sum, i) => sum + (i.price * (parseInt(i.qty) || 0)), 0);
   
@@ -840,7 +843,7 @@ export function calculateOrderTotals(cartList = [], discType = "fixed", discValu
     cslAmount = taxableAmount * (parseFloat(erpState.settings.cslRate || 0) / 100);
   }
 
-  const netTotal = taxableAmount + scAmount + vatAmount + cslAmount;
+  const netTotal = Math.round((taxableAmount + scAmount + vatAmount + cslAmount) * 100) / 100;
   return { subtotal, discountAmount, loyaltyDiscount, pointRupeeValue, scAmount, vatAmount, cslAmount, netTotal };
 }
 
@@ -1049,7 +1052,7 @@ export function calculateSplitPaymentBalance() {
   }
 }
 
-// 🖨️ KOT & BOT DYNAMIC SLIP DISPATCHER
+// 🖨️ KOT & BOT SLIP DISPATCHER
 async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   const modalContainer = document.getElementById("kotPrintModal");
   if (!modalContainer) return;
@@ -1087,7 +1090,7 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   await sendDirectSilentPrint(targetPrinter, rawText, "kotPrintModal");
 }
 
-// 🖨️ SMART DELTA, OFFLINE-SAFE & LOCAL LAN STATION ORDER SENDER
+// 🖨️ SMART STATION ORDER SENDER
 export async function sendOrderToKitchen(forceReprintAll = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart ? [...currentBill.cart] : [];
@@ -1166,13 +1169,13 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       
       let sentViaLan = false;
 
-      // 📡 1. MOBILE APK OFFLINE LOCAL LAN DIRECT PRINT
+      // 📡 1. MOBILE APK OFFLINE LOCAL LAN DIRECT PRINT (FAST 1.2S TIMEOUT)
       if (!isDesktopPrinterHost) {
         const targetCashierIp = localStorage.getItem("cashier_lan_ip") || "192.168.8.100";
         if (targetCashierIp) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const timeoutId = setTimeout(() => controller.abort(), 1200);
             const res = await fetch(`http://${targetCashierIp}:8085/api/kot`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1371,7 +1374,7 @@ export async function printPreBillEstimate() {
   showLiveToast("📄 Pre-Bill Printed", `Table ${currentBill.tableNo || 'N/A'} සඳහා Estimate බිලක් Print කරන ලදී.`, "info", "fa-file-lines");
 }
 
-// ⚡ OPTIMISTIC ZERO-LAG INSTANT BILL PROCESSOR & CHECKOUT ENGINE
+// ⚡ OPTIMISTIC ZERO-LAG INSTANT BILL PROCESSOR (100% GHOST CUSTOMER FIXED)
 export async function processOrder(sendWhatsApp = false) {
   const currentBill = getActiveBillData();
   const cartList = currentBill.cart || [];
@@ -1427,13 +1430,14 @@ export async function processOrder(sendWhatsApp = false) {
   } else if (payMethod === "split") {
     const sCash = parseFloat(document.getElementById("splitPayCash")?.value || 0);
     const sCard = parseFloat(document.getElementById("splitPayCard")?.value || 0);
+    const sCardType = document.getElementById("cardType")?.value || "Visa";
     if (Math.abs((sCash + sCard) - netTotal) > 0.05) {
       showLiveToast("⚠️ Split Balance", `Split Payment මුදල මුළු මුදලට (Rs. ${netTotal.toFixed(2)}) සමාන විය යුතුය.`, "warning", "fa-layer-group");
       return;
     }
     payDetails.splitCash = sCash;
     payDetails.splitCard = sCard;
-    payDetails.cardType = "Visa";
+    payDetails.cardType = sCardType;
   } else if (payMethod === "credit") {
     const nameIn = document.getElementById("creditCustomerName");
     const phoneIn = document.getElementById("creditCustomerPhone");
@@ -1461,9 +1465,18 @@ export async function processOrder(sendWhatsApp = false) {
   const loyaltyEarnRate = parseFloat(erpState.settings?.loyaltyEarnRate || erpState.settings?.loyaltyRate || 100);
   const earnedLoyaltyPoints = Math.floor(netTotal / loyaltyEarnRate);
 
+  // 🛡️ REPAIRED & BULLETPROOF: NO GHOST CUSTOMERS EVER ATTACHED
   const attachedCustomerId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId || "";
-  const attachedCustomerName = document.getElementById("posSelectedCustomerName")?.innerText?.split('(')[0]?.trim() || currentBill.customerName || (payDetails.customerName || "");
-  const attachedCustomerPhone = currentBill.customerPhone || (payDetails.customerPhone || "");
+  let attachedCustomerName = "";
+  let attachedCustomerPhone = "";
+
+  if (attachedCustomerId && erpState.customers?.[attachedCustomerId]) {
+    attachedCustomerName = erpState.customers[attachedCustomerId].name || currentBill.customerName || "";
+    attachedCustomerPhone = erpState.customers[attachedCustomerId].phone || currentBill.customerPhone || "";
+  } else if (payMethod === "credit" && payDetails.customerName) {
+    attachedCustomerName = payDetails.customerName;
+    attachedCustomerPhone = payDetails.customerPhone || "";
+  }
 
   const invoiceData = {
     invoiceNumber: invoiceNumber,
@@ -1492,7 +1505,7 @@ export async function processOrder(sendWhatsApp = false) {
   payDetails.items = cartList;
   syncLiveCustomerDisplay(true, payDetails);
 
-  // 🚀 1. OPTIMISTIC INSTANT PRINT
+  // 1. Instant Print / WhatsApp
   if (sendWhatsApp) {
     const hotelName = currentTenantInfo?.hotelName || "Restaurant ERP";
     sendInvoiceViaWhatsApp(invoiceData, hotelName);
@@ -1520,22 +1533,57 @@ export async function processOrder(sendWhatsApp = false) {
   if (nameIn) nameIn.value = "";
   if (phoneIn) phoneIn.value = "";
 
+  // 🛡️ REPAIRED: Clean Customer CRM Badge & DOM innerText Completely
   const custBadge = document.getElementById("posSelectedCustomerBadge");
   const custIdIn = document.getElementById("posAttachedCustomerId");
+  const custNameLabel = document.getElementById("posSelectedCustomerName");
+  const custPtsLabel = document.getElementById("posSelectedCustomerPoints");
   const redeemBox = document.getElementById("posLoyaltyRedeemBox");
+
   if (custBadge) custBadge.classList.add("hidden");
   if (redeemBox) redeemBox.classList.add("hidden");
   if (custIdIn) custIdIn.value = "";
+  if (custNameLabel) custNameLabel.innerText = ""; // 🛡️ Wiped clean!
+  if (custPtsLabel) custPtsLabel.innerText = "";
 
   const savedActiveBillId = activeBillId;
   delete erpState.activeBills[savedActiveBillId];
 
+  // 🛡️ REPAIRED: Switch to another active bill or create new bill immediately
+  const remainingBillKeys = Object.keys(erpState.activeBills || {});
+  if (remainingBillKeys.length > 0) {
+    setActiveBillId(remainingBillKeys[0]);
+  } else {
+    const newTabKey = "bill_" + Date.now();
+    const freshBill = {
+      name: "Bill #1",
+      orderType: "Dine-in",
+      tableNo: "",
+      waiterName: "",
+      customerId: "",
+      customerName: "",
+      customerPhone: "",
+      cart: [],
+      discountType: "fixed",
+      discountVal: 0,
+      loyaltyPointsRedeemed: 0,
+      selectedPayMethod: "cash",
+      updatedAt: new Date().toISOString()
+    };
+    erpState.activeBills[newTabKey] = freshBill;
+    setActiveBillId(newTabKey);
+    if (dbRef && setFn && currentTenant && navigator.onLine && isAuthReady()) {
+      setFn(dbRef(`tenants/${currentTenant}/activeBills/${newTabKey}`), freshBill).catch(() => {});
+    }
+  }
+
   renderCartItemsUI();
   renderBillTabsBar();
+  syncActiveBillToFormUI();
 
   showLiveToast("✅ Bill Settled", `Invoice #${invoiceNumber} (Rs. ${netTotal.toFixed(2)}) නිකුත් විය.`, "success", "fa-circle-check");
 
-  // 🚀 2. NON-BLOCKING BACKGROUND SYNC
+  // 2. Background Cloud & Inventory Sync
   (async () => {
     try {
       if (navigator.onLine && dbRef && pushFn && currentTenant && isAuthReady()) {
@@ -1688,7 +1736,7 @@ export async function processOrder(sendWhatsApp = false) {
   })();
 }
 
-// 🖨️ THERMAL RECEIPT PRINT ENGINE (DUAL 80MM / 58MM ADAPTIVE)
+// 🖨️ THERMAL RECEIPT PRINT ENGINE
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const p1Dev = (pr.p1?.device || "").trim();
@@ -1726,7 +1774,6 @@ export async function printThermalReceipt(inv) {
   if (dEl) dEl.innerText = `Date: ${new Date(inv.createdAt || Date.now()).toLocaleString()}`;
   if (tEl) tEl.innerText = `${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''}${inv.customerName ? ' | Cust: ' + inv.customerName : ''})`;
 
-  // 🌟 ULTRA-CRISP PROPORTIONAL FLEXBOX ITEMS FORMATTING
   const itemsContainer = document.getElementById("receiptItems");
   if (itemsContainer) {
     itemsContainer.innerHTML = "";
@@ -1804,7 +1851,6 @@ export async function printThermalReceipt(inv) {
   const totEl = document.getElementById("receiptTotal");
   if (totEl) totEl.innerText = `Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}`;
 
-  // 🌟 PURE BLACK HIGH CONTRAST PAYMENT DETAILS
   const payDiv = document.getElementById("receiptPayDetails");
   if (payDiv) {
     const p = inv.payment || { method: "cash" };
@@ -1819,7 +1865,7 @@ export async function printThermalReceipt(inv) {
       payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Ref / TXN ID:</span><span style="font-weight: 800;">${p.refNo || '-'}</span></div>`;
     } else if (p.method === "split") {
       payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Cash:</span><span>Rs. ${parseFloat(p.splitCash || 0).toFixed(2)}</span></div>`;
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Card:</span><span>Rs. ${parseFloat(p.splitCard || 0).toFixed(2)}</span></div>`;
+      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Card:</span><span>Rs. ${parseFloat(p.splitCard || 0).toFixed(2)} (${p.cardType || 'Card'})</span></div>`;
     } else if (p.method === "credit") {
       payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Customer:</span><span style="font-weight: 800;">${p.customerName || 'Customer'} (${p.customerPhone || 'N/A'})</span></div>`;
     }
@@ -1926,11 +1972,15 @@ export async function executeItemSplitToNewBill() {
     if (cb.checked) {
       anySelected = true;
       const splitQty = Math.min(originalItem.qty, parseInt(document.getElementById(`split_qty_${idx}`)?.value || 1));
+      const originalSent = parseInt(originalItem.sentQty) || 0;
       
+      const splitSentQty = Math.min(originalSent, splitQty);
+      const remainSentQty = Math.max(0, originalSent - splitSentQty);
+
       splitItems.push({
         ...originalItem,
         qty: splitQty,
-        sentQty: 0
+        sentQty: splitSentQty
       });
 
       const remainQty = originalItem.qty - splitQty;
@@ -1938,7 +1988,7 @@ export async function executeItemSplitToNewBill() {
         remainingCart.push({
           ...originalItem,
           qty: remainQty,
-          sentQty: Math.min(originalItem.sentQty || 0, remainQty)
+          sentQty: remainSentQty
         });
       }
     } else {
@@ -2032,8 +2082,19 @@ export async function handleShiftFloatSubmit(e) {
   };
 
   try {
-    if (dbRef && pushFn && currentTenant && navigator.onLine && isAuthReady()) {
-      await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), floatTransaction);
+    if (navigator.onLine && dbRef && pushFn && currentTenant && isAuthReady()) {
+      const pRef = await pushFn(dbRef(`tenants/${currentTenant}/pettyCash`), floatTransaction);
+      if (!erpState.pettyCash) erpState.pettyCash = {};
+      erpState.pettyCash[pRef.key] = floatTransaction;
+    } else if (localDBInstance) {
+      await localDBInstance.offlinePettyCash.add({ ...floatTransaction, synced: 0 });
+      const tempKey = "offline_float_" + Date.now();
+      if (!erpState.pettyCash) erpState.pettyCash = {};
+      erpState.pettyCash[tempKey] = floatTransaction;
+    } else {
+      const tempKey = "local_float_" + Date.now();
+      if (!erpState.pettyCash) erpState.pettyCash = {};
+      erpState.pettyCash[tempKey] = floatTransaction;
     }
     closeShiftFloatModal();
     showLiveToast("🌅 Shift Float Recorded", `Rs. ${amount.toFixed(2)} ක ආරම්භක මුදල (Opening Float) පෙට්ටියට සාර්ථකව එකතු විය.`, "success", "fa-vault");
@@ -2042,7 +2103,7 @@ export async function handleShiftFloatSubmit(e) {
   }
 }
 
-// 🔄 5-YEAR PRODUCTION HARDENED OFFLINE INVOICES CLOUD SYNC
+// 🔄 OFFLINE INVOICES CLOUD SYNC
 export async function syncOfflineInvoicesToCloud() {
   if (!navigator.onLine || !localDBInstance || !dbRef || !pushFn || !currentTenant) return;
   if (!isAuthReady()) {
@@ -2176,7 +2237,7 @@ export async function syncOfflineInvoicesToCloud() {
   }
 }
 
-// 🛡️ CRITICAL GLOBAL WINDOW EXPORTS
+// Global Window Exports
 window.setTableOrderMode = setTableOrderMode;
 window.updateCheckoutButtonsVisibility = updateCheckoutButtonsVisibility;
 window.enqueuePrintJob = enqueuePrintJob;
@@ -2212,3 +2273,4 @@ window.processOrder = processOrder;
 window.printThermalReceipt = printThermalReceipt;
 window.syncLiveCustomerDisplay = syncLiveCustomerDisplay;
 window.addEventListener("online", syncOfflineInvoicesToCloud);
+
