@@ -3,6 +3,7 @@
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (HIGH-CONTRAST PURE-BLACK RECEIPT)
 // 🛡️ DUAL PAPER WIDTH (80MM / 58MM) & ZERO PERMISSION-DENIED SYNC ENGINE
 // 🛡️ DUAL-LAYER MULTI-DEVICE KOT/BOT DE-DUPLICATION ENGINE
+// ❌ KOT / BOT ORDER & ITEM CANCELLATION (VOID) ENGINE INTEGRATED
 // 🔒 DYNAMIC TABLE-ORDER CHECKOUT HIDING GUARD (METHOD 01)
 // 💳 MULTI-CARD (VISA/MASTER/AMEX/FRIMI) RECONCILIATION READY
 // ⚡ ZERO-RACE-CONDITION BILL RESETS & OFFLINE FLOAT ENGINE
@@ -12,7 +13,7 @@
 import { erpState, currentTenant, currentTenantInfo, activeBillId, setActiveBillId, currentCategoryFilter, setCurrentCategoryFilter } from './state.js';
 import { showLiveToast, sendInvoiceViaWhatsApp, showCustomInputModal, getLocalDateString } from './utils.js';
 import { convertRecipeQtyToBaseUnit, getDishStationTarget } from './menu.js';
-import { formatReceiptRawText, formatStationOrderTicket, sendDirectSilentPrint } from './printer.js';
+import { formatReceiptRawText, formatStationOrderTicket, formatCancellationTicket, sendDirectSilentPrint } from './printer.js';
 
 let dbRef = null;
 let pushFn = null;
@@ -408,7 +409,7 @@ export function syncActiveBillToFormUI() {
   if (bTitle) bTitle.innerHTML = `<i class="fa-solid fa-receipt text-blue-600"></i> ${label}`;
   if (bSub) bSub.innerText = `${currentBill.orderType} (Table: ${currentBill.tableNo || 'N/A'}${currentBill.waiterName ? ' | ' + currentBill.waiterName : ''})`;
 
-  // 🛡️ REPAIRED: Clean Customer CRM Linking (No stale text retention)
+  // 🛡️ Clean Customer CRM Linking (No stale text retention)
   const badgeContainer = document.getElementById("posSelectedCustomerBadge");
   const nameLabel = document.getElementById("posSelectedCustomerName");
   const pointsBadge = document.getElementById("posSelectedCustomerPoints");
@@ -671,6 +672,50 @@ export async function addDishToActiveCart(dishId, dish) {
   syncLiveCustomerDisplay();
 }
 
+// 🛡️ KDS (KITCHEN DISPLAY) REALTIME CANCELLATION SYNC HELPER
+export async function markKDSItemAsCancelled(tableNo, dishId, dishName, cancelQty, reason) {
+  if (!dbRef || !updateFn || !currentTenant) return;
+
+  const cleanTargetNo = String(tableNo || "").replace(/\D/g, "");
+  const activeKitchenOrders = Object.entries(erpState.kitchenOrders || {});
+
+  for (const [orderId, order] of activeKitchenOrders) {
+    const cleanOrderNo = String(order.tableNo || "").replace(/\D/g, "");
+    const isTableMatch = (cleanTargetNo && cleanOrderNo === cleanTargetNo) || (String(order.tableNo || '').trim().toLowerCase() === String(tableNo || '').trim().toLowerCase());
+
+    if (order.status === "Cooking" && isTableMatch && Array.isArray(order.items)) {
+      let itemModified = false;
+      const updatedItems = order.items.map(item => {
+        if ((item.dishId === dishId || item.name === dishName) && !item.isCancelled && !itemModified) {
+          itemModified = true;
+          return {
+            ...item,
+            isCancelled: true,
+            cancelReason: reason,
+            cancelledQty: cancelQty
+          };
+        }
+        return item;
+      });
+
+      if (itemModified) {
+        try {
+          await updateFn(dbRef(`tenants/${currentTenant}/kitchenOrders/${orderId}`), {
+            items: updatedItems
+          });
+          if (erpState.kitchenOrders[orderId]) {
+            erpState.kitchenOrders[orderId].items = updatedItems;
+          }
+        } catch (e) {
+          console.warn("KDS Cancel sync error:", e.message);
+        }
+        break;
+      }
+    }
+  }
+}
+
+// 🛡️ REPAIRED: SMART CHANGE CART QTY (INTERCEPTS SENT ITEMS FOR VOID / CANCELLATION)
 export async function changeCartQty(dishId, stepDelta) {
   cfdSettledHoldUntil = 0;
   const currentBill = getActiveBillData();
@@ -678,12 +723,84 @@ export async function changeCartQty(dishId, stepDelta) {
   const targetItem = cartList.find(i => i.dishId === dishId);
   if (!targetItem) return;
 
-  const calculatedQty = (parseInt(targetItem.qty) || 0) + stepDelta;
-  if (calculatedQty <= 0) {
-    cartList = cartList.filter(i => i.dishId !== dishId);
-  } else {
-    targetItem.qty = calculatedQty;
-    targetItem.sentQty = Math.min(parseInt(targetItem.sentQty) || 0, calculatedQty);
+  const currentQty = parseInt(targetItem.qty) || 0;
+  const sentQty = parseInt(targetItem.sentQty) || 0;
+  const unsentQty = Math.max(0, currentQty - sentQty);
+
+  // ❌ අවස්ථාව 1: කුස්සියට/බාර් එකට දැනටමත් යවා ඇති කෑමක් අවලංගු කිරීම (Cancellation Workflow)
+  if (stepDelta < 0 && unsentQty === 0 && sentQty > 0) {
+    const cancelQty = Math.min(sentQty, Math.abs(stepDelta));
+
+    // Client කෑම අවලංගු කිරීමට හේතුව විමසීම
+    const reason = await showCustomInputModal(
+      `Cancel KOT/BOT: ${targetItem.name}`,
+      "උදා: Guest changed mind / Order delayed",
+      "",
+      `Table ${currentBill.tableNo || 'N/A'} සඳහා යැවූ කෑම අවලංගු කිරීමට හේතුව ඇතුළත් කරන්න`,
+      "fa-ban"
+    );
+
+    if (!reason || !reason.trim()) {
+      showLiveToast("ℹ️ Cancellation Aborted", "හේතුවක් ඇතුළත් නොකළ බැවින් අවලංගු කිරීම නැවතුණි.", "info", "fa-circle-info");
+      return;
+    }
+
+    const cancelReason = reason.trim();
+    const station = getDishStationTarget(dishId);
+
+    // 1. KDS (Kitchen Display) එකේ අදාළ Item එක Cancelled ලෙස ලකුණු කිරීම
+    await markKDSItemAsCancelled(currentBill.tableNo, targetItem.dishId, targetItem.name, cancelQty, cancelReason);
+
+    // 2. Kitchen හෝ Bar Printer එක වෙත CANCEL SLIP එකක් යැවීම
+    const cancelPayload = {
+      tableNo: currentBill.tableNo || "N/A",
+      orderType: currentBill.orderType || "Dine-in",
+      waiterName: currentBill.waiterName || "",
+      timestamp: new Date().toISOString(),
+      items: [{
+        dishId: targetItem.dishId,
+        name: targetItem.name,
+        qty: cancelQty,
+        reason: cancelReason,
+        station: station
+      }]
+    };
+
+    enqueuePrintJob(async () => {
+      const pr = erpState.settings?.printers || {};
+      const targetPrinter = station === "bar" 
+        ? (pr.p3?.device || pr.p1?.device || "").trim() 
+        : (pr.p2?.device || pr.p1?.device || "").trim();
+
+      const rawText = formatCancellationTicket(cancelPayload, station === "bar" ? "BOT" : "KOT");
+      await sendDirectSilentPrint(targetPrinter, rawText);
+    });
+
+    // 3. Cart එකේ Qty සහ sentQty අඩු කිරීම
+    const newQty = currentQty - cancelQty;
+    const newSentQty = sentQty - cancelQty;
+
+    if (newQty <= 0) {
+      cartList = cartList.filter(i => i.dishId !== dishId);
+    } else {
+      targetItem.qty = newQty;
+      targetItem.sentQty = Math.max(0, newSentQty);
+    }
+
+    showLiveToast("❌ Order Cancelled", `${targetItem.name} x${cancelQty} අවලංගු කර කුස්සියට/බාර් එකට දැනුම් දෙන ලදී.`, "warning", "fa-ban");
+
+  } else if (stepDelta < 0 && unsentQty > 0) {
+    // 🛡️ අවස්ථාව 2: තවම කුස්සියට නොයැවූ කොටසක් අඩු කිරීම (සාමාන්‍ය අඩු කිරීම)
+    const newQty = currentQty - 1;
+    if (newQty <= 0) {
+      cartList = cartList.filter(i => i.dishId !== dishId);
+    } else {
+      targetItem.qty = newQty;
+      targetItem.sentQty = Math.min(sentQty, newQty);
+    }
+  } else if (stepDelta > 0) {
+    // 🛡️ අවස්ථාව 3: Qty එක වැඩි කිරීම
+    targetItem.qty = currentQty + stepDelta;
   }
 
   currentBill.cart = cartList;
@@ -717,24 +834,94 @@ export async function updateCartItemNote(dishId) {
   }
 }
 
+// 🛡️ REPAIRED: CLEAR CURRENT CART (PROMPTS AND CANCELS SENT ITEMS AUTOMATICALLY)
 export async function clearCurrentCart() {
-  if (confirm("Cart එක හිස් කිරීමට අවශ්‍යද?")) {
-    const currentBill = getActiveBillData();
-    currentBill.cart = [];
-    currentBill.discountVal = 0;
-    currentBill.loyaltyPointsRedeemed = 0;
+  const currentBill = getActiveBillData();
+  const cartList = currentBill.cart || [];
+  if (cartList.length === 0) return;
 
-    renderCartItemsUI();
-    recalculateCartTotalsUI();
-    renderBillTabsBar();
+  const hasSentItems = cartList.some(i => (parseInt(i.sentQty) || 0) > 0);
 
-    await persistActiveBillToCloud({ cart: [], discountVal: 0, loyaltyPointsRedeemed: 0 });
-    const discIn = document.getElementById("cartDiscountInput");
-    const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
-    if (discIn) discIn.value = "";
-    if (redeemIn) redeemIn.value = "";
-    syncLiveCustomerDisplay();
+  if (hasSentItems) {
+    const confirmMsg = "මෙම බිලේ කුස්සියට/බාර් එකට යැවූ කෑම (Sent KOT/BOT) අඩංගුයි. සියල්ල අවලංගු කිරීමට (Cancel KOT/BOT) අවශ්‍යද?";
+    if (!confirm(confirmMsg)) return;
+
+    const reason = await showCustomInputModal(
+      "Cancel Entire Order",
+      "උදා: Guest Left / Table Cancelled",
+      "",
+      "මුළු ඇණවුමම අවලංගු කිරීමට හේතුව ඇතුළත් කරන්න",
+      "fa-ban"
+    );
+
+    if (!reason || !reason.trim()) {
+      showLiveToast("ℹ️ Action Cancelled", "හේතුවක් ඇතුළත් නොකළ බැවින් ක්‍රියාවලිය නැවතුණි.", "info", "fa-circle-info");
+      return;
+    }
+
+    const cancelReason = reason.trim();
+    const kitchenCancelItems = [];
+    const barCancelItems = [];
+
+    for (const item of cartList) {
+      const sentQ = parseInt(item.sentQty) || 0;
+      if (sentQ > 0) {
+        const station = getDishStationTarget(item.dishId);
+        await markKDSItemAsCancelled(currentBill.tableNo, item.dishId, item.name, sentQ, cancelReason);
+        const pItem = { dishId: item.dishId, name: item.name, qty: sentQ, reason: cancelReason, station };
+        if (station === "bar") barCancelItems.push(pItem);
+        else kitchenCancelItems.push(pItem);
+      }
+    }
+
+    // Print Void Slips to respective stations
+    enqueuePrintJob(async () => {
+      const pr = erpState.settings?.printers || {};
+      const kitchenPrinter = (pr.p2?.device || pr.p1?.device || "").trim();
+      const barPrinter = (pr.p3?.device || pr.p1?.device || "").trim();
+
+      if (kitchenCancelItems.length > 0) {
+        const rawText = formatCancellationTicket({
+          tableNo: currentBill.tableNo || "N/A",
+          orderType: currentBill.orderType || "Dine-in",
+          waiterName: currentBill.waiterName || "",
+          timestamp: new Date().toISOString(),
+          items: kitchenCancelItems
+        }, "KOT");
+        await sendDirectSilentPrint(kitchenPrinter, rawText);
+      }
+
+      if (barCancelItems.length > 0) {
+        const rawText = formatCancellationTicket({
+          tableNo: currentBill.tableNo || "N/A",
+          orderType: currentBill.orderType || "Dine-in",
+          waiterName: currentBill.waiterName || "",
+          timestamp: new Date().toISOString(),
+          items: barCancelItems
+        }, "BOT");
+        await sendDirectSilentPrint(barPrinter, rawText);
+      }
+    });
+
+    showLiveToast("❌ Order Cancelled", "සියලුම කෑම අවලංගු කර කුස්සියට හා බාර් එකට දැනුම් දෙන ලදී.", "warning", "fa-ban");
+  } else {
+    if (!confirm("Cart එක හිස් කිරීමට අවශ්‍යද?")) return;
   }
+
+  currentBill.cart = [];
+  currentBill.discountVal = 0;
+  currentBill.loyaltyPointsRedeemed = 0;
+
+  renderCartItemsUI();
+  recalculateCartTotalsUI();
+  renderBillTabsBar();
+
+  await persistActiveBillToCloud({ cart: [], discountVal: 0, loyaltyPointsRedeemed: 0 });
+  const discIn = document.getElementById("cartDiscountInput");
+  const redeemIn = document.getElementById("cartLoyaltyRedeemInput");
+  if (discIn) discIn.value = "";
+  if (redeemIn) redeemIn.value = "";
+  syncLiveCustomerDisplay();
 }
 
 export function renderCartItemsUI() {
@@ -783,7 +970,7 @@ export function renderCartItemsUI() {
             </div>
           </div>
           <div class="flex items-center gap-1">
-            <button onclick="changeCartQty('${item.dishId}', -1)" class="w-4 h-4 rounded bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-[10px] cursor-pointer">-</button>
+            <button onclick="changeCartQty('${item.dishId}', -1)" title="${sent >= q ? 'Cancel Sent Item' : 'Decrease Qty'}" class="w-4 h-4 rounded bg-white border border-gray-300 ${sent >= q ? 'text-red-600 border-red-300 font-black' : 'text-gray-700'} flex items-center justify-center font-bold text-[10px] cursor-pointer">-</button>
             <span class="font-black text-xs w-4 text-center">${q}</span>
             <button onclick="changeCartQty('${item.dishId}', 1)" class="w-4 h-4 rounded bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-[10px] cursor-pointer">+</button>
           </div>
@@ -1543,7 +1730,7 @@ export async function processOrder(sendWhatsApp = false) {
   if (custBadge) custBadge.classList.add("hidden");
   if (redeemBox) redeemBox.classList.add("hidden");
   if (custIdIn) custIdIn.value = "";
-  if (custNameLabel) custNameLabel.innerText = ""; // 🛡️ Wiped clean!
+  if (custNameLabel) custNameLabel.innerText = "";
   if (custPtsLabel) custPtsLabel.innerText = "";
 
   const savedActiveBillId = activeBillId;
@@ -2272,5 +2459,5 @@ window.sendOrderToKitchen = sendOrderToKitchen;
 window.processOrder = processOrder;
 window.printThermalReceipt = printThermalReceipt;
 window.syncLiveCustomerDisplay = syncLiveCustomerDisplay;
+window.markKDSItemAsCancelled = markKDSItemAsCancelled;
 window.addEventListener("online", syncOfflineInvoicesToCloud);
-
