@@ -2,6 +2,7 @@
 // MODULE 12: UNIVERSAL SILENT DIRECT HARDWARE PRINTER DRIVER (KOT & BOT COMPLIANT)
 // 🛡️ DUAL PAPER WIDTH ADAPTIVE ENGINE (80MM & 58MM AUTO-SCALED ZERO-CLIPPING)
 // 🌟 ADVANCED MULTI-LINE AUTO-WRAP ENGINE (NO ITEM NAME TRUNCATION)
+// ❌ KOT / BOT CANCELLATION (VOID) TICKET PRINTING INTEGRATED
 // 🖨️ DEDICATED SLOT 5 PAYSLIP PRINTER ROUTING SUPPORT
 // ==========================================================================
 
@@ -199,6 +200,57 @@ export function formatStationOrderTicket(ticket, stationType = "KOT") {
   
   text += doubleDivider;
   text += CMD_CENTER + tagline;
+  text += "Software by systems.lk | Tel: 0760672029\n\n\n";
+  text += CMD_CUT;
+  
+  return text;
+}
+
+// 🛡️ 2.1 KOT & BOT CANCELLATION (VOID) TICKET FORMATTER (ADAPTIVE 80MM / 58MM WITH AUTO-WRAP)
+export function formatCancellationTicket(ticket, stationType = "KOT") {
+  const isBar = (stationType || "").toUpperCase() === "BOT";
+  const title = isBar ? "*** BAR ORDER CANCELLED (VOID BOT) ***" : "*** KITCHEN ORDER CANCELLED (VOID KOT) ***";
+  const tagline = isBar ? "DO NOT PREPARE / STOP BAR ORDER\n" : "DO NOT PREPARE / STOP COOKING\n";
+  
+  const is58 = (erpState.settings?.paperWidth === "58mm");
+  const lineWidth = is58 ? 32 : 48;
+  const doubleDivider = "=".repeat(lineWidth) + "\n";
+  const divider = "-".repeat(lineWidth) + "\n";
+  
+  let text = CMD_INIT;
+  text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
+  text += CMD_BOLD_ON + `TABLE: ${ticket.tableNo || 'N/A'}\n` + CMD_BOLD_OFF;
+  text += `Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}\n`;
+  if (ticket.waiterName) {
+    text += `Staff: ${ticket.waiterName}\n`;
+  }
+  text += CMD_LEFT + doubleDivider;
+  text += CMD_BOLD_ON + "CANCELLED ITEMS (සකස් කිරීම නවත්වන්න):\n" + CMD_BOLD_OFF;
+  text += divider;
+  
+  const nameWidth = is58 ? 22 : 36;
+  const qtyWidth = is58 ? 8 : 10;
+
+  (ticket.items || []).forEach(i => {
+    const fullName = `[CANCEL] ${i.name}`;
+    const nameLines = wrapText(fullName, nameWidth);
+    const qtyStr = ("-x" + i.qty).padStart(qtyWidth, " ");
+    
+    // First line with Qty on the right
+    text += CMD_BOLD_ON + `${(nameLines[0] || '').padEnd(nameWidth, " ")} ${qtyStr}\n` + CMD_BOLD_OFF;
+
+    // Remaining lines of item name wrapped cleanly
+    for (let l = 1; l < nameLines.length; l++) {
+      text += CMD_BOLD_ON + `  ${nameLines[l]}\n` + CMD_BOLD_OFF;
+    }
+
+    if (i.reason) {
+      text += `  >> REASON: ${i.reason}\n`;
+    }
+  });
+  
+  text += doubleDivider;
+  text += CMD_CENTER + CMD_BOLD_ON + `⚠️ ${tagline}` + CMD_BOLD_OFF;
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
   text += CMD_CUT;
   
@@ -434,6 +486,7 @@ window.testDirectPrinter = testDirectPrinter;
 window.printThermalPayslip = printThermalPayslip;
 window.sendDirectSilentPrint = sendDirectSilentPrint;
 window.formatStationOrderTicket = formatStationOrderTicket;
+window.formatCancellationTicket = formatCancellationTicket;
 window.formatKOTRawText = formatKOTRawText;
 window.formatReceiptRawText = formatReceiptRawText;
 window.formatPayslipRawText = formatPayslipRawText;
