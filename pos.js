@@ -772,8 +772,8 @@ export async function changeCartQty(dishId, stepDelta) {
         ? (pr.p3?.device || pr.p1?.device || "").trim() 
         : (pr.p2?.device || pr.p1?.device || "").trim();
 
-      const rawText = formatCancellationTicket(cancelPayload, station === "bar" ? "BOT" : "KOT");
-      await sendDirectSilentPrint(targetPrinter, rawText);
+      const htmlSlip = formatCancellationTicket(cancelPayload, station === "bar" ? "BOT" : "KOT");
+      await sendDirectSilentPrint(targetPrinter, htmlSlip);
     });
 
     // 3. Cart එකේ Qty සහ sentQty අඩු කිරීම
@@ -881,25 +881,25 @@ export async function clearCurrentCart() {
       const barPrinter = (pr.p3?.device || pr.p1?.device || "").trim();
 
       if (kitchenCancelItems.length > 0) {
-        const rawText = formatCancellationTicket({
+        const htmlSlip = formatCancellationTicket({
           tableNo: currentBill.tableNo || "N/A",
           orderType: currentBill.orderType || "Dine-in",
           waiterName: currentBill.waiterName || "",
           timestamp: new Date().toISOString(),
           items: kitchenCancelItems
         }, "KOT");
-        await sendDirectSilentPrint(kitchenPrinter, rawText);
+        await sendDirectSilentPrint(kitchenPrinter, htmlSlip);
       }
 
       if (barCancelItems.length > 0) {
-        const rawText = formatCancellationTicket({
+        const htmlSlip = formatCancellationTicket({
           tableNo: currentBill.tableNo || "N/A",
           orderType: currentBill.orderType || "Dine-in",
           waiterName: currentBill.waiterName || "",
           timestamp: new Date().toISOString(),
           items: barCancelItems
         }, "BOT");
-        await sendDirectSilentPrint(barPrinter, rawText);
+        await sendDirectSilentPrint(barPrinter, htmlSlip);
       }
     });
 
