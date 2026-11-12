@@ -2,7 +2,7 @@
 // MODULE 12: UNIVERSAL SILENT DIRECT HARDWARE PRINTER DRIVER (KOT & BOT COMPLIANT)
 // 🛡️ DUAL PAPER WIDTH ADAPTIVE ENGINE (80MM & 58MM AUTO-SCALED ZERO-CLIPPING)
 // 🌟 ADVANCED MULTI-LINE AUTO-WRAP ENGINE (NO ITEM NAME TRUNCATION)
-// ❌ KOT / BOT CANCELLATION (VOID) TICKET PRINTING INTEGRATED
+// ❌ KOT / BOT CANCELLATION (VOID) TICKET HTML PRINTING INTEGRATED
 // 🖨️ DEDICATED SLOT 5 PAYSLIP PRINTER ROUTING SUPPORT
 // ==========================================================================
 
@@ -206,55 +206,64 @@ export function formatStationOrderTicket(ticket, stationType = "KOT") {
   return text;
 }
 
-// 🛡️ 2.1 KOT & BOT CANCELLATION (VOID) TICKET FORMATTER (ADAPTIVE 80MM / 58MM WITH AUTO-WRAP)
+// 🛡️ 2.1 KOT & BOT CANCELLATION (VOID) TICKET HTML FORMATTER (ZERO CLIPPING & NO WEIRD CHARACTERS)
 export function formatCancellationTicket(ticket, stationType = "KOT") {
   const isBar = (stationType || "").toUpperCase() === "BOT";
   const title = isBar ? "*** BAR ORDER CANCELLED (VOID BOT) ***" : "*** KITCHEN ORDER CANCELLED (VOID KOT) ***";
-  const tagline = isBar ? "DO NOT PREPARE / STOP BAR ORDER\n" : "DO NOT PREPARE / STOP COOKING\n";
-  
-  const is58 = (erpState.settings?.paperWidth === "58mm");
-  const lineWidth = is58 ? 32 : 48;
-  const doubleDivider = "=".repeat(lineWidth) + "\n";
-  const divider = "-".repeat(lineWidth) + "\n";
-  
-  let text = CMD_INIT;
-  text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
-  text += CMD_BOLD_ON + `TABLE: ${ticket.tableNo || 'N/A'}\n` + CMD_BOLD_OFF;
-  text += `Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}\n`;
-  if (ticket.waiterName) {
-    text += `Staff: ${ticket.waiterName}\n`;
-  }
-  text += CMD_LEFT + doubleDivider;
-  text += CMD_BOLD_ON + "CANCELLED ITEMS (සකස් කිරීම නවත්වන්න):\n" + CMD_BOLD_OFF;
-  text += divider;
-  
-  const nameWidth = is58 ? 22 : 36;
-  const qtyWidth = is58 ? 8 : 10;
+  const tagline = isBar ? "DO NOT PREPARE / STOP BAR ORDER" : "DO NOT PREPARE / STOP COOKING";
+  const timeStr = new Date(ticket.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  (ticket.items || []).forEach(i => {
-    const fullName = `[CANCEL] ${i.name}`;
-    const nameLines = wrapText(fullName, nameWidth);
-    const qtyStr = ("-x" + i.qty).padStart(qtyWidth, " ");
-    
-    // First line with Qty on the right
-    text += CMD_BOLD_ON + `${(nameLines[0] || '').padEnd(nameWidth, " ")} ${qtyStr}\n` + CMD_BOLD_OFF;
+  const itemsHtml = (ticket.items || []).map(i => `
+    <div style="border-bottom: 1.5px dashed #000000; padding: 4px 0; margin-bottom: 3px; width: 100%; color: #000000;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+        <span style="flex: 1; font-weight: 900; font-size: 13px; line-height: 1.25; color: #000000; word-break: break-word;">
+          [CANCEL] ${i.name}
+        </span>
+        <span style="flex-shrink: 0; font-weight: 900; font-size: 14px; text-align: right; padding-left: 6px; color: #000000; white-space: nowrap;">
+          [ -x${i.qty} ]
+        </span>
+      </div>
+      ${i.reason ? `<div style="font-size: 10.5px; font-weight: 900; background: #eee; padding: 2px 4px; margin-top: 3px; border-left: 3px solid #000000; color: #000000;">>> REASON: ${i.reason}</div>` : ''}
+    </div>
+  `).join("");
 
-    // Remaining lines of item name wrapped cleanly
-    for (let l = 1; l < nameLines.length; l++) {
-      text += CMD_BOLD_ON + `  ${nameLines[l]}\n` + CMD_BOLD_OFF;
-    }
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Courier New', monospace; color: #000000; line-height: 1.35; width: 100%;">
+      
+      <!-- HEADER -->
+      <div style="text-align: center; border-bottom: 2px dashed #000000; padding-bottom: 4px; margin-bottom: 4px;">
+        <div style="font-size: 12px; font-weight: 900; letter-spacing: 0.5px;">${title}</div>
+        
+        <!-- PROMINENT TABLE NUMBER -->
+        <div style="font-size: 18px; font-weight: 900; border: 2px solid #000000; padding: 2px 8px; margin: 4px auto; display: inline-block; min-width: 44mm; text-align: center;">
+          TABLE: ${ticket.tableNo || 'N/A'}
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: 800; margin-top: 3px;">
+          <span>TYPE: ${(ticket.orderType || 'DINE-IN').toUpperCase()}</span>
+          <span>${timeStr}</span>
+        </div>
+        ${ticket.waiterName ? `<div style="text-align: left; font-size: 10px; font-weight: 800; margin-top: 2px;">Staff: ${ticket.waiterName}</div>` : ''}
+      </div>
 
-    if (i.reason) {
-      text += `  >> REASON: ${i.reason}\n`;
-    }
-  });
-  
-  text += doubleDivider;
-  text += CMD_CENTER + CMD_BOLD_ON + `⚠️ ${tagline}` + CMD_BOLD_OFF;
-  text += "Software by systems.lk | Tel: 0760672029\n\n\n";
-  text += CMD_CUT;
-  
-  return text;
+      <!-- SECTION TITLE -->
+      <div style="font-size: 11px; font-weight: 900; border-bottom: 1.5px solid #000000; padding: 2px 0 3px 0; margin-bottom: 4px; color: #000000;">
+        CANCELLED ITEMS (සකස් කිරීම නවත්වන්න):
+      </div>
+
+      <!-- ITEMS LIST -->
+      <div style="width: 100%;">
+        ${itemsHtml}
+      </div>
+
+      <!-- FOOTER WARNING -->
+      <div style="text-align: center; border-top: 2px dashed #000000; padding-top: 5px; margin-top: 5px;">
+        <div style="font-size: 11.5px; font-weight: 900;">⚠️ ${tagline} ⚠️</div>
+        <div style="font-size: 9px; color: #333333; margin-top: 2px;">Software by systems.lk | 0760672029</div>
+      </div>
+      
+    </div>
+  `;
 }
 
 // Backward compatibility alias for formatKOTRawText
