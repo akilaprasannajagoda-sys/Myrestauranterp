@@ -3,6 +3,7 @@
 // 5-YEAR PRODUCTION HARDENED ARCHITECTURE (USAR COMPLIANT P&L WITH STORE ISSUES)
 // 📄 100% VECTOR HIGH-CONTRAST A4 PDF & EXCEL (CSV) EXPORT HUB
 // 💳 DAY-END CARD MACHINE BATCH RECONCILIATION & MIDNIGHT SHIFT REPAIRED
+// 🛎️ DEDICATED SERVICE CHARGE SUMMARY & WAITER POOL DISTRIBUTION REPORT
 // 📑 SMART INVOICE LIST PAGINATION (ZERO-LAG BROWSER RENDERING)
 // ==========================================================================
 
@@ -38,8 +39,8 @@ export let activeReportTabName = "invoices";
 export function switchReportTab(tabName) {
   activeReportTabName = tabName;
   
-  // All Report Sub-tabs including Day-End History
-  ["invoices", "pnl", "hourly", "waiters", "items", "credits", "dayEndHistory"].forEach(t => {
+  // 🛎️ All Report Sub-tabs including serviceCharge & Day-End History
+  ["invoices", "pnl", "hourly", "waiters", "items", "credits", "serviceCharge", "dayEndHistory"].forEach(t => {
     const sec = document.getElementById("reportSection-" + t);
     const tabBtn = document.getElementById("repTab-" + t);
     if (sec) sec.classList.add("hidden");
@@ -75,6 +76,8 @@ export function switchReportTab(tabName) {
     renderItemWiseSalesSummary();
   } else if (tabName === "credits") {
     renderCustomerCreditsLedger();
+  } else if (tabName === "serviceCharge") {
+    renderServiceChargeReport();
   } else if (tabName === "dayEndHistory") {
     const fromIn = document.getElementById("zHistFromDate");
     const toIn = document.getElementById("zHistToDate");
@@ -188,6 +191,8 @@ export async function applyReportDateFilter(forceRefresh = false) {
     renderItemWiseSalesSummary();
   } else if (activeReportTabName === "credits") {
     renderCustomerCreditsLedger();
+  } else if (activeReportTabName === "serviceCharge") {
+    renderServiceChargeReport();
   } else {
     renderInvoiceReportsList();
   }
@@ -742,6 +747,71 @@ export function renderWaiterSalesReport() {
   });
 }
 
+// 🛎️ 4.1 DEDICATED SERVICE CHARGE SUMMARY & DINE-IN LEDGER REPORT
+export function renderServiceChargeReport() {
+  const tbody = document.getElementById("repServiceChargeTableBody");
+  const countBadge = document.getElementById("repScRecordCountBadge");
+  if (!tbody) return;
+
+  const fromVal = document.getElementById("repFromDate")?.value;
+  const toVal = document.getElementById("repToDate")?.value;
+
+  const fromTime = fromVal ? new Date(fromVal).getTime() : 0;
+  const toTime = toVal ? new Date(toVal).getTime() : Infinity;
+
+  const list = Object.values(erpState.invoices || {}).filter(inv => {
+    if (inv.status === "Voided") return false;
+    const invTime = new Date(inv.createdAt || 0).getTime();
+    if (invTime < fromTime || invTime > toTime) return false;
+    return parseFloat(inv.scAmount || 0) > 0;
+  });
+
+  let totalScPool = 0;
+  let totalDineInSales = 0;
+
+  list.forEach(inv => {
+    totalScPool += parseFloat(inv.scAmount || 0);
+    totalDineInSales += parseFloat(inv.subtotal || 0);
+  });
+
+  const avgScPerBill = list.length > 0 ? (totalScPool / list.length) : 0;
+
+  const poolEl = document.getElementById("repScTotalPool");
+  const countEl = document.getElementById("repScBillsCount");
+  const dineSalesEl = document.getElementById("repScTotalDineInSales");
+  const avgEl = document.getElementById("repScAveragePerBill");
+
+  if (poolEl) poolEl.innerText = `Rs. ${totalScPool.toFixed(2)}`;
+  if (countEl) countEl.innerText = `${list.length} Bills`;
+  if (dineSalesEl) dineSalesEl.innerText = `Rs. ${totalDineInSales.toFixed(2)}`;
+  if (avgEl) avgEl.innerText = `Rs. ${avgScPerBill.toFixed(2)}`;
+  if (countBadge) countBadge.innerText = `${list.length} Bills`;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400">තෝරාගත් කාලසීමාව තුළ Service Charge සහිත බිල්පත් හමු නොවීය...</td></tr>`;
+    return;
+  }
+
+  list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  tbody.innerHTML = "";
+  list.forEach(inv => {
+    const scRate = erpState.settings?.scRate || 10;
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-gray-50 border-b border-gray-100";
+    tr.innerHTML = `
+      <td class="p-3.5 font-mono font-bold text-blue-600">${inv.invoiceNumber}</td>
+      <td class="p-3.5 text-gray-500">${new Date(inv.createdAt || Date.now()).toLocaleString()}</td>
+      <td class="p-3.5 font-bold text-gray-800">Table ${inv.tableNo || 'N/A'}</td>
+      <td class="p-3.5 font-bold text-gray-700">${inv.waiterName || 'Unassigned'}</td>
+      <td class="p-3.5 text-right font-bold text-gray-800">Rs. ${parseFloat(inv.subtotal || 0).toFixed(2)}</td>
+      <td class="p-3.5 text-center font-bold text-purple-700">${scRate}%</td>
+      <td class="p-3.5 text-right font-black text-purple-700">Rs. ${parseFloat(inv.scAmount || 0).toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 // 🔒 MANAGER OVERRIDE VERIFICATION (TOAST SAFE)
 export function requestManagerVoidOverride(invoiceId) {
   pendingVoidInvoiceId = invoiceId;
@@ -1223,6 +1293,52 @@ export function exportCurrentReportToPDF() {
       rows: rows
     });
 
+  } else if (activeReportTabName === "serviceCharge") {
+    // 🛎️ PDF EXPORT FOR SERVICE CHARGE REPORT
+    const list = Object.values(erpState.invoices || {}).filter(inv => inv.status !== "Voided" && parseFloat(inv.scAmount || 0) > 0);
+    if (list.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට Service Charge දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+
+    list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+    let totalPool = 0;
+    const rows = list.map(inv => {
+      const sc = parseFloat(inv.scAmount || 0);
+      totalPool += sc;
+      return [
+        inv.invoiceNumber,
+        new Date(inv.createdAt || Date.now()).toLocaleString(),
+        `Table ${inv.tableNo || 'N/A'}`,
+        inv.waiterName || "Unassigned",
+        parseFloat(inv.subtotal || 0).toFixed(2),
+        `${erpState.settings?.scRate || 10}%`,
+        sc.toFixed(2)
+      ];
+    });
+
+    generateReportPDF({
+      reportTitle: "Dine-in Service Charge Distribution Report",
+      subtitle: `Total Service Charge Pool: Rs. ${totalPool.toFixed(2)} | Eligible Bills: ${list.length}`,
+      orientation: "portrait",
+      summaryCards: [
+        { label: "Total SC Pool", value: `Rs. ${totalPool.toFixed(2)}`, color: "#7c3aed" },
+        { label: "Eligible Bills", value: `${list.length} Bills`, color: "#2563eb" },
+        { label: "Average SC/Bill", value: `Rs. ${(totalPool / list.length).toFixed(2)}`, color: "#16a34a" }
+      ],
+      columns: [
+        { label: "Invoice #", bold: true },
+        { label: "Date & Time" },
+        { label: "Table" },
+        { label: "Waiter" },
+        { label: "Subtotal (Rs.)", align: "right" },
+        { label: "SC Rate", align: "center" },
+        { label: "SC Amount (Rs.)", align: "right", bold: true }
+      ],
+      rows: rows
+    });
+
   } else if (activeReportTabName === "items") {
     const rows = [];
     document.querySelectorAll("#repItemSalesTableBody tr").forEach(r => {
@@ -1354,10 +1470,23 @@ export function exportCurrentReportToCSV() {
     rows.forEach(r => {
       const cols = r.querySelectorAll("td");
       if (cols.length >= 6) {
-        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}","${cols[4].innerText}","${cols[5].innerText}"\n`;
+        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}"\n`;
       }
     });
     downloadCSVFile(csv, `Waiter_Sales_Performance_${dateStr}.csv`);
+
+  } else if (activeReportTabName === "serviceCharge") {
+    // 🛎️ CSV EXPORT FOR SERVICE CHARGE REPORT
+    const list = Object.values(erpState.invoices || {}).filter(inv => inv.status !== "Voided" && parseFloat(inv.scAmount || 0) > 0);
+    if (list.length === 0) {
+      showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
+      return;
+    }
+    let csv = `Invoice Number,Date Time,Table No,Waiter,Subtotal (Rs.),SC Rate (%),Service Charge Amount (Rs.)\n`;
+    list.forEach(inv => {
+      csv += `"${inv.invoiceNumber}","${inv.createdAt}","${inv.tableNo || 'N/A'}","${inv.waiterName || 'Unassigned'}","${inv.subtotal}","${erpState.settings?.scRate || 10}","${inv.scAmount}"\n`;
+    });
+    downloadCSVFile(csv, `Service_Charge_Report_${dateStr}.csv`);
 
   } else if (activeReportTabName === "items") {
     const rows = document.querySelectorAll("#repItemSalesTableBody tr");
@@ -1582,6 +1711,7 @@ export async function openDayEndModal() {
   const flVal = document.getElementById("dayEndOpeningFloatVal");
   const cardVal = document.getElementById("dayEndCardSalesVal");
   const expVal = document.getElementById("dayEndExpectedCashVal");
+  const scVal = document.getElementById("dayEndServiceChargeVal");
   
   // Card Types Breakdown Spans (System Expected Values)
   const visaVal = document.getElementById("dayEndVisaTotalVal");
@@ -1597,6 +1727,7 @@ export async function openDayEndModal() {
   if (flVal) flVal.innerText = `Rs. ${currentZReportCalculatedData.openingFloat.toFixed(2)}`;
   if (cardVal) cardVal.innerText = `Rs. ${currentZReportCalculatedData.cardSales.toFixed(2)}`;
   if (expVal) expVal.innerText = `Rs. ${currentZReportCalculatedData.expectedCash.toFixed(2)}`;
+  if (scVal) scVal.innerText = `Rs. ${currentZReportCalculatedData.totalServiceCharge.toFixed(2)}`;
 
   if (visaVal) visaVal.innerText = `Rs. ${cardVisa.toFixed(2)}`;
   if (masterVal) masterVal.innerText = `Rs. ${cardMaster.toFixed(2)}`;
@@ -1889,7 +2020,7 @@ export async function printAndSaveZReport() {
   }
 }
 
-// THERMAL PRINTABLE Z-REPORT FORMATTER
+// THERMAL PRINTABLE Z-REPORT FORMATTER (PURE-BLACK HIGH-CONTRAST CARD MACHINE RECONCILIATION)
 function renderAdvancedThermalZReport(z) {
   const zHotel = document.getElementById("zHotelName");
   const zDate = document.getElementById("zReportDate");
@@ -1923,44 +2054,57 @@ function renderAdvancedThermalZReport(z) {
   const zCred = document.getElementById("zCreditSales");
 
   if (zCash) zCash.innerText = `Rs. ${z.cashSales.toFixed(2)}`;
-  
-  if (zCard) {
+  if (zCard) zCard.innerText = `Rs. ${parseFloat(z.cardSales || 0).toFixed(2)}`;
+
+  // 💳 100% HIGH-CONTRAST THERMAL CARD BREAKDOWN TABLE (PURE BLACK & ZERO OVERLAP)
+  const zCardBox = document.getElementById("zCardBreakdownBox");
+  if (zCardBox) {
     const cb = z.cardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
     const acb = z.actualCardBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
     const vcb = z.cardVarianceBreakdown || { visa: 0, master: 0, amex: 0, other: 0 };
-    
-    function formatCardSlipLine(label, posVal, mchVal, diffVal) {
-      if (posVal === 0 && mchVal === 0 && diffVal === 0) return '';
-      const sign = diffVal > 0 ? '+' : (diffVal < 0 ? '-' : '');
-      const diffStr = Math.abs(diffVal) < 0.01 ? 'Match' : `${sign}Rs.${Math.abs(diffVal).toFixed(0)}`;
-      return `<div>${label}: POS Rs.${posVal.toFixed(0)} | Mch Rs.${mchVal.toFixed(0)} [${diffStr}]</div>`;
+
+    const cardRows = [
+      { name: "Visa", pos: cb.visa || 0, act: acb.visa || 0, diff: vcb.visa || 0 },
+      { name: "Master", pos: cb.master || 0, act: acb.master || 0, diff: vcb.master || 0 },
+      { name: "AMEX", pos: cb.amex || 0, act: acb.amex || 0, diff: vcb.amex || 0 },
+      { name: "Other/FriMi", pos: cb.other || 0, act: acb.other || 0, diff: vcb.other || 0 }
+    ].filter(r => r.pos > 0 || r.act > 0 || Math.abs(r.diff) > 0.01);
+
+    if (cardRows.length > 0) {
+      zCardBox.innerHTML = `
+        <div style="margin: 4px 0; border: 1.5px dashed #000000; padding: 3px 2px; color: #000000 !important; font-family: monospace;">
+          <div style="text-align: center; font-weight: 900; font-size: 10px; border-bottom: 1px solid #000000; padding-bottom: 2px; margin-bottom: 2px;">
+            CARD MACHINE BATCH RECONCILIATION
+          </div>
+          <table style="width: 100%; font-size: 9.5px; border-collapse: collapse; font-weight: 700; color: #000000 !important;">
+            <tr style="border-bottom: 1px dotted #000000;">
+              <th style="text-align: left; padding: 1px 0;">CARD</th>
+              <th style="text-align: right; padding: 1px 0;">POS</th>
+              <th style="text-align: right; padding: 1px 0;">MCH</th>
+              <th style="text-align: right; padding: 1px 0;">DIFF</th>
+            </tr>
+            ${cardRows.map(r => {
+              const sign = r.diff > 0 ? '+' : (r.diff < 0 ? '-' : '');
+              const diffStr = Math.abs(r.diff) < 0.01 ? '0' : `${sign}${Math.abs(r.diff).toFixed(0)}`;
+              return `
+                <tr>
+                  <td style="text-align: left; font-weight: 900;">${r.name}</td>
+                  <td style="text-align: right;">${r.pos.toFixed(0)}</td>
+                  <td style="text-align: right;">${r.act.toFixed(0)}</td>
+                  <td style="text-align: right; font-weight: 900;">${diffStr}</td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+          <div style="border-top: 1px dashed #000000; margin-top: 2px; padding-top: 2px; display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 900;">
+            <span>MCH TOTAL: Rs. ${parseFloat(z.actualCard || 0).toFixed(2)}</span>
+            <span>VAR: Rs. ${parseFloat(z.cardVariance || 0).toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      zCardBox.innerHTML = "";
     }
-    
-    const visaLine = formatCardSlipLine("Visa", cb.visa || 0, acb.visa || 0, vcb.visa || 0);
-    const masterLine = formatCardSlipLine("Master", cb.master || 0, acb.master || 0, vcb.master || 0);
-    const amexLine = formatCardSlipLine("AMEX", cb.amex || 0, acb.amex || 0, vcb.amex || 0);
-    const otherLine = formatCardSlipLine("Other", cb.other || 0, acb.other || 0, vcb.other || 0);
-    
-    const hasAnyCard = (z.cardSales > 0 || (z.actualCard || 0) > 0);
-    
-    zCard.innerHTML = `
-      <span>Rs. ${parseFloat(z.cardSales || 0).toFixed(2)}</span>
-      ${
-        hasAnyCard 
-          ? `
-            <div style="font-size: 8.5px; color: #000000; font-family: monospace; font-weight: normal; margin-top: 2px; border-top: 1px dotted #000; padding-top: 2px;">
-              ${visaLine || '<div>Visa: Rs.0 (Match)</div>'}
-              ${masterLine || '<div>Master: Rs.0 (Match)</div>'}
-              ${amexLine}
-              ${otherLine}
-              <div style="font-weight: bold; border-top: 1px dashed #000; margin-top: 1px; padding-top: 1px;">
-                Mch Total: Rs.${parseFloat(z.actualCard || 0).toFixed(2)} | Var: Rs.${parseFloat(z.cardVariance || 0).toFixed(2)}
-              </div>
-            </div>
-          ` 
-          : ''
-      }
-    `;
   }
 
   if (zTrans) zTrans.innerText = `Rs. ${z.transferSales.toFixed(2)}`;
@@ -2425,6 +2569,7 @@ window.exportCurrentReportToPDF = exportCurrentReportToPDF;
 window.renderPnLStatement = renderPnLStatement;
 window.renderHourlyVelocityReport = renderHourlyVelocityReport;
 window.renderWaiterSalesReport = renderWaiterSalesReport;
+window.renderServiceChargeReport = renderServiceChargeReport;
 window.renderItemWiseSalesSummary = renderItemWiseSalesSummary;
 window.renderCustomerCreditsLedger = renderCustomerCreditsLedger;
 window.requestManagerVoidOverride = requestManagerVoidOverride;
@@ -2446,4 +2591,3 @@ window.renderDayEndHistoryTable = renderDayEndHistoryTable;
 window.reprintPastZReport = reprintPastZReport;
 window.exportDayEndHistoryToCSV = exportDayEndHistoryToCSV;
 window.exportDayEndHistoryToPDF = exportDayEndHistoryToPDF;
-
