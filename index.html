@@ -1616,12 +1616,16 @@ to { transform: translateY(0); opacity: 1; }
   <button onclick="switchReportTab('items')" id="repTab-items" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
     🍽️ Item Sales
   </button>
-  <button onclick="switchReportTab('credits')" id="repTab-credits" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-    💳 Customer Credits
-  </button>
-  <button onclick="switchReportTab('dayEndHistory')" id="repTab-dayEndHistory" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
-    📑 Day-End History
-  </button>
+<button onclick="switchReportTab('credits')" id="repTab-credits" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+  💳 Customer Credits
+</button>
+<!-- 🛎️ NEW: SERVICE CHARGE SUMMARY TAB -->
+<button onclick="switchReportTab('serviceCharge')" id="repTab-serviceCharge" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+  🛎️ Service Charge
+</button>
+<button onclick="switchReportTab('dayEndHistory')" id="repTab-dayEndHistory" class="px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900 font-bold cursor-pointer">
+  📑 Day-End History
+</button>
 </div>
           </div>
 
@@ -1945,12 +1949,74 @@ to { transform: translateY(0); opacity: 1; }
                   </tbody>
                 </table>
               </div>
+ </div>
+          </div>
+
+          <!-- TAB 6.5: SERVICE CHARGE SUMMARY & DINE-IN LEDGER REPORT -->
+          <div id="reportSection-serviceCharge" class="hidden space-y-4">
+            <!-- Summary KPI Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              <div class="bg-white p-4 rounded-2xl border border-purple-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                  <i class="fa-solid fa-hand-holding-dollar text-purple-600"></i> Total SC Collected
+                </span>
+                <span id="repScTotalPool" class="text-xl font-black text-purple-700 mt-1 block font-mono">Rs. 0.00</span>
+                <span class="text-[9px] text-gray-400 font-semibold block mt-0.5">Dine-in Service Charge Pool</span>
+              </div>
+              <div class="bg-white p-4 rounded-2xl border border-blue-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                  <i class="fa-solid fa-receipt text-blue-600"></i> Bills with SC
+                </span>
+                <span id="repScBillsCount" class="text-xl font-black text-blue-700 mt-1 block">0 Bills</span>
+                <span class="text-[9px] text-gray-400 font-semibold block mt-0.5">Eligible Dine-in Invoices</span>
+              </div>
+              <div class="bg-white p-4 rounded-2xl border border-green-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                  <i class="fa-solid fa-coins text-green-600"></i> Dine-in Sales Subtotal
+                </span>
+                <span id="repScTotalDineInSales" class="text-xl font-black text-green-700 mt-1 block font-mono">Rs. 0.00</span>
+                <span class="text-[9px] text-gray-400 font-semibold block mt-0.5">Revenue Generating SC</span>
+              </div>
+              <div class="bg-white p-4 rounded-2xl border border-yellow-200 shadow-sm">
+                <span class="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                  <i class="fa-solid fa-calculator text-yellow-600"></i> Average SC / Bill
+                </span>
+                <span id="repScAveragePerBill" class="text-xl font-black text-yellow-700 mt-1 block font-mono">Rs. 0.00</span>
+                <span class="text-[9px] text-gray-400 font-semibold block mt-0.5">Mean Tip Contribution</span>
+              </div>
+            </div>
+
+            <!-- Service Charge Ledger Table -->
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <span class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <i class="fa-solid fa-bell-concierge text-purple-600"></i> Dine-in Service Charge Distribution Log
+                </span>
+                <span id="repScRecordCountBadge" class="text-xs bg-purple-100 text-purple-800 font-bold px-2.5 py-0.5 rounded-full">0 Records</span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-100 whitespace-nowrap">
+                    <tr>
+                      <th class="p-3.5">Invoice #</th>
+                      <th class="p-3.5">Date & Time</th>
+                      <th class="p-3.5">Table No</th>
+                      <th class="p-3.5">Assigned Waiter</th>
+                      <th class="p-3.5 text-right">Dine-in Net Sales (Rs.)</th>
+                      <th class="p-3.5 text-center">SC Rate (%)</th>
+                      <th class="p-3.5 text-right font-black text-purple-700">Service Charge (Rs.)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="repServiceChargeTableBody" class="divide-y divide-gray-100 font-medium text-gray-700 whitespace-nowrap">
+                    <tr><td colspan="7" class="text-center py-10 text-gray-400">Service Charge සහිත බිල්පත් දත්ත නොමැත...</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
           <!-- TAB 7: DAY-END (Z-REPORT) AUDIT HISTORY -->
           <div id="reportSection-dayEndHistory" class="hidden space-y-4">
-            
             <!-- Date Filter & On-Demand Load Bar -->
             <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3 text-xs font-bold">
               <div class="flex items-center gap-1.5 border-b border-gray-100 pb-2.5 overflow-x-auto no-scrollbar">
@@ -2560,215 +2626,212 @@ to { transform: translateY(0); opacity: 1; }
     </div>
   </div>
 
-  <!-- MODAL: DAY-END CASH CLOSING (Z-REPORT) - WIDE 2-COLUMN TOUCH-OPTIMIZED -->
-<div id="dayEndModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-2 sm:p-4">
-  <div class="bg-white rounded-3xl w-full max-w-4xl max-h-[94vh] shadow-2xl border border-gray-100 p-4 sm:p-5 flex flex-col justify-between overflow-hidden">
+  <!-- <!-- MODAL: DAY-END CASH CLOSING (Z-REPORT) - 15-INCH TOUCH SCREEN OPTIMIZED (ZERO CUTOFF) -->
+<div id="dayEndModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-1 sm:p-3 overflow-y-auto">
+  <div class="bg-white rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[92vh] shadow-2xl border border-gray-200 p-3 sm:p-4 flex flex-col justify-between overflow-hidden">
     
     <!-- Fixed Header (Always visible at top) -->
-    <div class="flex justify-between items-center border-b border-gray-200 pb-2.5 shrink-0">
+    <div class="flex justify-between items-center border-b border-gray-200 pb-2 shrink-0">
       <div>
-        <h3 class="font-black text-gray-800 text-sm sm:text-base flex items-center gap-2">
+        <h3 class="font-black text-gray-800 text-xs sm:text-sm flex items-center gap-1.5">
           <i class="fa-solid fa-vault text-green-600"></i> Day-End Cash & Card Audit (Z-Report)
         </h3>
-        <p class="text-[10px] text-gray-400 font-bold">Cashier විකුණුම් කවුන්ටරය, Card Machine Batch සහ Petty Cash ස්වාධීන විගණනය</p>
+        <p class="text-[9.5px] text-gray-400 font-bold">Cashier විකුණුම් කවුන්ටරය, Card Machine Batch සහ Service Charge විගණනය</p>
       </div>
-      <button type="button" onclick="closeDayEndModal()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+      <button type="button" onclick="closeDayEndModal()" class="text-gray-400 hover:text-gray-700 p-1 text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
     </div>
     
-    <!-- Scrollable 2-Column Body (Wide layout - nothing gets squashed) -->
-    <div class="flex-1 overflow-y-auto py-2 my-1 pr-1 grid grid-cols-1 md:grid-cols-12 gap-3 min-h-0 text-xs">
+    <!-- Scrollable 2-Column Body (Optimized for 1024x768 & 1366x768 Touch Monitors) -->
+    <div class="flex-1 overflow-y-auto py-1.5 my-1 pr-1 grid grid-cols-1 md:grid-cols-12 gap-2.5 min-h-0 text-xs">
       
-      <!-- LEFT COLUMN: CASH/CARD SUMMARY & CARD MACHINE AUDIT (6 COLS) -->
-      <div class="col-span-12 md:col-span-6 space-y-2.5">
+      <!-- LEFT COLUMN: CASH, CARD, SC & MACHINE AUDIT (6 COLS) -->
+      <div class="col-span-12 md:col-span-6 space-y-2">
         
-        <!-- Top 4 Summary Cards -->
-        <div class="grid grid-cols-2 gap-2">
-          <div class="bg-gray-50 p-2 rounded-xl border border-gray-200">
-            <span class="text-[9px] text-gray-500 font-bold uppercase block">Cash Sales (+)</span>
+        <!-- Summary Cards Grid (Includes Service Charge) -->
+        <div class="grid grid-cols-3 gap-1.5">
+          <div class="bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+            <span class="text-[8.5px] text-gray-500 font-bold uppercase block">Cash Sales (+)</span>
             <span id="dayEndCashSalesVal" class="text-xs font-black text-green-600 block mt-0.5 font-mono">Rs. 0.00</span>
           </div>
-          <div class="bg-gray-50 p-2 rounded-xl border border-gray-200">
-            <span class="text-[9px] text-gray-500 font-bold uppercase block">Opening Float (+)</span>
-            <span id="dayEndOpeningFloatVal" class="text-xs font-black text-blue-600 block mt-0.5 font-mono">Rs. 0.00</span>
-          </div>
-          <div class="bg-gray-50 p-2 rounded-xl border border-gray-200">
-            <span class="text-[9px] text-gray-500 font-bold uppercase block">Total Card Sales</span>
+          <div class="bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+            <span class="text-[8.5px] text-gray-500 font-bold uppercase block">Card Sales</span>
             <span id="dayEndCardSalesVal" class="text-xs font-black text-purple-600 block mt-0.5 font-mono">Rs. 0.00</span>
           </div>
-          <div class="bg-green-100 p-2 rounded-xl border border-green-300">
-            <span class="text-[9px] text-green-950 font-black uppercase block">Expected Cash in Drawer</span>
+          <!-- 🛎️ SERVICE CHARGE SUMMARY CARD -->
+          <div class="bg-purple-50 p-1.5 rounded-xl border border-purple-200">
+            <span class="text-[8.5px] text-purple-900 font-bold uppercase block">Service Charge (SC)</span>
+            <span id="dayEndServiceChargeVal" class="text-xs font-black text-purple-700 block mt-0.5 font-mono">Rs. 0.00</span>
+          </div>
+          <div class="bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+            <span class="text-[8.5px] text-gray-500 font-bold uppercase block">Opening Float (+)</span>
+            <span id="dayEndOpeningFloatVal" class="text-xs font-black text-blue-600 block mt-0.5 font-mono">Rs. 0.00</span>
+          </div>
+          <div class="col-span-2 bg-green-100 p-1.5 rounded-xl border border-green-300">
+            <span class="text-[8.5px] text-green-950 font-black uppercase block">Expected Cash in Drawer</span>
             <span id="dayEndExpectedCashVal" class="text-xs font-black text-green-800 block mt-0.5 font-mono">Rs. 0.00</span>
           </div>
         </div>
         
-     <!-- 💳 Card Payment Breakdown & Machine Reconciliation Box (වෙන වෙනම Card Settlement) -->
-<div class="p-2.5 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2.5">
-  <div class="flex justify-between items-center border-b border-purple-200/60 pb-1.5">
-    <span class="text-[11px] font-black text-purple-950 uppercase flex items-center gap-1.5">
-      <i class="fa-solid fa-credit-card text-purple-600"></i> Card Machine Batch Reconciliation (වෙන වෙනම විගණනය)
-    </span>
-    <span class="text-[9.5px] text-purple-700 font-extrabold bg-purple-100 px-2 py-0.5 rounded-md">POS vs Machine</span>
-  </div>
-  
-  <!-- 4 Card Types with Individual Actual Inputs & Variances -->
-  <div class="space-y-1.5 text-xs">
-    
-    <!-- 1. Visa -->
-    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
-      <div class="w-28 shrink-0">
-        <span class="font-extrabold text-gray-800 text-xs block">Visa Card:</span>
-        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndVisaTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
-        <input type="number" step="0.01" id="dayEndActualVisaInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
-      </div>
-      <span id="dayEndVisaVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
-    </div>
-    
-    <!-- 2. MasterCard -->
-    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
-      <div class="w-28 shrink-0">
-        <span class="font-extrabold text-gray-800 text-xs block">MasterCard:</span>
-        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndMasterTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
-        <input type="number" step="0.01" id="dayEndActualMasterInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
-      </div>
-      <span id="dayEndMasterVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
-    </div>
-    
-    <!-- 3. AMEX -->
-    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
-      <div class="w-28 shrink-0">
-        <span class="font-extrabold text-gray-800 text-xs block">AMEX:</span>
-        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndAmexTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
-        <input type="number" step="0.01" id="dayEndActualAmexInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
-      </div>
-      <span id="dayEndAmexVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
-    </div>
-    
-    <!-- 4. Other / FriMi / Genie -->
-    <div class="p-2 bg-white rounded-xl border border-purple-100 flex flex-wrap items-center justify-between gap-2">
-      <div class="w-28 shrink-0">
-        <span class="font-extrabold text-gray-800 text-xs block">Other / FriMi:</span>
-        <span class="text-[10px] text-gray-400 font-bold">POS: <span id="dayEndOtherCardTotalVal" class="text-purple-900 font-mono">Rs. 0.00</span></span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="text-[10px] text-gray-500 font-bold">Actual Machine:</span>
-        <input type="number" step="0.01" id="dayEndActualOtherInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-24 p-1 border border-purple-300 rounded-lg text-xs font-mono font-black text-right bg-purple-50/50 outline-none focus:bg-white focus:border-purple-600">
-      </div>
-      <span id="dayEndOtherVarianceBox" class="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0.00</span>
-    </div>
-    
-  </div>
-  
-  <!-- Total Card Machine Variance Summary -->
-  <div class="p-2 bg-white rounded-xl border border-purple-300 flex justify-between items-center">
-    <span class="text-[10.5px] font-extrabold text-purple-950 uppercase">Total Card Variance:</span>
-    <span id="dayEndCardVarianceBox" class="text-xs font-black text-gray-700 font-mono">Rs. 0.00</span>
-  </div>
-</div>
-        
-        <!-- Petty Cash Balance Box -->
-        <div class="p-2.5 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between text-xs">
-          <div>
-            <span class="font-black text-blue-900 flex items-center gap-1.5 uppercase text-[10px]">
-              <i class="fa-solid fa-wallet text-blue-600"></i> Petty Cash Box (ස්වාධීන මුදල් පෙට්ටිය)
+        <!-- 💳 Card Machine Batch Reconciliation Box -->
+        <div class="p-2 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1.5">
+          <div class="flex justify-between items-center border-b border-purple-200/60 pb-1">
+            <span class="text-[10px] font-black text-purple-950 uppercase flex items-center gap-1">
+              <i class="fa-solid fa-credit-card text-purple-600"></i> Card Machine Batch Audit
             </span>
-            <span class="text-[9px] text-gray-500">කවුන්ටරයට මිශ්‍ර කර නොමැත</span>
+            <span class="text-[9px] text-purple-700 font-extrabold bg-purple-100 px-1.5 py-0.2 rounded">POS vs Machine</span>
           </div>
-          <div class="text-right">
-            <span id="zModalPettyBoxBalance" class="font-black text-blue-700 text-xs font-mono">Rs. 0.00</span>
+          
+          <div class="space-y-1 text-xs">
+            <!-- Visa -->
+            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex items-center justify-between gap-1">
+              <div class="w-24 shrink-0">
+                <span class="font-extrabold text-gray-800 text-[11px] block">Visa:</span>
+                <span class="text-[9px] text-gray-400 font-bold">POS: <span id="dayEndVisaTotalVal" class="text-purple-900 font-mono">Rs. 0</span></span>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-[9px] text-gray-500">Mch:</span>
+                <input type="number" step="0.01" id="dayEndActualVisaInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-20 p-1 border border-purple-300 rounded text-xs font-mono font-black text-right bg-purple-50/50 outline-none">
+              </div>
+              <span id="dayEndVisaVarianceBox" class="text-[9.5px] font-black px-1.5 py-0.2 rounded bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0</span>
+            </div>
+            
+            <!-- MasterCard -->
+            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex items-center justify-between gap-1">
+              <div class="w-24 shrink-0">
+                <span class="font-extrabold text-gray-800 text-[11px] block">Master:</span>
+                <span class="text-[9px] text-gray-400 font-bold">POS: <span id="dayEndMasterTotalVal" class="text-purple-900 font-mono">Rs. 0</span></span>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-[9px] text-gray-500">Mch:</span>
+                <input type="number" step="0.01" id="dayEndActualMasterInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-20 p-1 border border-purple-300 rounded text-xs font-mono font-black text-right bg-purple-50/50 outline-none">
+              </div>
+              <span id="dayEndMasterVarianceBox" class="text-[9.5px] font-black px-1.5 py-0.2 rounded bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0</span>
+            </div>
+            
+            <!-- AMEX -->
+            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex items-center justify-between gap-1">
+              <div class="w-24 shrink-0">
+                <span class="font-extrabold text-gray-800 text-[11px] block">AMEX:</span>
+                <span class="text-[9px] text-gray-400 font-bold">POS: <span id="dayEndAmexTotalVal" class="text-purple-900 font-mono">Rs. 0</span></span>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-[9px] text-gray-500">Mch:</span>
+                <input type="number" step="0.01" id="dayEndActualAmexInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-20 p-1 border border-purple-300 rounded text-xs font-mono font-black text-right bg-purple-50/50 outline-none">
+              </div>
+              <span id="dayEndAmexVarianceBox" class="text-[9.5px] font-black px-1.5 py-0.2 rounded bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0</span>
+            </div>
+            
+            <!-- Other / FriMi -->
+            <div class="p-1.5 bg-white rounded-lg border border-purple-100 flex items-center justify-between gap-1">
+              <div class="w-24 shrink-0">
+                <span class="font-extrabold text-gray-800 text-[11px] block">Other/FriMi:</span>
+                <span class="text-[9px] text-gray-400 font-bold">POS: <span id="dayEndOtherCardTotalVal" class="text-purple-900 font-mono">Rs. 0</span></span>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-[9px] text-gray-500">Mch:</span>
+                <input type="number" step="0.01" id="dayEndActualOtherInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-20 p-1 border border-purple-300 rounded text-xs font-mono font-black text-right bg-purple-50/50 outline-none">
+              </div>
+              <span id="dayEndOtherVarianceBox" class="text-[9.5px] font-black px-1.5 py-0.2 rounded bg-gray-100 text-gray-500 whitespace-nowrap">Rs. 0</span>
+            </div>
           </div>
+          
+          <div class="p-1.5 bg-white rounded-lg border border-purple-300 flex justify-between items-center text-[10px]">
+            <span class="font-extrabold text-purple-950 uppercase">Total Card Variance:</span>
+            <span id="dayEndCardVarianceBox" class="text-xs font-black text-gray-700 font-mono">Rs. 0.00</span>
+          </div>
+        </div>
+        
+        <!-- Petty Cash Box -->
+        <div class="p-2 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs">
+          <div>
+            <span class="font-black text-blue-900 flex items-center gap-1 uppercase text-[9.5px]">
+              <i class="fa-solid fa-wallet text-blue-600"></i> Petty Cash Box Balance
+            </span>
+            <span class="text-[8.5px] text-gray-500">කවුන්ටරයට මිශ්‍ර කර නොමැත</span>
+          </div>
+          <span id="zModalPettyBoxBalance" class="font-black text-blue-700 text-xs font-mono">Rs. 0.00</span>
         </div>
         
         <!-- Orders Breakdown -->
-        <div class="space-y-1">
-          <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Orders Breakdown</span>
-          <div id="zModalOrderTypeSummary" class="grid grid-cols-3 gap-1.5"></div>
-        </div>
-        
-        <!-- Category Sales List -->
-        <div class="space-y-1">
-          <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Category Sales</span>
-          <div id="zModalCategorySummary" class="max-h-24 overflow-y-auto bg-gray-50 p-2 rounded-xl border border-gray-200 divide-y divide-gray-100 text-xs"></div>
+        <div class="space-y-0.5">
+          <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Orders Breakdown</span>
+          <div id="zModalOrderTypeSummary" class="grid grid-cols-3 gap-1"></div>
         </div>
       </div>
       
-      <!-- RIGHT COLUMN: CASH DENOMINATION COUNTER & CASH AUDIT (6 COLS) -->
-      <div class="col-span-12 md:col-span-6 space-y-2.5">
-        
-        <div class="p-3 bg-yellow-50/70 border border-yellow-200 rounded-2xl space-y-2">
+      <!-- RIGHT COLUMN: CASH DENOMINATION & RECONCILIATION (6 COLS) -->
+      <div class="col-span-12 md:col-span-6 space-y-2">
+        <div class="p-2 bg-yellow-50/70 border border-yellow-200 rounded-xl space-y-1.5">
           <div class="flex justify-between items-center">
-            <span class="text-[11px] font-black text-yellow-950 uppercase flex items-center gap-1.5">
+            <span class="text-[10px] font-black text-yellow-950 uppercase flex items-center gap-1">
               <i class="fa-solid fa-calculator text-yellow-600"></i> Cash Denomination Counter
             </span>
-            <span class="text-[9px] text-yellow-700 font-bold">මුදල් නෝට්ටු ගණකය</span>
+            <span class="text-[8.5px] text-yellow-700 font-bold">මුදල් නෝට්ටු ගණකය</span>
           </div>
           
-          <!-- Notes Inputs Grid -->
-          <div class="grid grid-cols-3 gap-1.5 text-xs">
+          <div class="grid grid-cols-3 gap-1 text-xs">
             <div>
-              <label class="text-[9.5px] font-bold text-gray-600 block">Rs. 5000 x</label>
-              <input type="number" min="0" id="denom_5000" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded-lg text-center font-bold bg-white outline-none">
+              <label class="text-[8.5px] font-bold text-gray-600 block">5000 x</label>
+              <input type="number" min="0" id="denom_5000" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded text-center font-bold bg-white outline-none">
             </div>
             <div>
-              <label class="text-[9.5px] font-bold text-gray-600 block">Rs. 1000 x</label>
-              <input type="number" min="0" id="denom_1000" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded-lg text-center font-bold bg-white outline-none">
+              <label class="text-[8.5px] font-bold text-gray-600 block">1000 x</label>
+              <input type="number" min="0" id="denom_1000" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded text-center font-bold bg-white outline-none">
             </div>
             <div>
-              <label class="text-[9.5px] font-bold text-gray-600 block">Rs. 500 x</label>
-              <input type="number" min="0" id="denom_500" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded-lg text-center font-bold bg-white outline-none">
+              <label class="text-[8.5px] font-bold text-gray-600 block">500 x</label>
+              <input type="number" min="0" id="denom_500" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded text-center font-bold bg-white outline-none">
             </div>
             <div>
-              <label class="text-[9.5px] font-bold text-gray-600 block">Rs. 100 x</label>
-              <input type="number" min="0" id="denom_100" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded-lg text-center font-bold bg-white outline-none">
+              <label class="text-[8.5px] font-bold text-gray-600 block">100 x</label>
+              <input type="number" min="0" id="denom_100" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded text-center font-bold bg-white outline-none">
             </div>
             <div>
-              <label class="text-[9.5px] font-bold text-gray-600 block">Rs. 50 x</label>
-              <input type="number" min="0" id="denom_50" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded-lg text-center font-bold bg-white outline-none">
+              <label class="text-[8.5px] font-bold text-gray-600 block">50 x</label>
+              <input type="number" min="0" id="denom_50" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded text-center font-bold bg-white outline-none">
             </div>
             <div>
-              <label class="text-[9.5px] font-bold text-gray-600 block">Rs. 20 x</label>
-              <input type="number" min="0" id="denom_20" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded-lg text-center font-bold bg-white outline-none">
+              <label class="text-[8.5px] font-bold text-gray-600 block">20 x</label>
+              <input type="number" min="0" id="denom_20" oninput="calculateCashDenominations()" placeholder="0" class="w-full p-1 border rounded text-center font-bold bg-white outline-none">
             </div>
             <div class="col-span-3">
-              <div class="flex items-center justify-between gap-2">
-                <label class="text-[10px] font-bold text-gray-600 whitespace-nowrap">Coins / කාසි (Rs.):</label>
-                <input type="number" step="0.5" id="denom_coins" oninput="calculateCashDenominations()" placeholder="0.00" class="w-32 p-1 border rounded-lg text-right font-bold bg-white outline-none text-yellow-900 font-mono">
+              <div class="flex items-center justify-between gap-1.5">
+                <label class="text-[9.5px] font-bold text-gray-600 whitespace-nowrap">Coins / කාසි (Rs.):</label>
+                <input type="number" step="0.5" id="denom_coins" oninput="calculateCashDenominations()" placeholder="0.00" class="w-28 p-1 border rounded text-right font-bold bg-white outline-none text-yellow-900 font-mono">
               </div>
             </div>
           </div>
         </div>
         
-        <!-- Total Counted Cash & Variance Alerts -->
-        <div class="p-3 bg-gray-50 border border-gray-200 rounded-2xl space-y-2">
+        <!-- Physical Cash Input & Variance Status -->
+        <div class="p-2 bg-gray-50 border border-gray-200 rounded-xl space-y-1.5">
           <div class="flex items-center justify-between gap-2">
-            <label class="text-[11px] font-black text-gray-700 uppercase whitespace-nowrap">Total Counted Cash:</label>
-            <input type="number" step="1" id="dayEndActualCashInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-36 p-1.5 border-2 border-green-400 rounded-xl text-sm font-black text-green-800 text-right outline-none bg-green-50 font-mono">
+            <label class="text-[10px] font-black text-gray-700 uppercase whitespace-nowrap">Total Counted Cash:</label>
+            <input type="number" step="1" id="dayEndActualCashInput" oninput="calculateDayEndVariance()" placeholder="0.00" class="w-32 p-1 border-2 border-green-400 rounded-lg text-sm font-black text-green-800 text-right outline-none bg-green-50 font-mono">
           </div>
           
-          <div id="dayEndVarianceBox" class="p-2.5 rounded-xl border text-center font-bold text-[11px] bg-gray-100 text-gray-600">
+          <div id="dayEndVarianceBox" class="p-2 rounded-lg border text-center font-bold text-[10.5px] bg-gray-100 text-gray-600">
             නෝට්ටු ගණන හෝ මුළු මුදල ඇතුළත් කරන්න...
           </div>
+        </div>
+        
+        <!-- Category Sales Breakdown -->
+        <div class="space-y-0.5">
+          <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Category Sales</span>
+          <div id="zModalCategorySummary" class="max-h-24 overflow-y-auto bg-gray-50 p-1.5 rounded-xl border border-gray-200 divide-y divide-gray-100 text-xs"></div>
         </div>
       </div>
       
     </div>
     
-    <!-- 🌟 FIXED BOTTOM FOOTER: ALWAYS VISIBLE AT BOTTOM (NEVER CUT OFF) -->
-    <div class="shrink-0 flex justify-end items-center gap-2 pt-2.5 border-t border-gray-200 bg-white">
+    <!-- 🌟 FIXED BOTTOM FOOTER: ALWAYS VISIBLE ON 15-INCH SCREENS (ZERO CUTOFF) -->
+    <div class="shrink-0 flex justify-end items-center gap-2 pt-2 border-t border-gray-200 bg-white">
       <button type="button" onclick="closeDayEndModal()" class="px-4 py-2 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 transition cursor-pointer">
         Cancel
       </button>
-      <button type="button" onclick="printAndSaveZReport()" class="bg-green-600 hover:bg-green-700 text-white font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition flex items-center gap-2 cursor-pointer">
-        <i class="fa-solid fa-print text-sm"></i>
-        <span>Save & Print Advanced Z-Report</span>
+      <button type="button" onclick="printAndSaveZReport()" class="bg-green-600 hover:bg-green-700 text-white font-black px-5 py-2 rounded-xl text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+        <i class="fa-solid fa-print"></i>
+        <span>Save & Print Z-Report</span>
       </button>
     </div>
     
@@ -2808,13 +2871,15 @@ to { transform: translateY(0); opacity: 1; }
     </div>
     <p class="border-b border-black border-dashed my-1"></p>
 
-    <div class="space-y-0.5 text-[10px]">
-      <p class="font-black underline uppercase">4. PAYMENT RECONCILIATION:</p>
-      <div class="flex justify-between"><span>Cash Collected:</span><span id="zCashSales">Rs. 0.00</span></div>
-      <div class="flex justify-between"><span>Card Payments:</span><span id="zCardSales">Rs. 0.00</span></div>
-      <div class="flex justify-between"><span>Bank / QR Transfers:</span><span id="zTransferSales">Rs. 0.00</span></div>
-      <div class="flex justify-between"><span>Customer Debt (Credit):</span><span id="zCreditSales">Rs. 0.00</span></div>
-    </div>
+  <div class="space-y-0.5 text-[10px]">
+  <p class="font-black underline uppercase">4. PAYMENT RECONCILIATION:</p>
+  <div class="flex justify-between"><span>Cash Collected:</span><span id="zCashSales">Rs. 0.00</span></div>
+  <div class="flex justify-between font-bold"><span>Total Card Payments:</span><span id="zCardSales">Rs. 0.00</span></div>
+  <!-- 💳 DEDICATED FULL-WIDTH HIGH CONTRAST CARD BREAKDOWN BOX -->
+  <div id="zCardBreakdownBox" style="width: 100%; color: #000000;"></div>
+  <div class="flex justify-between"><span>Bank / QR Transfers:</span><span id="zTransferSales">Rs. 0.00</span></div>
+  <div class="flex justify-between"><span>Customer Debt (Credit):</span><span id="zCreditSales">Rs. 0.00</span></div>
+</div>
     <p class="border-b border-black border-dashed my-1"></p>
 
     <div class="space-y-0.5 text-[10px]">
