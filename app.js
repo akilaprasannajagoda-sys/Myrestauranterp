@@ -1116,7 +1116,7 @@ function initializeRealtimeDataStreams(tenantId) {
   });
   activeFirebaseUnsubscribers.push(unsubGrns);
 
-  // 13. Invoices
+  // 13. Invoices (With Realtime Service Charge Report Support)
   const recentInvoicesQuery = query(ref(dbInstance, `${basePath}/invoices`), limitToLast(30));
   const unsubInvoices = onValue(recentInvoicesQuery, (snapshot) => {
     const fromVal = document.getElementById("repFromDate")?.value;
@@ -1134,6 +1134,8 @@ function initializeRealtimeDataStreams(tenantId) {
         Reports.renderItemWiseSalesSummary();
       } else if (Reports.activeReportTabName === "credits") {
         Reports.renderCustomerCreditsLedger();
+      } else if (Reports.activeReportTabName === "serviceCharge") {
+        Reports.renderServiceChargeReport();
       } else {
         Reports.renderInvoiceReportsList();
       }
@@ -1755,6 +1757,7 @@ window.exportCurrentReportToPDF = Reports.exportCurrentReportToPDF;
 window.renderPnLStatement = Reports.renderPnLStatement;
 window.renderHourlyVelocityReport = Reports.renderHourlyVelocityReport;
 window.renderWaiterSalesReport = Reports.renderWaiterSalesReport;
+window.renderServiceChargeReport = Reports.renderServiceChargeReport;
 window.renderItemWiseSalesSummary = Reports.renderItemWiseSalesSummary;
 window.renderCustomerCreditsLedger = Reports.renderCustomerCreditsLedger;
 window.requestManagerVoidOverride = Reports.requestManagerVoidOverride;
@@ -1764,7 +1767,7 @@ window.openDayEndModal = Reports.openDayEndModal;
 window.closeDayEndModal = Reports.closeDayEndModal;
 window.calculateCashDenominations = Reports.calculateCashDenominations;
 window.calculateDayEndVariance = Reports.calculateDayEndVariance;
-window.printAndSaveZReport = Reports.printAndSaveZReport;
+window.printAndSaveZReport = printAndSaveZReport;
 window.openShiftHandoverModal = Reports.openShiftHandoverModal;
 window.closeShiftHandoverModal = Reports.closeShiftHandoverModal;
 window.handleShiftHandoverSubmit = Reports.handleShiftHandoverSubmit;
