@@ -115,7 +115,7 @@ export function formatReceiptRawText(inv, stationLabel = "") {
     text += `Points Disc (${inv.loyaltyPointsRedeemed || 0} Pts): -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)}\n`;
   }
   if (parseFloat(inv.scAmount || 0) > 0) {
-    text += `Service Charge: Rs. ${parseFloat(inv.scAmount).toFixed(2)}\n`;
+    text += `Tax(10%): Rs. ${parseFloat(inv.scAmount).toFixed(2)}\n`;
   }
   if (parseFloat(inv.vatAmount || 0) > 0) {
     text += `VAT: Rs. ${parseFloat(inv.vatAmount).toFixed(2)}\n`;
