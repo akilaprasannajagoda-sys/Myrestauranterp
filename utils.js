@@ -426,7 +426,12 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
           <h4 class="font-black text-base text-gray-800">${escapeHTML(titleText)}</h4>
           <p class="text-[11px] text-gray-400 mt-0.5">${escapeHTML(subtitleText)}</p>
         </div>
-        <input type="text" id="customPromptInputField" value="${escapeHTML(defaultValue)}" placeholder="${escapeHTML(placeholderText)}" class="w-full p-3 border-2 ${isWA ? 'border-green-400 bg-green-50/40 focus:border-green-600' : 'border-blue-400 bg-blue-50/40 focus:border-blue-600'} rounded-2xl text-center text-base font-bold outline-none text-gray-800 focus:bg-white transition">
+        <div class="flex gap-1.5 items-center">
+          <input type="text" id="customPromptInputField" value="${escapeHTML(defaultValue)}" placeholder="${escapeHTML(placeholderText)}" class="flex-1 p-3 border-2 ${isWA ? 'border-green-400 bg-green-50/40 focus:border-green-600' : 'border-blue-400 bg-blue-50/40 focus:border-blue-600'} rounded-2xl text-center text-base font-bold outline-none text-gray-800 focus:bg-white transition">
+          <button type="button" id="customPromptKbBtn" title="Touch Keyboard" class="p-3.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border-2 border-blue-200 rounded-2xl text-base cursor-pointer active:scale-95">
+            <i class="fa-solid fa-keyboard"></i>
+          </button>
+        </div>
         <div class="flex justify-end gap-2 pt-2 text-xs font-bold border-t border-gray-100">
           <button type="button" id="customPromptCancelBtn" class="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition cursor-pointer">Cancel</button>
           <button type="button" id="customPromptOkBtn" class="flex-1 py-2.5 rounded-xl ${isWA ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white shadow-md transition cursor-pointer">OK (Confirm)</button>
@@ -452,7 +457,9 @@ export function showCustomInputModal(titleText, placeholderText = "", defaultVal
 
     overlay.querySelector("#customPromptOkBtn").onclick = () => cleanup(input.value.trim());
     overlay.querySelector("#customPromptCancelBtn").onclick = () => cleanup(null);
-
+     overlay.querySelector("#customPromptKbBtn").onclick = () => {
+  if (window.openTouchKeyboard) window.openTouchKeyboard("customPromptInputField", titleText, "text");
+};
     input.onkeydown = (e) => {
       if (e.key === "Enter") cleanup(input.value.trim());
       if (e.key === "Escape") cleanup(null);
