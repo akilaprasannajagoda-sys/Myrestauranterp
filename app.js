@@ -71,6 +71,12 @@ const firebaseConfig = {
 const appInstance = initializeApp(firebaseConfig);
 export const authInstance = getAuth(appInstance);
 window.authInstance = authInstance;
+
+// 🛡️ App එක අලුතින් Open වන විට පරණ Auto-Login Session එක ඉවත් කිරීම
+if (!sessionStorage.getItem("erp_manual_login_active")) {
+  signOut(authInstance).catch(() => {});
+}
+
 const dbInstance = getDatabase(appInstance);
 const dbRef = (path) => ref(dbInstance, path);
 
@@ -293,6 +299,7 @@ export async function handleOfflinePinSubmit(ev) {
   const isInitialSetupUnlock = employeesList.length === 0 && pin === "1234";
 
   if (matchedEmp || isInitialSetupUnlock) {
+    sessionStorage.setItem("erp_manual_login_active", "true");
     const role = matchedEmp ? (matchedEmp.systemRole || matchedEmp.role?.toLowerCase() || "cashier") : "owner";
     const perms = matchedEmp ? matchedEmp.permissions : null;
     const staffName = matchedEmp ? matchedEmp.name : "Admin";
@@ -349,6 +356,7 @@ export async function handleLoginSubmit(ev) {
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...`;
     }
+    sessionStorage.setItem("erp_manual_login_active", "true");
     const userCred = await signInWithEmailAndPassword(authInstance, emailVal, passVal);
     
     if (userCred.user) {
@@ -356,6 +364,7 @@ export async function handleLoginSubmit(ev) {
       localStorage.setItem("terminal_auth_password", passVal);
     }
   } catch (err) {
+    sessionStorage.removeItem("erp_manual_login_active");
     let errDesc = "Login දෝෂයකි: Email හෝ Password වැරදිය.";
     if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
       errDesc = "Email ලිපිනය හෝ Password අංකය වැරදිය. කරුණාකර නැවත පරීක්ෂා කරන්න.";
@@ -775,6 +784,11 @@ onAuthStateChanged(authInstance, async (activeUser) => {
   }
 
   if (activeUser) {
+    if (!sessionStorage.getItem("erp_manual_login_active")) {
+      await signOut(authInstance);
+      return;
+    }
+
     try {
       let snap = await get(ref(dbInstance, `users/${activeUser.uid}`));
       let attempts = 0;
@@ -852,20 +866,18 @@ onAuthStateChanged(authInstance, async (activeUser) => {
       }
     }
   } else {
-    if (localStorage.getItem("pairedHotelTenantId")) {
-      switchAuthMode("offline");
-      if (navigator.onLine) {
-        triggerBackgroundTerminalAuth();
-      }
-    } else {
-      setCurrentTenant(null);
-      currentStaffPermissions = null;
-      clearAllFirebaseStreams();
-      document.getElementById("authScreen")?.classList.remove("hidden");
-      document.getElementById("mainApp")?.classList.add("hidden");
-      Payroll.stopKioskCameraStream();
-      updateDeviceTerminalBadgeUI();
-    }
+    setCurrentTenant(null);
+    currentStaffPermissions = null;
+    clearAllFirebaseStreams();
+    document.getElementById("authScreen")?.classList.remove("hidden");
+    document.getElementById("mainApp")?.classList.add("hidden");
+    Payroll.stopKioskCameraStream();
+    updateDeviceTerminalBadgeUI();
+    const emailIn = document.getElementById("loginEmail");
+    const passIn = document.getElementById("loginPassword");
+    if (emailIn) emailIn.value = "";
+    if (passIn) passIn.value = "";
+    switchAuthMode("online");
   }
 });
 
@@ -881,7 +893,7 @@ setInterval(() => {
 
 window.addEventListener("online", () => {
   showLiveToast("🌐 Internet Connected", "සම්බන්ධතාවය යථා තත්ත්වයට පත් විය. Cloud Sync වෙමින් පවතී...", "info", "fa-wifi");
-  if (!authInstance.currentUser) {
+  if (!authInstance.currentUser && currentTenant) {
     triggerBackgroundTerminalAuth();
   } else if (currentTenant) {
     POS.syncOfflineInvoicesToCloud();
@@ -898,10 +910,11 @@ window.lockTerminal = function() {
   showLiveToast("🔒 Terminal Locked", "කවුන්ටරය අගුළු වැටිණි. ඊළඟ Cashier හට PIN එකෙන් ඇතුළු විය හැක.", "info", "fa-lock");
 };
 
-window.logout = function() {
+window.logout = async function() {
   const confirmFull = confirm("⚠️ අවධානයට:\n\nඔබට මෙම පරිගණකය හෝටල් ගිණුමෙන් සම්පූර්ණයෙන්ම ඉවත් කර (Sign Out) වීමට අවශ්‍යද?\n\n(සාමාන්‍ය Cashier මාරුවකට හෝ තාවකාලිකව වැසීමට නම් 'Cancel' ඔබා Lock Terminal භාවිත කරන්න)");
   
   if (confirmFull) {
+    sessionStorage.removeItem("erp_manual_login_active");
     clearAllFirebaseStreams();
     if (Payroll && Payroll.stopKioskCameraStream) {
       Payroll.stopKioskCameraStream();
@@ -912,9 +925,11 @@ window.logout = function() {
     localStorage.removeItem("terminal_auth_email");
     localStorage.removeItem("terminal_auth_password");
 
-    signOut(authInstance).catch(() => {
-      window.location.reload();
-    });
+    try {
+      await signOut(authInstance);
+    } catch (e) {}
+
+    window.location.reload();
   }
 };
 
