@@ -1470,13 +1470,13 @@ export function exportCurrentReportToCSV() {
     rows.forEach(r => {
       const cols = r.querySelectorAll("td");
       if (cols.length >= 6) {
-        csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}"\n`;
+       csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText}","${cols[3].innerText}","${cols[4].innerText}","${cols[5].innerText}"\n`;
       }
     });
     downloadCSVFile(csv, `Waiter_Sales_Performance_${dateStr}.csv`);
 
   } else if (activeReportTabName === "serviceCharge") {
-    // 🛎️ CSV EXPORT FOR SERVICE CHARGE REPORT
+    // 🛎️ CSV : FOR SERVICE CHARGE REPORT
     const list = Object.values(erpState.invoices || {}).filter(inv => inv.status !== "Voided" && parseFloat(inv.scAmount || 0) > 0);
     if (list.length === 0) {
       showLiveToast("ℹ️ Export Notice", "Export කිරීමට දත්ත නොමැත.", "info", "fa-circle-info");
