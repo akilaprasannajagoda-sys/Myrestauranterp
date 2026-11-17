@@ -179,7 +179,7 @@ transition: transform 0.25s ease-in-out, visibility 0.25s ease-in-out;
 transform: translateX(0) !important;
 visibility: visible;
 }
-/* 📱🖥️ NARROWER CART + WIDER TOUCH MENU PANEL (DESKTOP / TOUCH POS) */
+/* 📱🖥️ NARROWER CART + WIDER TOUCH MENU PANEL + 5 COMPACT ITEM COLUMNS */
     @media (min-width: 1024px) {
       #posMainSplit {
         display: flex !important;
@@ -191,8 +191,11 @@ visibility: visible;
         min-width: 0 !important;
       }
       #posCartPanel {
-        width: 325px !important;
+        width: 315px !important;
         flex-shrink: 0 !important;
+      }
+      #posGrid {
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
       }
     }
 </style>
@@ -515,193 +518,200 @@ visibility: visible;
       </div>
     </div>
     
-    <!-- Category Filter Pills Bar (Large Touch Friendly Multi-Row Colorful Tabs) -->
-    <div id="categoryFilters" style="max-height: 165px;" class="flex flex-wrap gap-1.5 overflow-y-auto py-1 pr-1 shrink-0"></div>
+  <!-- Category Filter Pills Bar (Extra Large Touch Friendly Multi-Row Colorful Tabs) -->
+<div id="categoryFilters" style="max-height: 36vh;" class="flex flex-wrap gap-2 overflow-y-auto py-1 pr-1 shrink-0"></div>
     
-    <!-- Independent Scrollable Dishes Grid -->
-    <div id="posGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 pr-1 content-start"></div>
-  </div>
+  <!-- Independent Scrollable Dishes Grid -->
+<div id="posGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 pr-1 content-start"></div>
+</div>
+
+<!-- RIGHT COLUMN: TOUCH-FRIENDLY CART & CHECKOUT ENGINE -->
+<div id="posCartPanel" class="w-full bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 flex flex-col h-full min-h-0 overflow-hidden justify-between">
   
-  <!-- RIGHT COLUMN: COMPACT CART & FIXED CHECKOUT ENGINE -->
-  <div id="posCartPanel" class="w-full bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex flex-col h-full min-h-0 overflow-hidden justify-between">
-        
-        <!-- Top Cart Header & Customer CRM -->
-        <div class="shrink-0 space-y-0.5">
-          <div class="flex justify-between items-center border-b border-gray-100 pb-1">
-            <div>
-              <h3 id="currentBillTitle" class="font-black text-gray-800 text-xs flex items-center gap-1">
-                <i class="fa-solid fa-receipt text-blue-600"></i> Bill #1
-              </h3>
-              <span id="currentBillSubtitle" class="text-[9px] text-gray-400 font-bold block leading-none">Dine-in (Table: N/A)</span>
-            </div>
-            <div class="flex items-center gap-1">
-              <button type="button" onclick="openSplitBillModal()" title="Split Bill" class="text-[9px] bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold px-1.5 py-0.5 rounded border border-purple-200 transition cursor-pointer">
-                <i class="fa-solid fa-scissors mr-0.5"></i> Split
-              </button>
-              <button type="button" onclick="clearCurrentCart()" class="text-[9px] text-red-500 font-bold hover:underline px-1 cursor-pointer">Clear</button>
-            </div>
-          </div>
-          
-          <!-- Compact Customer CRM Bar -->
-          <div class="bg-gray-50 p-1 rounded-lg border border-gray-200 space-y-0.5 text-xs">
-            <div class="relative">
-              <input type="text" id="posCustomerSearchInput" oninput="onPosCustomerSearch(this)" placeholder="🔍 Search customer (Phone/Name)..." class="w-full p-0.5 pl-2 border border-gray-300 rounded text-[10px] font-bold bg-white outline-none">
-              <div id="posCustomerSearchResults" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-32 overflow-y-auto"></div>
-            </div>
-            
-            <!-- Selected Customer Badge -->
-            <div id="posSelectedCustomerBadge" class="hidden p-0.5 bg-blue-50 border border-blue-200 rounded flex items-center justify-between">
-              <input type="hidden" id="posAttachedCustomerId">
-              <div class="truncate text-[9.5px]">
-                <span id="posSelectedCustomerName" class="font-extrabold text-blue-900 block truncate">Customer</span>
-                <span id="posSelectedCustomerPoints" class="text-[8.5px] font-black text-purple-700 block">⭐ 0 Points Available</span>
-              </div>
-              <button type="button" onclick="removeCustomerFromCurrentBill()" class="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"><i class="fa-solid fa-xmark text-xs"></i></button>
-            </div>
-            
-            <!-- Loyalty Points Redemption -->
-            <div id="posLoyaltyRedeemBox" class="hidden flex items-center justify-between pt-0.5 border-t border-gray-200 text-[9px]">
-              <span class="font-bold text-purple-900">Redeem Points:</span>
-              <div class="flex items-center gap-1">
-                <input type="number" id="cartLoyaltyRedeemInput" min="0" placeholder="0" oninput="recalculateCartTotalsUI()" class="w-12 p-0.5 border border-purple-300 rounded text-center text-[10px] font-bold text-purple-700 outline-none bg-white font-mono">
-                <span id="cartLoyaltyDiscountVal" class="font-black text-purple-700">-Rs. 0.00</span>
-              </div>
-            </div>
-          </div>
+  <!-- Top Cart Header & Customer CRM -->
+  <div class="shrink-0 space-y-1.5">
+    <div class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+      <div>
+        <h3 id="currentBillTitle" class="font-black text-gray-800 text-sm flex items-center gap-1.5">
+          <i class="fa-solid fa-receipt text-blue-600"></i> Bill #1
+        </h3>
+        <span id="currentBillSubtitle" class="text-[10px] text-gray-500 font-bold block leading-tight">Dine-in (Table: N/A)</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button type="button" onclick="openSplitBillModal()" title="Split Bill" class="text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 font-extrabold px-2.5 py-1.5 rounded-lg border border-purple-200 transition cursor-pointer active:scale-95">
+          <i class="fa-solid fa-scissors mr-1"></i> Split
+        </button>
+        <button type="button" onclick="clearCurrentCart()" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 font-extrabold px-2.5 py-1.5 rounded-lg border border-red-200 transition cursor-pointer active:scale-95">
+          Clear
+        </button>
+      </div>
+    </div>
+    
+    <!-- Customer CRM Bar -->
+    <div class="bg-gray-50 p-1.5 rounded-xl border border-gray-200 space-y-1 text-xs">
+      <div class="relative">
+        <input type="text" id="posCustomerSearchInput" oninput="onPosCustomerSearch(this)" placeholder="🔍 Search customer (Phone/Name)..." class="w-full py-1.5 px-2.5 border border-gray-300 rounded-lg text-xs font-bold bg-white outline-none">
+        <div id="posCustomerSearchResults" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-32 overflow-y-auto"></div>
+      </div>
+      
+      <!-- Selected Customer Badge -->
+      <div id="posSelectedCustomerBadge" class="hidden p-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+        <input type="hidden" id="posAttachedCustomerId">
+        <div class="truncate text-[10.5px]">
+          <span id="posSelectedCustomerName" class="font-extrabold text-blue-900 block truncate">Customer</span>
+          <span id="posSelectedCustomerPoints" class="text-[9.5px] font-black text-purple-700 block">⭐ 0 Points Available</span>
         </div>
-        
-        <!-- INDEPENDENT SCROLLABLE CART ITEMS LIST -->
-        <div id="cartItems" class="flex-1 overflow-y-auto space-y-1 py-1 my-0.5 border-y border-gray-100 text-xs min-h-[45px]">
-          <p class="text-center text-gray-400 py-2 text-[10.5px]">Cart එක හිස්ය. කෑම වර්ගයක් තෝරන්න.</p>
-        </div>
-        
-        <!-- FIXED BOTTOM CHECKOUT & PAYMENT CONTROLS (ALWAYS 100% VISIBLE ON SCREEN) -->
-        <div class="shrink-0 space-y-1 text-xs pt-0.5">
-          
-          <!-- Totals & Breakdown -->
-          <div class="space-y-0.5 text-gray-600 text-[10px] leading-tight">
-            <div class="flex justify-between items-center">
-              <span>Subtotal:</span>
-              <span id="cartSubtotal" class="font-bold text-gray-800">Rs. 0.00</span>
-            </div>
-            <div id="cartDiscountRow" class="hidden flex justify-between text-purple-700 font-bold">
-              <span>Discount:</span>
-              <span id="cartDiscountTotalVal">-Rs. 0.00</span>
-            </div>
-            <div id="cartLoyaltyRow" class="hidden flex justify-between text-purple-700 font-bold">
-              <span>Loyalty Points:</span>
-              <span id="cartLoyaltyTotalVal">-Rs. 0.00</span>
-            </div>
-            <div id="cartServiceChargeRow" class="hidden flex justify-between">
-              <span id="cartServiceChargeLabel">Service Charge:</span>
-              <span id="cartServiceChargeVal" class="font-bold text-gray-800">Rs. 0.00</span>
-            </div>
-            <div id="cartVatRow" class="hidden flex justify-between">
-              <span id="cartVatLabel">VAT:</span>
-              <span id="cartVatVal" class="font-bold text-gray-800">Rs. 0.00</span>
-            </div>
-            <div id="cartCslRow" class="hidden flex justify-between">
-              <span id="cartCslLabel">SSCL:</span>
-              <span id="cartCslVal" class="font-bold text-gray-800">Rs. 0.00</span>
-            </div>
-            
-            <!-- NET TOTAL -->
-            <div class="flex justify-between items-center text-xs font-black text-gray-900 pt-0.5 border-t border-gray-200">
-              <span class="text-[9.5px] uppercase font-bold text-gray-600">NET TOTAL:</span>
-              <span id="cartTotal" class="text-sm font-black text-blue-600 font-mono">Rs. 0.00</span>
-            </div>
-          </div>
-          
-          <!-- Kitchen & Pre-Bill Row -->
-          <div class="grid grid-cols-2 gap-1">
-            <button onclick="sendOrderToKitchen(false)" id="btnSendKitchen" disabled class="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-1 rounded text-[10px] shadow-2xs transition flex justify-center items-center gap-1 cursor-pointer">
-              <i class="fa-solid fa-bell-concierge"></i> Send Kitchen
-            </button>
-            <button onclick="printPreBillEstimate()" id="btnPrePrintBill" disabled class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-1 rounded text-[10px] shadow-2xs transition flex justify-center items-center gap-1 cursor-pointer">
-              <i class="fa-solid fa-file-lines"></i> Pre-Bill
-            </button>
-          </div>
-          
-          <!-- Payment Methods Tabs (5 Tabs) -->
-          <div class="grid grid-cols-5 gap-1">
-            <button type="button" onclick="selectPayMethod('cash')" id="payTab-cash" class="pay-method-tab py-0.5 rounded border border-blue-600 bg-blue-50 text-blue-700 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-              Cash
-            </button>
-            <button type="button" onclick="selectPayMethod('card')" id="payTab-card" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-              Card
-            </button>
-            <button type="button" onclick="selectPayMethod('transfer')" id="payTab-transfer" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-              Transfer
-            </button>
-            <button type="button" onclick="selectPayMethod('split')" id="payTab-split" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-              Split
-            </button>
-            <button type="button" onclick="selectPayMethod('credit')" id="payTab-credit" class="pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer">
-              Credit
-            </button>
-          </div>
-          
-          <!-- Compact Payment Input Boxes -->
-          <div id="paymentDetailsBox" class="bg-gray-50 p-1 rounded-lg border border-gray-200 space-y-0.5">
-            <div id="payFields-cash" class="space-y-0.5">
-              <div class="flex items-center justify-between gap-1">
-                <span class="text-[9px] text-gray-600 font-bold whitespace-nowrap">Cash Received:</span>
-                <input type="number" step="10" id="cashTendered" placeholder="0.00" oninput="calculateCashChange()" class="w-24 p-0.5 border border-gray-300 rounded text-xs font-bold text-right outline-none bg-white font-mono">
-              </div>
-              
-              <div class="grid grid-cols-4 gap-1">
-                <button type="button" onclick="setQuickCashAmount(500)" class="py-0.5 bg-white border border-gray-300 rounded text-[8.5px] font-black text-gray-800 shadow-2xs cursor-pointer">500</button>
-                <button type="button" onclick="setQuickCashAmount(1000)" class="py-0.5 bg-white border border-gray-300 rounded text-[8.5px] font-black text-gray-800 shadow-2xs cursor-pointer">1,000</button>
-                <button type="button" onclick="setQuickCashAmount(5000)" class="py-0.5 bg-white border border-gray-300 rounded text-[8.5px] font-black text-gray-800 shadow-2xs cursor-pointer">5,000</button>
-                <button type="button" onclick="setQuickCashAmount('exact')" class="py-0.5 bg-green-50 border border-green-300 text-green-800 rounded text-[8.5px] font-black shadow-2xs cursor-pointer">Exact</button>
-              </div>
-              
-              <div class="flex items-center justify-between text-[10px] pt-0.5 border-t border-gray-200 leading-none">
-                <span class="text-gray-500 font-semibold">Change (ඉතිරි):</span>
-                <span id="cashChangeVal" class="font-black text-green-600">Rs. 0.00</span>
-              </div>
-            </div>
-            
-            <div id="payFields-card" class="hidden grid grid-cols-2 gap-1">
-              <select id="cardType" class="p-0.5 border rounded text-[10px] bg-white font-bold outline-none">
-                <option value="Visa">Visa</option>
-                <option value="MasterCard">MasterCard</option>
-                <option value="AMEX">AMEX</option>
-                <option value="FriMi/Genie">FriMi / Genie</option>
-                <option value="OtherCard">Other Card</option>
-              </select>
-              <input type="text" maxlength="4" id="cardLast4" placeholder="Last 4 Digits" class="p-0.5 border rounded text-[10px] font-mono font-bold text-center bg-white outline-none">
-            </div>
-            
-            <div id="payFields-transfer" class="hidden">
-              <input type="text" id="transferRef" placeholder="Transaction / Ref ID" class="w-full p-0.5 border rounded text-[10px] font-mono font-bold bg-white outline-none">
-            </div>
-            
-            <div id="payFields-split" class="hidden grid grid-cols-2 gap-1 text-[9px]">
-              <input type="number" step="10" id="splitPayCash" placeholder="Cash Rs." oninput="calculateSplitPaymentBalance()" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
-              <input type="number" step="10" id="splitPayCard" placeholder="Card Rs." oninput="calculateSplitPaymentBalance()" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
-            </div>
-            
-            <div id="payFields-credit" class="hidden grid grid-cols-2 gap-1">
-              <input type="text" id="creditCustomerName" placeholder="Name" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
-              <input type="text" id="creditCustomerPhone" placeholder="Phone" class="p-0.5 border rounded text-[10px] font-bold bg-white outline-none">
-            </div>
-          </div>
-          
-          <!-- Final Action Buttons: Print Bill & WhatsApp Bill (NEVER CUT OFF) -->
-          <div class="grid grid-cols-2 gap-1 pt-0.5">
-            <button type="button" onclick="processOrder(false)" id="btnCheckout" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2 rounded-xl text-xs shadow-md transition flex justify-center items-center gap-1 cursor-pointer">
-              <i class="fa-solid fa-print"></i> Print Bill
-            </button>
-            <button type="button" onclick="processOrder(true)" id="btnWhatsAppCheckout" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2 rounded-xl text-xs shadow-md transition flex justify-center items-center gap-1 cursor-pointer">
-              <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
-            </button>
-          </div>
+        <button type="button" onclick="removeCustomerFromCurrentBill()" class="text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+      </div>
+      
+      <!-- Loyalty Points Redemption -->
+      <div id="posLoyaltyRedeemBox" class="hidden flex items-center justify-between pt-1 border-t border-gray-200 text-[10px]">
+        <span class="font-bold text-purple-900">Redeem Points:</span>
+        <div class="flex items-center gap-1">
+          <input type="number" id="cartLoyaltyRedeemInput" min="0" placeholder="0" oninput="recalculateCartTotalsUI()" class="w-16 p-1 border border-purple-300 rounded-lg text-center text-xs font-bold text-purple-700 outline-none bg-white font-mono">
+          <span id="cartLoyaltyDiscountVal" class="font-black text-purple-700">-Rs. 0.00</span>
         </div>
       </div>
     </div>
   </div>
+  
+  <!-- INDEPENDENT SCROLLABLE CART ITEMS LIST -->
+  <div id="cartItems" class="flex-1 overflow-y-auto space-y-1.5 py-1.5 my-1 border-y border-gray-100 text-xs min-h-[45px]">
+    <p class="text-center text-gray-400 py-4 text-xs">Cart එක හිස්ය. කෑම වර්ගයක් තෝරන්න.</p>
+  </div>
+  
+  <!-- FIXED BOTTOM TOUCH CHECKOUT & PAYMENT CONTROLS -->
+  <div class="shrink-0 space-y-1.5 text-xs pt-0.5">
+    
+    <!-- Totals & Breakdown -->
+    <div class="space-y-0.5 text-gray-600 text-[11px] leading-tight">
+      <div class="flex justify-between items-center">
+        <span>Subtotal:</span>
+        <span id="cartSubtotal" class="font-bold text-gray-800">Rs. 0.00</span>
+      </div>
+      <div id="cartDiscountRow" class="hidden flex justify-between text-purple-700 font-bold">
+        <span>Discount:</span>
+        <span id="cartDiscountTotalVal">-Rs. 0.00</span>
+      </div>
+      <div id="cartLoyaltyRow" class="hidden flex justify-between text-purple-700 font-bold">
+        <span>Loyalty Points:</span>
+        <span id="cartLoyaltyTotalVal">-Rs. 0.00</span>
+      </div>
+      <div id="cartServiceChargeRow" class="hidden flex justify-between">
+        <span id="cartServiceChargeLabel">Service Charge:</span>
+        <span id="cartServiceChargeVal" class="font-bold text-gray-800">Rs. 0.00</span>
+      </div>
+      <div id="cartVatRow" class="hidden flex justify-between">
+        <span id="cartVatLabel">VAT:</span>
+        <span id="cartVatVal" class="font-bold text-gray-800">Rs. 0.00</span>
+      </div>
+      <div id="cartCslRow" class="hidden flex justify-between">
+        <span id="cartCslLabel">SSCL:</span>
+        <span id="cartCslVal" class="font-bold text-gray-800">Rs. 0.00</span>
+      </div>
+      
+      <!-- NET TOTAL -->
+      <div class="flex justify-between items-center text-sm font-black text-gray-900 pt-1 border-t border-gray-200">
+        <span class="text-xs uppercase font-extrabold text-gray-700">NET TOTAL:</span>
+        <span id="cartTotal" class="text-base font-black text-blue-600 font-mono">Rs. 0.00</span>
+      </div>
+    </div>
+    
+    <!-- Kitchen & Pre-Bill Row (Touch Friendly) -->
+    <div class="grid grid-cols-2 gap-1.5">
+      <button onclick="sendOrderToKitchen(false)" id="btnSendKitchen" disabled class="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2.5 rounded-xl text-xs shadow-sm transition flex justify-center items-center gap-1.5 cursor-pointer active:scale-95">
+        <i class="fa-solid fa-bell-concierge"></i> Send Kitchen
+      </button>
+      <button onclick="printPreBillEstimate()" id="btnPrePrintBill" disabled class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-2.5 rounded-xl text-xs shadow-sm transition flex justify-center items-center gap-1.5 cursor-pointer active:scale-95">
+        <i class="fa-solid fa-file-lines"></i> Pre-Bill
+      </button>
+    </div>
+    
+    <!-- Payment Methods Tabs (5 Large Touch Tabs) -->
+    <div class="grid grid-cols-5 gap-1">
+      <button type="button" onclick="selectPayMethod('cash')" id="payTab-cash" class="pay-method-tab py-2 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-700 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95">
+        Cash
+      </button>
+      <button type="button" onclick="selectPayMethod('card')" id="payTab-card" class="pay-method-tab py-2 rounded-lg border-2 border-gray-200 bg-gray-50 text-gray-600 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95">
+        Card
+      </button>
+      <button type="button" onclick="selectPayMethod('transfer')" id="payTab-transfer" class="pay-method-tab py-2 rounded-lg border-2 border-gray-200 bg-gray-50 text-gray-600 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95">
+        Transfer
+      </button>
+      <button type="button" onclick="selectPayMethod('split')" id="payTab-split" class="pay-method-tab py-2 rounded-lg border-2 border-gray-200 bg-gray-50 text-gray-600 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95">
+        Split
+      </button>
+      <button type="button" onclick="selectPayMethod('credit')" id="payTab-credit" class="pay-method-tab py-2 rounded-lg border-2 border-gray-200 bg-gray-50 text-gray-600 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95">
+        Credit
+      </button>
+    </div>
+    
+    <!-- Touch Payment Input Boxes -->
+    <div id="paymentDetailsBox" class="bg-gray-50 p-2 rounded-xl border border-gray-200 space-y-1.5">
+      <div id="payFields-cash" class="space-y-1.5">
+        <div class="flex items-center justify-between gap-1.5">
+          <span class="text-[11px] text-gray-700 font-extrabold whitespace-nowrap">Cash Received:</span>
+          <div class="flex items-center gap-1">
+            <input type="number" step="10" id="cashTendered" placeholder="0.00" oninput="calculateCashChange()" class="w-24 py-1.5 px-2 border-2 border-gray-300 rounded-lg text-sm font-black text-right outline-none bg-white font-mono">
+            <button type="button" onclick="openTouchNumpad('cashTendered', 'Cash Received (Rs.)')" title="Open Touch Keypad" class="py-1.5 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer active:scale-95">
+              <i class="fa-solid fa-calculator"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-4 gap-1.5">
+          <button type="button" onclick="setQuickCashAmount(500)" class="py-2 bg-white hover:bg-gray-100 border-2 border-gray-300 rounded-lg text-xs font-black text-gray-800 shadow-2xs cursor-pointer active:scale-95">500</button>
+          <button type="button" onclick="setQuickCashAmount(1000)" class="py-2 bg-white hover:bg-gray-100 border-2 border-gray-300 rounded-lg text-xs font-black text-gray-800 shadow-2xs cursor-pointer active:scale-95">1,000</button>
+          <button type="button" onclick="setQuickCashAmount(5000)" class="py-2 bg-white hover:bg-gray-100 border-2 border-gray-300 rounded-lg text-xs font-black text-gray-800 shadow-2xs cursor-pointer active:scale-95">5,000</button>
+          <button type="button" onclick="setQuickCashAmount('exact')" class="py-2 bg-green-100 hover:bg-green-200 border-2 border-green-400 text-green-900 rounded-lg text-xs font-black shadow-2xs cursor-pointer active:scale-95">Exact</button>
+        </div>
+        
+        <div class="flex items-center justify-between text-xs pt-1 border-t border-gray-200 leading-none">
+          <span class="text-gray-600 font-bold">Change (ඉතිරි):</span>
+          <span id="cashChangeVal" class="font-black text-green-600 text-sm">Rs. 0.00</span>
+        </div>
+      </div>
+      
+      <div id="payFields-card" class="hidden grid grid-cols-2 gap-1.5">
+        <select id="cardType" class="p-2 border rounded-lg text-xs bg-white font-bold outline-none">
+          <option value="Visa">Visa</option>
+          <option value="MasterCard">MasterCard</option>
+          <option value="AMEX">AMEX</option>
+          <option value="FriMi/Genie">FriMi / Genie</option>
+          <option value="OtherCard">Other Card</option>
+        </select>
+        <input type="text" maxlength="4" id="cardLast4" placeholder="Last 4 Digits" class="p-2 border rounded-lg text-xs font-mono font-bold text-center bg-white outline-none">
+      </div>
+      
+      <div id="payFields-transfer" class="hidden">
+        <input type="text" id="transferRef" placeholder="Transaction / Ref ID" class="w-full p-2 border rounded-lg text-xs font-mono font-bold bg-white outline-none">
+      </div>
+      
+      <div id="payFields-split" class="hidden grid grid-cols-2 gap-1.5 text-xs">
+        <input type="number" step="10" id="splitPayCash" placeholder="Cash Rs." oninput="calculateSplitPaymentBalance()" class="p-2 border rounded-lg text-xs font-bold bg-white outline-none">
+        <input type="number" step="10" id="splitPayCard" placeholder="Card Rs." oninput="calculateSplitPaymentBalance()" class="p-2 border rounded-lg text-xs font-bold bg-white outline-none">
+      </div>
+      
+      <div id="payFields-credit" class="hidden grid grid-cols-2 gap-1.5">
+        <input type="text" id="creditCustomerName" placeholder="Name" class="p-2 border rounded-lg text-xs font-bold bg-white outline-none">
+        <input type="text" id="creditCustomerPhone" placeholder="Phone" class="p-2 border rounded-lg text-xs font-bold bg-white outline-none">
+      </div>
+    </div>
+    
+    <!-- Final Action Buttons: Print Bill & WhatsApp Bill -->
+    <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+      <button type="button" onclick="processOrder(false)" id="btnCheckout" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-3 rounded-xl text-xs sm:text-sm shadow-md transition flex justify-center items-center gap-1.5 cursor-pointer active:scale-95">
+        <i class="fa-solid fa-print"></i> Print Bill
+      </button>
+      <button type="button" onclick="processOrder(true)" id="btnWhatsAppCheckout" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-3 rounded-xl text-xs sm:text-sm shadow-md transition flex justify-center items-center gap-1.5 cursor-pointer active:scale-95">
+        <i class="fa-brands fa-whatsapp text-base"></i> WhatsApp
+      </button>
+    </div>
+  </div>
+</div>
 
+</div>
+</div>
       <!-- VIEW 2: TABLE MANAGEMENT ENGINE (ARCHITECTURAL FLOOR PLAN) -->
 <div id="viewTables" class="hidden space-y-4 max-w-7xl mx-auto">
   <div class="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -4320,9 +4330,38 @@ visibility: visible;
       
       <input type="password" id="unlockScreenPinInput" maxlength="6" placeholder="****" onkeydown="if(event.key === 'Enter') submitCounterUnlock()" class="w-full text-center text-3xl font-mono font-black tracking-widest p-3 bg-gray-900 border-2 border-blue-500 rounded-2xl outline-none text-white">
       
-      <button type="button" onclick="submitCounterUnlock()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
+<button type="button" onclick="submitCounterUnlock()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
         <i class="fa-solid fa-unlock"></i> Unlock Terminal
       </button>
+    </div>
+  </div>
+
+  <!-- TOUCH ON-SCREEN NUMPAD MODAL (KEYBOARDLESS POS) -->
+  <div id="touchNumpadModal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-3xl w-full max-w-xs shadow-2xl border border-gray-200 p-5 space-y-3">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-2">
+        <h4 id="touchNumpadTitle" class="font-black text-gray-800 text-sm">Enter Amount</h4>
+        <button type="button" onclick="closeTouchNumpad()" class="text-gray-400 hover:text-gray-700 p-1 text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <input type="text" id="touchNumpadDisplay" readonly class="w-full p-3 border-2 border-blue-400 rounded-2xl text-right text-2xl font-black font-mono bg-blue-50 text-blue-900 outline-none">
+      <div class="grid grid-cols-3 gap-2">
+        <button type="button" onclick="touchNumpadPress('1')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">1</button>
+        <button type="button" onclick="touchNumpadPress('2')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">2</button>
+        <button type="button" onclick="touchNumpadPress('3')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">3</button>
+        <button type="button" onclick="touchNumpadPress('4')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">4</button>
+        <button type="button" onclick="touchNumpadPress('5')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">5</button>
+        <button type="button" onclick="touchNumpadPress('6')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">6</button>
+        <button type="button" onclick="touchNumpadPress('7')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">7</button>
+        <button type="button" onclick="touchNumpadPress('8')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">8</button>
+        <button type="button" onclick="touchNumpadPress('9')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">9</button>
+        <button type="button" onclick="touchNumpadClear()" class="p-3.5 text-sm font-black bg-red-100 text-red-700 hover:bg-red-200 rounded-xl shadow-xs cursor-pointer active:scale-95">Clear</button>
+        <button type="button" onclick="touchNumpadPress('0')" class="p-3.5 text-xl font-black bg-gray-100 hover:bg-gray-200 rounded-xl shadow-xs cursor-pointer active:scale-95">0</button>
+        <button type="button" onclick="touchNumpadBackspace()" class="p-3.5 text-lg font-black bg-gray-200 text-gray-700 hover:bg-gray-300 rounded-xl shadow-xs cursor-pointer active:scale-95"><i class="fa-solid fa-delete-left"></i></button>
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button type="button" onclick="touchNumpadPress('00')" class="py-3 bg-gray-100 hover:bg-gray-200 font-black text-base rounded-xl cursor-pointer active:scale-95">00</button>
+        <button type="button" onclick="confirmTouchNumpad()" class="py-3 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded-xl shadow-md cursor-pointer active:scale-95">OK (Confirm)</button>
+      </div>
     </div>
   </div>
 <script>
