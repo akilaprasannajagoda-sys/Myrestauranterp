@@ -901,6 +901,7 @@ window.addEventListener("online", () => {
 });
 
 window.lockTerminal = function() {
+  closeSidebarDrawer();
   if (Payroll && Payroll.stopKioskCameraStream) {
     Payroll.stopKioskCameraStream();
   }
@@ -1426,15 +1427,38 @@ export function switchView(viewName) {
     }
   }
 
-  const sidebarElem = document.getElementById("sidebar");
-  if (sidebarElem && !sidebarElem.classList.contains("hidden") && window.innerWidth < 768) {
-    sidebarElem.classList.add("hidden");
+ closeSidebarDrawer();
+}
+
+export function openSidebarDrawer() {
+  document.getElementById("sidebar")?.classList.add("sidebar-open");
+  document.getElementById("sidebarBackdrop")?.classList.remove("hidden");
+}
+
+export function closeSidebarDrawer() {
+  document.getElementById("sidebar")?.classList.remove("sidebar-open");
+  document.getElementById("sidebarBackdrop")?.classList.add("hidden");
+}
+
+export function toggleSidebar() {
+  const sb = document.getElementById("sidebar");
+  if (!sb) return;
+  if (sb.classList.contains("sidebar-open")) {
+    closeSidebarDrawer();
+  } else {
+    openSidebarDrawer();
   }
 }
 
-window.switchView = switchView;
-window.toggleMobileSidebar = () => document.getElementById("sidebar")?.classList.toggle("hidden");
+document.querySelectorAll("#sidebar nav button").forEach(btn => {
+  btn.addEventListener("click", () => closeSidebarDrawer());
+});
 
+window.switchView = switchView;
+window.openSidebarDrawer = openSidebarDrawer;
+window.closeSidebarDrawer = closeSidebarDrawer;
+window.toggleSidebar = toggleSidebar;
+window.toggleMobileSidebar = toggleSidebar;
 function startLiveClockWidget() {
   setInterval(() => {
     const now = new Date();
