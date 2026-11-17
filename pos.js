@@ -492,24 +492,54 @@ export function filterPosByCategory(categoryName) {
   renderPOSDishesGrid();
 }
 
+const POS_COLOR_PALETTE = [
+  { solidBg: "#2563eb", softBg: "#eff6ff", border: "#93c5fd", text: "#1e3a8a", badgeBg: "#dbeafe", badgeText: "#1d4ed8" }, // Blue
+  { solidBg: "#d97706", softBg: "#fffbeb", border: "#fcd34d", text: "#78350f", badgeBg: "#fef3c7", badgeText: "#b45309" }, // Amber
+  { solidBg: "#059669", softBg: "#ecfdf5", border: "#6ee7b7", text: "#064e3b", badgeBg: "#d1fae5", badgeText: "#047857" }, // Emerald
+  { solidBg: "#7c3aed", softBg: "#f5f3ff", border: "#c4b5fd", text: "#4c1d95", badgeBg: "#ede9fe", badgeText: "#6d28d9" }, // Purple
+  { solidBg: "#e11d48", softBg: "#fff1f2", border: "#fda4af", text: "#881337", badgeBg: "#ffe4e6", badgeText: "#be123c" }, // Rose
+  { solidBg: "#0d9488", softBg: "#f0fdfa", border: "#5eead4", text: "#134e4a", badgeBg: "#ccfbf1", badgeText: "#0f766e" }, // Teal
+  { solidBg: "#4f46e5", softBg: "#eef2ff", border: "#a5b4fc", text: "#312e81", badgeBg: "#e0e7ff", badgeText: "#4338ca" }, // Indigo
+  { solidBg: "#ea580c", softBg: "#fff7ed", border: "#fdba74", text: "#7c2d12", badgeBg: "#ffedd5", badgeText: "#c2410c" } // Orange
+];
+
+function getCategoryColorTheme(categoryName) {
+  const cleanName = (categoryName || "").toLowerCase().trim();
+  const cats = Object.values(erpState.dishCategories || {});
+  const idx = cats.findIndex(c => (c.name || "").toLowerCase().trim() === cleanName);
+  if (idx >= 0) {
+    return POS_COLOR_PALETTE[idx % POS_COLOR_PALETTE.length];
+  }
+  let hash = 0;
+  for (let i = 0; i < cleanName.length; i++) {
+    hash = cleanName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return POS_COLOR_PALETTE[Math.abs(hash) % POS_COLOR_PALETTE.length];
+}
+
 export function renderDishCategoriesFilterUI() {
   const container = document.getElementById("categoryFilters");
   if (!container) return;
   container.innerHTML = "";
-
+  
+  const isAllActive = currentCategoryFilter === "ALL";
   const allButton = document.createElement("button");
-  allButton.className = `px-2.5 py-1 rounded-xl whitespace-nowrap font-bold transition cursor-pointer text-xs ${
-    currentCategoryFilter === "ALL" ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200"
-  }`;
+  allButton.className = "px-4 py-2.5 rounded-xl whitespace-nowrap font-black transition cursor-pointer text-xs sm:text-sm active:scale-95";
+  allButton.style.cssText = isAllActive ?
+    "background-color: #0f172a; color: #ffffff; border: 2px solid #0f172a; box-shadow: 0 4px 10px rgba(0,0,0,0.2);" :
+    "background-color: #ffffff; color: #1e293b; border: 2px solid #cbd5e1;";
   allButton.innerText = "All Items";
   allButton.onclick = () => filterPosByCategory("ALL");
   container.appendChild(allButton);
-
+  
   Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
+    const theme = getCategoryColorTheme(cat.name);
+    const isActive = currentCategoryFilter === cat.name;
     const b = document.createElement("button");
-    b.className = `px-2.5 py-1 rounded-xl whitespace-nowrap font-bold transition cursor-pointer text-xs ${
-      currentCategoryFilter === cat.name ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200"
-    }`;
+    b.className = "px-4 py-2.5 rounded-xl whitespace-nowrap font-black transition cursor-pointer text-xs sm:text-sm active:scale-95";
+    b.style.cssText = isActive ?
+      `background-color: ${theme.solidBg}; color: #ffffff; border: 2px solid #0f172a; box-shadow: 0 4px 10px rgba(0,0,0,0.2);` :
+      `background-color: ${theme.badgeBg}; color: ${theme.text}; border: 2px solid ${theme.border};`;
     b.innerText = cat.name;
     b.onclick = () => filterPosByCategory(cat.name);
     container.appendChild(b);
@@ -593,26 +623,31 @@ export function renderPOSDishesGrid() {
     const station = getDishStationTarget(dishId);
     const isBar = station === "bar";
 
-    const cardElem = document.createElement("div");
-    cardElem.className = `p-2.5 rounded-2xl border transition select-none flex flex-col justify-between ${
+ const theme = getCategoryColorTheme(dish.category);
+const cardElem = document.createElement("div");
+cardElem.className = `p-3 rounded-2xl transition select-none flex flex-col justify-between ${
       isOut 
-        ? "bg-gray-100 border-red-200 opacity-60 cursor-not-allowed" 
-        : "bg-white border-gray-200 hover:border-blue-500 shadow-sm cursor-pointer active:scale-95"
+        ? "bg-gray-100 border-2 border-red-200 opacity-60 cursor-not-allowed" 
+        : "shadow-sm cursor-pointer active:scale-95"
     }`;
 
-    cardElem.onclick = () => {
-      if (isOut) {
-        showLiveToast("🚫 Out of Stock", `${dish.name} සඳහා අවශ්‍ය ${stockInfo.outMaterialName} තොග අවසන් වී ඇත!`, "warning", "fa-ban");
-        return;
-      }
-      addDishToActiveCart(dishId, dish);
-    };
+if (!isOut) {
+  cardElem.style.cssText = `background-color: ${theme.softBg}; border: 2px solid ${theme.border}; border-left: 5px solid ${theme.solidBg};`;
+}
 
-    cardElem.innerHTML = `
+cardElem.onclick = () => {
+  if (isOut) {
+    showLiveToast("🚫 Out of Stock", `${dish.name} සඳහා අවශ්‍ය ${stockInfo.outMaterialName} තොග අවසන් වී ඇත!`, "warning", "fa-ban");
+    return;
+  }
+  addDishToActiveCart(dishId, dish);
+};
+
+cardElem.innerHTML = `
       <div>
         <div class="flex justify-between items-start gap-1">
-          <span class="text-[9px] ${isBar ? 'bg-purple-100 text-purple-800' : 'bg-blue-50 text-blue-700'} font-bold px-1.5 py-0.2 rounded-md uppercase">
-            ${isBar ? '🍹 Bar' : dish.category || 'Kitchen'}
+          <span style="${isOut ? '' : `background-color: ${theme.badgeBg}; color: ${theme.badgeText};`}" class="text-[9.5px] font-black px-2 py-0.5 rounded-md uppercase">
+            ${isBar ? '🍹 ' + (dish.category || 'Bar') : (dish.category || 'Kitchen')}
           </span>
           ${
             isOut 
@@ -622,11 +657,11 @@ export function renderPOSDishesGrid() {
                 : ''
           }
         </div>
-        <h4 class="font-bold text-xs text-gray-800 mt-1 line-clamp-2 leading-tight">${dish.name}</h4>
+        <h4 class="font-extrabold text-xs sm:text-sm text-gray-900 mt-1.5 line-clamp-2 leading-tight">${dish.name}</h4>
       </div>
-      <div class="mt-2 flex items-center justify-between">
-        <span class="font-extrabold text-xs text-blue-600">Rs. ${parseFloat(dish.price).toFixed(2)}</span>
-        <div class="w-5 h-5 rounded-md ${isOut ? 'bg-gray-300 text-gray-500' : 'bg-blue-50 text-blue-600'} flex items-center justify-center text-[10px]">
+      <div class="mt-2.5 flex items-center justify-between">
+        <span style="${isOut ? '' : `color: ${theme.solidBg};`}" class="font-black text-xs sm:text-sm">Rs. ${parseFloat(dish.price).toFixed(2)}</span>
+        <div style="${isOut ? '' : `background-color: ${theme.solidBg}; color: #ffffff;`}" class="w-6 h-6 rounded-lg ${isOut ? 'bg-gray-300 text-gray-500' : ''} flex items-center justify-center text-[11px] shadow-xs">
           <i class="fa-solid ${isOut ? 'fa-ban' : 'fa-plus'}"></i>
         </div>
       </div>
@@ -959,8 +994,8 @@ export function renderCartItemsUI() {
       const rowElem = document.createElement("div");
       rowElem.className = "p-1.5 rounded-xl bg-gray-50 border border-gray-100 space-y-0.5";
       rowElem.innerHTML = `
-        <div class="flex items-center justify-between">
-          <div class="truncate w-36">
+        <div class="flex items-center justify-between gap-1">
+          <div class="truncate flex-1 min-w-0 pr-1">
             <p class="font-bold text-gray-800 truncate text-[11px]">${item.name}</p>
             <div class="flex items-center gap-1 text-[9.5px]">
               <span class="text-gray-400">Rs. ${item.price.toFixed(2)}</span>
