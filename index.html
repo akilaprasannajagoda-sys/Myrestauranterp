@@ -179,6 +179,22 @@ transition: transform 0.25s ease-in-out, visibility 0.25s ease-in-out;
 transform: translateX(0) !important;
 visibility: visible;
 }
+/* 📱🖥️ NARROWER CART + WIDER TOUCH MENU PANEL (DESKTOP / TOUCH POS) */
+    @media (min-width: 1024px) {
+      #posMainSplit {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 0.5rem !important;
+      }
+      #posMenuPanel {
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
+      }
+      #posCartPanel {
+        width: 325px !important;
+        flex-shrink: 0 !important;
+      }
+    }
 </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen relative">
@@ -475,39 +491,39 @@ visibility: visible;
       </button>
     </div>
     
-    <!-- Main POS Two-Column Split (100% Height Locked) -->
-    <div class="flex-1 grid grid-cols-12 gap-1.5 min-h-0 overflow-hidden">
-      
-      <!-- LEFT COLUMN: DISHES & SEARCH (8 COLS ON DESKTOP) -->
-      <div class="col-span-12 lg:col-span-7 xl:col-span-8 flex flex-col min-h-0 overflow-hidden gap-1">
-        
-        <!-- 1-Line Compact Bar: Order Type + Table No + Search Bar -->
-        <div class="bg-white p-1.5 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 shrink-0">
-          <div class="w-32 shrink-0">
-            <select id="orderType" onchange="updateCurrentBillSettings()" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1 outline-none text-gray-700 cursor-pointer">
-              <option value="Dine-in">🍽️ Dine-in</option>
-              <option value="Takeaway">🥡 Takeaway</option>
-              <option value="Delivery">🛵 Delivery</option>
-            </select>
-          </div>
-          <div class="w-20 shrink-0">
-            <input type="text" id="orderTable" oninput="updateCurrentBillSettings()" placeholder="Table No" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1 outline-none text-center">
-          </div>
-          <div class="relative flex-1">
-            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-gray-400 text-xs"></i>
-            <input type="text" id="posSearchInput" oninput="onPosSearchInput()" placeholder="Search dishes (කෑම වර්ග සොයන්න)..." class="w-full pl-7 pr-3 py-1 bg-gray-50 focus:bg-white border border-gray-200 rounded-lg text-xs outline-none transition font-medium">
-          </div>
-        </div>
-        
-        <!-- Category Filter Pills Bar -->
-        <div id="categoryFilters" class="flex gap-1 overflow-x-auto pb-0.5 text-xs font-bold no-scrollbar shrink-0"></div>
-        
-        <!-- Independent Scrollable Dishes Grid -->
-        <div id="posGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5 pr-1 content-start"></div>
+   <!-- Main POS Two-Column Split (100% Height Locked) -->
+<div id="posMainSplit" class="flex-1 flex flex-col gap-1.5 min-h-0 overflow-hidden">
+  
+  <!-- LEFT COLUMN: WIDER DISHES & LARGE COLORFUL CATEGORIES -->
+  <div id="posMenuPanel" class="flex flex-col min-h-0 overflow-hidden gap-1.5">
+    
+    <!-- 1-Line Compact Bar: Order Type + Table No + Search Bar -->
+    <div class="bg-white p-1.5 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 shrink-0">
+      <div class="w-32 shrink-0">
+        <select id="orderType" onchange="updateCurrentBillSettings()" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1 outline-none text-gray-700 cursor-pointer">
+          <option value="Dine-in">🍽️ Dine-in</option>
+          <option value="Takeaway">🥡 Takeaway</option>
+          <option value="Delivery">🛵 Delivery</option>
+        </select>
       </div>
-      
-      <!-- RIGHT COLUMN: CART & FIXED CHECKOUT ENGINE (4 COLS ON DESKTOP - ZERO OVERFLOW) -->
-      <div class="col-span-12 lg:col-span-5 xl:col-span-4 bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex flex-col h-full min-h-0 overflow-hidden justify-between">
+      <div class="w-20 shrink-0">
+        <input type="text" id="orderTable" oninput="updateCurrentBillSettings()" placeholder="Table No" class="w-full bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-1 outline-none text-center">
+      </div>
+      <div class="relative flex-1">
+        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+        <input type="text" id="posSearchInput" oninput="onPosSearchInput()" placeholder="Search dishes (කෑම වර්ග සොයන්න)..." class="w-full pl-7 pr-3 py-1 bg-gray-50 focus:bg-white border border-gray-200 rounded-lg text-xs outline-none transition font-medium">
+      </div>
+    </div>
+    
+    <!-- Category Filter Pills Bar (Large Touch Friendly Multi-Row Colorful Tabs) -->
+    <div id="categoryFilters" style="max-height: 165px;" class="flex flex-wrap gap-1.5 overflow-y-auto py-1 pr-1 shrink-0"></div>
+    
+    <!-- Independent Scrollable Dishes Grid -->
+    <div id="posGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 pr-1 content-start"></div>
+  </div>
+  
+  <!-- RIGHT COLUMN: COMPACT CART & FIXED CHECKOUT ENGINE -->
+  <div id="posCartPanel" class="w-full bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex flex-col h-full min-h-0 overflow-hidden justify-between">
         
         <!-- Top Cart Header & Customer CRM -->
         <div class="shrink-0 space-y-0.5">
