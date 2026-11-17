@@ -514,7 +514,7 @@ export async function sendInvoiceViaWhatsApp(invoiceData, hotelName = "Restauran
   }
 
   if (parseFloat(invoiceData.scAmount || 0) > 0) {
-    message += `Service Charge: Rs. ${parseFloat(invoiceData.scAmount).toFixed(2)}\n`;
+    message += `Tax(10%): Rs. ${parseFloat(invoiceData.scAmount).toFixed(2)}\n`;
   }
   if (parseFloat(invoiceData.vatAmount || 0) > 0) {
     message += `VAT: Rs. ${parseFloat(invoiceData.vatAmount).toFixed(2)}\n`;
