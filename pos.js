@@ -522,28 +522,28 @@ export function renderDishCategoriesFilterUI() {
   if (!container) return;
   container.innerHTML = "";
   
-  const isAllActive = currentCategoryFilter === "ALL";
-  const allButton = document.createElement("button");
-  allButton.className = "px-4 py-2.5 rounded-xl whitespace-nowrap font-black transition cursor-pointer text-xs sm:text-sm active:scale-95";
-  allButton.style.cssText = isAllActive ?
-    "background-color: #0f172a; color: #ffffff; border: 2px solid #0f172a; box-shadow: 0 4px 10px rgba(0,0,0,0.2);" :
-    "background-color: #ffffff; color: #1e293b; border: 2px solid #cbd5e1;";
-  allButton.innerText = "All Items";
-  allButton.onclick = () => filterPosByCategory("ALL");
-  container.appendChild(allButton);
-  
-  Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
-    const theme = getCategoryColorTheme(cat.name);
-    const isActive = currentCategoryFilter === cat.name;
-    const b = document.createElement("button");
-    b.className = "px-4 py-2.5 rounded-xl whitespace-nowrap font-black transition cursor-pointer text-xs sm:text-sm active:scale-95";
-    b.style.cssText = isActive ?
-      `background-color: ${theme.solidBg}; color: #ffffff; border: 2px solid #0f172a; box-shadow: 0 4px 10px rgba(0,0,0,0.2);` :
-      `background-color: ${theme.badgeBg}; color: ${theme.text}; border: 2px solid ${theme.border};`;
-    b.innerText = cat.name;
-    b.onclick = () => filterPosByCategory(cat.name);
-    container.appendChild(b);
-  });
+const isAllActive = currentCategoryFilter === "ALL";
+const allButton = document.createElement("button");
+allButton.className = "rounded-2xl whitespace-nowrap font-black transition cursor-pointer active:scale-95";
+allButton.style.cssText = isAllActive ?
+  "padding: 12px 20px; font-size: 15px; background-color: #0f172a; color: #ffffff; border: 2px solid #0f172a; box-shadow: 0 4px 10px rgba(0,0,0,0.2);" :
+  "padding: 12px 20px; font-size: 15px; background-color: #ffffff; color: #1e293b; border: 2px solid #cbd5e1;";
+allButton.innerText = "All Items";
+allButton.onclick = () => filterPosByCategory("ALL");
+container.appendChild(allButton);
+
+Object.entries(erpState.dishCategories || {}).forEach(([id, cat]) => {
+  const theme = getCategoryColorTheme(cat.name);
+  const isActive = currentCategoryFilter === cat.name;
+  const b = document.createElement("button");
+  b.className = "rounded-2xl whitespace-nowrap font-black transition cursor-pointer active:scale-95";
+  b.style.cssText = isActive ?
+    `padding: 12px 20px; font-size: 15px; background-color: ${theme.solidBg}; color: #ffffff; border: 2px solid #0f172a; box-shadow: 0 4px 10px rgba(0,0,0,0.2);` :
+    `padding: 12px 20px; font-size: 15px; background-color: ${theme.badgeBg}; color: ${theme.text}; border: 2px solid ${theme.border};`;
+  b.innerText = cat.name;
+  b.onclick = () => filterPosByCategory(cat.name);
+  container.appendChild(b);
+});
 }
 
 export function checkDishStockAvailability(dish) {
@@ -623,16 +623,16 @@ export function renderPOSDishesGrid() {
     const station = getDishStationTarget(dishId);
     const isBar = station === "bar";
 
- const theme = getCategoryColorTheme(dish.category);
+const theme = getCategoryColorTheme(dish.category);
 const cardElem = document.createElement("div");
-cardElem.className = `p-3 rounded-2xl transition select-none flex flex-col justify-between ${
+cardElem.className = `p-2 rounded-xl transition select-none flex flex-col justify-between ${
       isOut 
         ? "bg-gray-100 border-2 border-red-200 opacity-60 cursor-not-allowed" 
-        : "shadow-sm cursor-pointer active:scale-95"
+        : "shadow-2xs cursor-pointer active:scale-95"
     }`;
 
 if (!isOut) {
-  cardElem.style.cssText = `background-color: ${theme.softBg}; border: 2px solid ${theme.border}; border-left: 5px solid ${theme.solidBg};`;
+  cardElem.style.cssText = `background-color: ${theme.softBg}; border: 1.5px solid ${theme.border}; border-left: 4px solid ${theme.solidBg};`;
 }
 
 cardElem.onclick = () => {
@@ -645,23 +645,23 @@ cardElem.onclick = () => {
 
 cardElem.innerHTML = `
       <div>
-        <div class="flex justify-between items-start gap-1">
-          <span style="${isOut ? '' : `background-color: ${theme.badgeBg}; color: ${theme.badgeText};`}" class="text-[9.5px] font-black px-2 py-0.5 rounded-md uppercase">
+        <div class="flex justify-between items-center gap-1">
+          <span style="${isOut ? '' : `background-color: ${theme.badgeBg}; color: ${theme.badgeText};`}" class="text-[8.5px] font-black px-1.5 py-0.2 rounded uppercase truncate">
             ${isBar ? '🍹 ' + (dish.category || 'Bar') : (dish.category || 'Kitchen')}
           </span>
           ${
             isOut 
-              ? `<span class="text-[8.5px] bg-red-500 text-white font-black px-1 py-0.2 rounded uppercase animate-pulse">Out of Stock</span>`
+              ? `<span class="text-[8px] bg-red-500 text-white font-black px-1 py-0.2 rounded uppercase animate-pulse shrink-0">Out</span>`
               : isLow 
-                ? `<span class="text-[8.5px] bg-yellow-100 text-yellow-800 font-bold px-1 py-0.2 rounded uppercase">${stockInfo.portionsLeft} Left</span>`
+                ? `<span class="text-[8px] bg-yellow-100 text-yellow-800 font-bold px-1 py-0.2 rounded uppercase shrink-0">${stockInfo.portionsLeft} Left</span>`
                 : ''
-          }
+           }
         </div>
-        <h4 class="font-extrabold text-xs sm:text-sm text-gray-900 mt-1.5 line-clamp-2 leading-tight">${dish.name}</h4>
+        <h4 class="font-bold text-[11px] text-gray-900 mt-1 line-clamp-2 leading-tight">${dish.name}</h4>
       </div>
-      <div class="mt-2.5 flex items-center justify-between">
-        <span style="${isOut ? '' : `color: ${theme.solidBg};`}" class="font-black text-xs sm:text-sm">Rs. ${parseFloat(dish.price).toFixed(2)}</span>
-        <div style="${isOut ? '' : `background-color: ${theme.solidBg}; color: #ffffff;`}" class="w-6 h-6 rounded-lg ${isOut ? 'bg-gray-300 text-gray-500' : ''} flex items-center justify-center text-[11px] shadow-xs">
+      <div class="mt-1.5 flex items-center justify-between">
+        <span style="${isOut ? '' : `color: ${theme.solidBg};`}" class="font-black text-[11px]">Rs. ${parseFloat(dish.price).toFixed(2)}</span>
+        <div style="${isOut ? '' : `background-color: ${theme.solidBg}; color: #ffffff;`}" class="w-5 h-5 rounded-md ${isOut ? 'bg-gray-300 text-gray-500' : ''} flex items-center justify-center text-[10px]">
           <i class="fa-solid ${isOut ? 'fa-ban' : 'fa-plus'}"></i>
         </div>
       </div>
@@ -992,30 +992,30 @@ export function renderCartItemsUI() {
       const isBar = station === "bar";
 
       const rowElem = document.createElement("div");
-      rowElem.className = "p-1.5 rounded-xl bg-gray-50 border border-gray-100 space-y-0.5";
-      rowElem.innerHTML = `
-        <div class="flex items-center justify-between gap-1">
+      rowElem.className = "p-2 rounded-xl bg-gray-50 border border-gray-200 space-y-1";
+rowElem.innerHTML = `
+        <div class="flex items-center justify-between gap-1.5">
           <div class="truncate flex-1 min-w-0 pr-1">
-            <p class="font-bold text-gray-800 truncate text-[11px]">${item.name}</p>
-            <div class="flex items-center gap-1 text-[9.5px]">
-              <span class="text-gray-400">Rs. ${item.price.toFixed(2)}</span>
-              <span class="text-[8px] px-1 rounded font-extrabold ${isBar ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">${isBar ? 'BOT' : 'KOT'}</span>
+            <p class="font-extrabold text-gray-900 truncate text-xs">${item.name}</p>
+            <div class="flex items-center gap-1 text-[10px] mt-0.5">
+              <span class="text-gray-500 font-semibold">Rs. ${item.price.toFixed(2)}</span>
+              <span class="text-[8.5px] px-1 rounded font-extrabold ${isBar ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">${isBar ? 'BOT' : 'KOT'}</span>
               ${sent > 0 ? `<span class="text-green-700 bg-green-100 px-1 rounded font-bold">Sent: ${sent}</span>` : ''}
               ${diff > 0 ? `<span class="text-yellow-800 bg-yellow-100 px-1 rounded font-bold animate-pulse">+${diff}</span>` : ''}
             </div>
           </div>
-          <div class="flex items-center gap-1">
-            <button onclick="changeCartQty('${item.dishId}', -1)" title="${sent >= q ? 'Cancel Sent Item' : 'Decrease Qty'}" class="w-4 h-4 rounded bg-white border border-gray-300 ${sent >= q ? 'text-red-600 border-red-300 font-black' : 'text-gray-700'} flex items-center justify-center font-bold text-[10px] cursor-pointer">-</button>
-            <span class="font-black text-xs w-4 text-center">${q}</span>
-            <button onclick="changeCartQty('${item.dishId}', 1)" class="w-4 h-4 rounded bg-white border border-gray-300 text-gray-700 flex items-center justify-center font-bold text-[10px] cursor-pointer">+</button>
+          <div class="flex items-center gap-1 shrink-0">
+            <button onclick="changeCartQty('${item.dishId}', -1)" title="${sent >= q ? 'Cancel Sent Item' : 'Decrease Qty'}" class="w-7 h-7 rounded-lg bg-white border-2 border-gray-300 ${sent >= q ? 'text-red-600 border-red-300 font-black' : 'text-gray-800'} flex items-center justify-center font-black text-sm cursor-pointer active:scale-95">-</button>
+            <span class="font-black text-sm w-5 text-center">${q}</span>
+            <button onclick="changeCartQty('${item.dishId}', 1)" class="w-7 h-7 rounded-lg bg-white border-2 border-gray-300 text-gray-800 flex items-center justify-center font-black text-sm cursor-pointer active:scale-95">+</button>
           </div>
-          <div class="font-black text-gray-800 text-[11px] text-right w-16">
+          <div class="font-black text-gray-900 text-xs text-right w-16 shrink-0">
             Rs. ${(item.price * q).toFixed(2)}
           </div>
         </div>
-        <div class="flex items-center justify-between text-[9.5px] text-gray-500 pt-0.5 border-t border-gray-200">
-          <span class="italic text-purple-700 font-semibold truncate w-40">${item.note ? '📝 ' + item.note : 'No notes'}</span>
-          <button onclick="updateCartItemNote('${item.dishId}')" class="text-blue-600 font-bold hover:underline cursor-pointer">
+        <div class="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-200">
+          <span class="italic text-purple-700 font-semibold truncate flex-1 pr-2">${item.note ? '📝 ' + item.note : 'No notes'}</span>
+          <button onclick="updateCartItemNote('${item.dishId}')" class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer active:scale-95">
             <i class="fa-solid fa-pen-to-square"></i> Note
           </button>
         </div>
@@ -1183,13 +1183,13 @@ export function selectPayMethod(method, syncCloud = true) {
   ["cash", "card", "transfer", "split", "credit"].forEach(m => {
     const tab = document.getElementById(`payTab-${m}`);
     const field = document.getElementById(`payFields-${m}`);
-    if (tab) {
-      if (m === method) {
-        tab.className = "pay-method-tab py-0.5 rounded border border-blue-600 bg-blue-50 text-blue-700 font-bold text-[9px] flex flex-col items-center cursor-pointer";
-      } else {
-        tab.className = "pay-method-tab py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600 font-bold text-[9px] flex flex-col items-center cursor-pointer";
-      }
-    }
+if (tab) {
+  if (m === method) {
+    tab.className = "pay-method-tab py-2 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-700 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95";
+  } else {
+    tab.className = "pay-method-tab py-2 rounded-lg border-2 border-gray-200 bg-gray-50 text-gray-600 font-extrabold text-[10px] flex flex-col items-center cursor-pointer active:scale-95";
+  }
+}
     if (field) {
       if (m === method) field.classList.remove("hidden");
       else field.classList.add("hidden");
@@ -2458,6 +2458,57 @@ export async function syncOfflineInvoicesToCloud() {
     isOfflineSyncInProgress = false;
   }
 }
+// 🔢 TOUCH ON-SCREEN NUMPAD CONTROLLER
+let activeNumpadTargetId = null;
+
+export function openTouchNumpad(inputId, title = "Enter Amount") {
+  activeNumpadTargetId = inputId;
+  const target = document.getElementById(inputId);
+  const disp = document.getElementById("touchNumpadDisplay");
+  const titleEl = document.getElementById("touchNumpadTitle");
+  if (titleEl) titleEl.innerText = title;
+  if (disp) disp.value = target ? target.value : "";
+  document.getElementById("touchNumpadModal")?.classList.remove("hidden");
+}
+
+export function closeTouchNumpad() {
+  document.getElementById("touchNumpadModal")?.classList.add("hidden");
+  activeNumpadTargetId = null;
+}
+
+export function touchNumpadPress(val) {
+  const disp = document.getElementById("touchNumpadDisplay");
+  if (disp) disp.value += val;
+}
+
+export function touchNumpadClear() {
+  const disp = document.getElementById("touchNumpadDisplay");
+  if (disp) disp.value = "";
+}
+
+export function touchNumpadBackspace() {
+  const disp = document.getElementById("touchNumpadDisplay");
+  if (disp) disp.value = disp.value.slice(0, -1);
+}
+
+export function confirmTouchNumpad() {
+  const disp = document.getElementById("touchNumpadDisplay");
+  if (activeNumpadTargetId && disp) {
+    const target = document.getElementById(activeNumpadTargetId);
+    if (target) {
+      target.value = disp.value;
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+  closeTouchNumpad();
+}
+
+window.openTouchNumpad = openTouchNumpad;
+window.closeTouchNumpad = closeTouchNumpad;
+window.touchNumpadPress = touchNumpadPress;
+window.touchNumpadClear = touchNumpadClear;
+window.touchNumpadBackspace = touchNumpadBackspace;
+window.confirmTouchNumpad = confirmTouchNumpad;
 
 // Global Window Exports
 window.setTableOrderMode = setTableOrderMode;
