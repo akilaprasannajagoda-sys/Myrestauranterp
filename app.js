@@ -305,9 +305,10 @@ export async function handleOfflinePinSubmit(ev) {
     const staffName = matchedEmp ? matchedEmp.name : "Admin";
 
     setCurrentTenant(pairedTenant);
-    setCurrentUserRole(role);
+setCurrentUserRole(role);
+localStorage.setItem("current_cashier_name", staffName);
 
-    document.getElementById("authScreen")?.classList.add("hidden");
+document.getElementById("authScreen")?.classList.add("hidden");
     document.getElementById("mainApp")?.classList.remove("hidden");
 
     const sideUser = document.getElementById("sideUserName");
@@ -405,26 +406,68 @@ document.getElementById("mergeTableForm")?.addEventListener("submit", (e) => { e
 document.getElementById("shiftFloatForm")?.addEventListener("submit", (e) => { e.preventDefault(); POS.handleShiftFloatSubmit(e); });
 document.getElementById("shiftHandoverForm")?.addEventListener("submit", (e) => { e.preventDefault(); Reports.handleShiftHandoverSubmit(e); });
 
-// HOTEL PROFILE FORM
+// 🖼️ DYNAMIC RESTAURANT LOGO UPLOAD HELPERS
+window.handleRestaurantLogoUpload = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  if (file.size > 700 * 1024) {
+    showLiveToast("⚠️ File Too Large", "Logo එකේ ප්‍රමාණය 700KB ට වඩා අඩු විය යුතුය.", "warning", "fa-image");
+    event.target.value = "";
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64Data = e.target.result;
+    document.getElementById("profLogoBase64").value = base64Data;
+    
+    const previewImg = document.getElementById("profLogoPreviewImg");
+    const placeholder = document.getElementById("profLogoPlaceholderIcon");
+    if (previewImg && placeholder) {
+      previewImg.src = base64Data;
+      previewImg.classList.remove("hidden");
+      placeholder.classList.add("hidden");
+    }
+  };
+  reader.readAsDataURL(file);
+};
+
+window.removeRestaurantLogo = function() {
+  document.getElementById("profLogoBase64").value = "";
+  const input = document.getElementById("profLogoFileInput");
+  if (input) input.value = "";
+  const previewImg = document.getElementById("profLogoPreviewImg");
+  const placeholder = document.getElementById("profLogoPlaceholderIcon");
+  if (previewImg && placeholder) {
+    previewImg.src = "";
+    previewImg.classList.add("hidden");
+    placeholder.classList.remove("hidden");
+  }
+};
+
+// HOTEL PROFILE FORM (WITH RESTAURANT LOGO PER TENANT)
 document.getElementById("hotelProfileForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!dbRef || !currentTenant) return;
-
-  const profData = {
-    hotelName: document.getElementById("profHotelName")?.value.trim() || "My Restaurant",
-    phone: document.getElementById("profPhone")?.value.trim() || "",
-    address: document.getElementById("profAddress")?.value.trim() || "",
-    taxNo: document.getElementById("profTaxNo")?.value.trim() || "",
-    footerNote: document.getElementById("profFooterNote")?.value.trim() || "*** THANK YOU! PLEASE VISIT US AGAIN ***",
-    updatedAt: new Date().toISOString()
-  };
-
+  
+const logoInputEl = document.getElementById("profLogoBase64");
+const profData = {
+  hotelName: document.getElementById("profHotelName")?.value.trim() || "My Restaurant",
+  phone: document.getElementById("profPhone")?.value.trim() || "",
+  address: document.getElementById("profAddress")?.value.trim() || "",
+  taxNo: document.getElementById("profTaxNo")?.value.trim() || "",
+  footerNote: document.getElementById("profFooterNote")?.value.trim() || "~~~Thank You~~~",
+  logo: logoInputEl !== null ? logoInputEl.value : (currentTenantInfo?.logo || ""),
+  updatedAt: new Date().toISOString()
+};
+  
   try {
     await update(ref(dbInstance, `tenants/${currentTenant}/profile`), profData);
     setCurrentTenantInfo(Object.assign(currentTenantInfo || {}, profData));
     localStorage.setItem("pairedHotelName", profData.hotelName);
     updateDeviceTerminalBadgeUI();
-    showLiveToast("🏢 Profile Updated", "හෝටලයේ විස්තර සාර්ථකව යාවත්කාලීන විය.", "success", "fa-hotel");
+    showLiveToast("🏢 Profile Updated", "හෝටලයේ විස්තර හා Logo එක සාර්ථකව යාවත්කාලීන විය.", "success", "fa-hotel");
   } catch (err) {
     showLiveToast("⚠️ Profile Error", "Profile යාවත්කාලීන කිරීමේදී දෝෂයක්: " + err.message, "warning", "fa-triangle-exclamation");
   }
@@ -826,9 +869,11 @@ onAuthStateChanged(authInstance, async (activeUser) => {
         updateDeviceTerminalBadgeUI();
       }
 
-      setCurrentTenant(uData.tenantId);
+  setCurrentTenant(uData.tenantId);
+const activeStaffName = uData.ownerName || activeUser.email.split('@')[0];
+localStorage.setItem("current_cashier_name", activeStaffName);
 
-      if (userRole !== "owner" && !userPermissions) {
+if (userRole !== "owner" && !userPermissions) {
         try {
           const empSnap = await get(ref(dbInstance, `tenants/${uData.tenantId}/employees`));
           if (empSnap.exists()) {
@@ -961,10 +1006,30 @@ function initializeRealtimeDataStreams(tenantId) {
     const pFoot = document.getElementById("profFooterNote");
 
     if (pName && !pName.value) pName.value = prof.hotelName || "";
-    if (pPhone && !pPhone.value) pPhone.value = prof.phone || "";
-    if (pAddr && !pAddr.value) pAddr.value = prof.address || "";
-    if (pTax && !pTax.value) pTax.value = prof.taxNo || "";
-    if (pFoot && !pFoot.value) pFoot.value = prof.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
+if (pPhone && !pPhone.value) pPhone.value = prof.phone || "";
+if (pAddr && !pAddr.value) pAddr.value = prof.address || "";
+if (pTax && !pTax.value) pTax.value = prof.taxNo || "";
+if (pFoot && !pFoot.value) pFoot.value = prof.footerNote || "~~~Thank You~~~";
+
+// Dynamic Logo Preview Initialization
+const logoImg = document.getElementById("profLogoPreviewImg");
+const logoIcon = document.getElementById("profLogoPlaceholderIcon");
+const logoHidden = document.getElementById("profLogoBase64");
+if (prof.logo) {
+  if (logoHidden) logoHidden.value = prof.logo;
+  if (logoImg && logoIcon) {
+    logoImg.src = prof.logo;
+    logoImg.classList.remove("hidden");
+    logoIcon.classList.add("hidden");
+  }
+} else {
+  if (logoHidden) logoHidden.value = "";
+  if (logoImg && logoIcon) {
+    logoImg.src = "";
+    logoImg.classList.add("hidden");
+    logoIcon.classList.remove("hidden");
+  }
+}
   });
   activeFirebaseUnsubscribers.push(unsubProfile);
 
