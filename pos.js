@@ -1288,11 +1288,15 @@ async function dispatchStationPrintSlip(targetPrinter, payload, ticketType) {
   if (titleHeader) {
     titleHeader.innerText = ticketType === "BOT" ? "*** BAR ORDER TICKET (BOT) ***" : "*** KITCHEN ORDER TICKET (KOT) ***";
   }
-  if (tableEl) tableEl.innerText = `TABLE: ${payload.tableNo || 'N/A'}`;
-  if (typeEl) typeEl.innerText = `TYPE: ${(payload.orderType || 'DINE-IN').toUpperCase()}`;
-  if (timeEl) timeEl.innerText = new Date(payload.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const staffEl = document.getElementById("kotPrintStaff");
+const activeStaff = payload.cashierName || payload.waiterName || localStorage.getItem("current_cashier_name") || "Staff";
 
-  if (itemsContainer) {
+if (tableEl) tableEl.innerText = `TABLE: ${payload.tableNo || 'N/A'}`;
+if (typeEl) typeEl.innerText = `TYPE: ${(payload.orderType || 'DINE-IN').toUpperCase()}`;
+if (timeEl) timeEl.innerText = new Date(payload.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+if (staffEl) staffEl.innerText = `SERVER: ${activeStaff}`;
+
+if (itemsContainer) {
     itemsContainer.innerHTML = payload.items.map(i => `
       <div style="border-bottom: 1.5px dashed #000000; padding: 3px 0; margin-bottom: 2px; width: 100%; color: #000000;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
@@ -1373,18 +1377,21 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
   const isDesktopPrinterHost = !!(window.electronAPI && window.electronAPI.printSilent);
   
   try {
-    if (totalDeltaCount > 0) {
-      const allNewItems = [...deltaKitchenItems, ...deltaBarItems];
-      const kotTicket = {
-        billKey: activeBillId,
-        orderType: currentBill.orderType || "Dine-in",
-        tableNo: currentBill.tableNo || "N/A",
-        waiterName: currentBill.waiterName || "",
-        items: allNewItems,
-        timestamp: new Date().toISOString(),
-        status: "Cooking",
-        isPrinted: isDesktopPrinterHost ? true : false
-      };
+    const activeStaffName = currentBill.waiterName || localStorage.getItem("current_cashier_name") || "Staff";
+
+if (totalDeltaCount > 0) {
+  const allNewItems = [...deltaKitchenItems, ...deltaBarItems];
+  const kotTicket = {
+    billKey: activeBillId,
+    orderType: currentBill.orderType || "Dine-in",
+    tableNo: currentBill.tableNo || "N/A",
+    waiterName: activeStaffName,
+    cashierName: activeStaffName,
+    items: allNewItems,
+    timestamp: new Date().toISOString(),
+    status: "Cooking",
+    isPrinted: isDesktopPrinterHost ? true : false
+  };
       
       currentBill.cart = updatedCart;
       renderCartItemsUI();
@@ -1454,31 +1461,35 @@ export async function sendOrderToKitchen(forceReprintAll = false) {
       
       let printedSummary = [];
       
-      if (kitchenItemsToPrint.length > 0) {
-        const kitchenPayload = {
-          tableNo: currentBill.tableNo || "N/A",
-          orderType: currentBill.orderType || "Dine-in",
-          waiterName: currentBill.waiterName || "",
-          items: kitchenItemsToPrint,
-          timestamp: new Date().toISOString()
-        };
-        
-        await dispatchStationPrintSlip(kitchenPrinter, kitchenPayload, "KOT");
-        printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
-        
-        if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-      
-      if (barItemsToPrint.length > 0) {
-        const barPayload = {
-          tableNo: currentBill.tableNo || "N/A",
-          orderType: currentBill.orderType || "Dine-in",
-          waiterName: currentBill.waiterName || "",
-          items: barItemsToPrint,
-          timestamp: new Date().toISOString()
-        };
+    const currentStaffForSlip = currentBill.waiterName || localStorage.getItem("current_cashier_name") || "Staff";
+
+if (kitchenItemsToPrint.length > 0) {
+  const kitchenPayload = {
+    tableNo: currentBill.tableNo || "N/A",
+    orderType: currentBill.orderType || "Dine-in",
+    waiterName: currentStaffForSlip,
+    cashierName: currentStaffForSlip,
+    items: kitchenItemsToPrint,
+    timestamp: new Date().toISOString()
+  };
+  
+  await dispatchStationPrintSlip(kitchenPrinter, kitchenPayload, "KOT");
+  printedSummary.push(`KOT (Kitchen: ${kitchenItemsToPrint.length})`);
+  
+  if (isSinglePrinterSetup && barItemsToPrint.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+
+if (barItemsToPrint.length > 0) {
+  const barPayload = {
+    tableNo: currentBill.tableNo || "N/A",
+    orderType: currentBill.orderType || "Dine-in",
+    waiterName: currentStaffForSlip,
+    cashierName: currentStaffForSlip,
+    items: barItemsToPrint,
+    timestamp: new Date().toISOString()
+  };
         
         await dispatchStationPrintSlip(barPrinter, barPayload, "BOT");
         printedSummary.push(`BOT (Bar: ${barItemsToPrint.length})`);
@@ -1575,22 +1586,25 @@ export async function printPreBillEstimate() {
 
   const { subtotal, discountAmount, loyaltyDiscount, scAmount, vatAmount, cslAmount, netTotal } = calculateOrderTotals(cartList, currentDiscountType, discVal, oType, loyaltyRedeemed);
 
-  const estimateData = {
-    invoiceNumber: generateCollisionProofEstimateNumber(),
-    orderType: oType,
-    tableNo: currentBill.tableNo || "N/A",
-    waiterName: currentBill.waiterName || "",
-    customerName: currentBill.customerName || "",
-    items: cartList,
-    subtotal: subtotal,
-    discountAmount: discountAmount + (loyaltyDiscount || 0),
-    scAmount: scAmount,
-    vatAmount: vatAmount,
-    cslAmount: cslAmount,
-    netTotal: netTotal,
-    payment: { method: "PRE-BILL ESTIMATE (UNPAID)" },
-    createdAt: new Date().toISOString()
-  };
+  const activeCashierName = localStorage.getItem("current_cashier_name") || "Cashier";
+
+const estimateData = {
+  invoiceNumber: generateCollisionProofEstimateNumber(),
+  orderType: oType,
+  tableNo: currentBill.tableNo || "N/A",
+  waiterName: currentBill.waiterName || "",
+  cashierName: activeCashierName,
+  customerName: currentBill.customerName || "",
+  items: cartList,
+  subtotal: subtotal,
+  discountAmount: discountAmount + (loyaltyDiscount || 0),
+  scAmount: scAmount,
+  vatAmount: vatAmount,
+  cslAmount: cslAmount,
+  netTotal: netTotal,
+  payment: { method: "PRE-BILL (UNPAID)" },
+  createdAt: new Date().toISOString()
+};
 
   await printThermalReceipt(estimateData);
   showLiveToast("📄 Pre-Bill Printed", `Table ${currentBill.tableNo || 'N/A'} සඳහා Estimate බිලක් Print කරන ලදී.`, "info", "fa-file-lines");
@@ -1684,27 +1698,36 @@ export async function processOrder(sendWhatsApp = false) {
     }
   }
 
-  const loyaltyEarnRate = parseFloat(erpState.settings?.loyaltyEarnRate || erpState.settings?.loyaltyRate || 100);
-  const earnedLoyaltyPoints = Math.floor(netTotal / loyaltyEarnRate);
+ // 🛡️ REPAIRED & BULLETPROOF: NO GHOST CUSTOMERS EVER ATTACHED
+const attachedCustomerId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId || "";
+let attachedCustomerName = "";
+let attachedCustomerPhone = "";
 
-  // 🛡️ REPAIRED & BULLETPROOF: NO GHOST CUSTOMERS EVER ATTACHED
-  const attachedCustomerId = document.getElementById("posAttachedCustomerId")?.value || currentBill.customerId || "";
-  let attachedCustomerName = "";
-  let attachedCustomerPhone = "";
+const isRegisteredCustomer = !!(attachedCustomerId && erpState.customers?.[attachedCustomerId]);
+const loyaltyEarnRate = parseFloat(erpState.settings?.loyaltyEarnRate || erpState.settings?.loyaltyRate || 100);
 
-  if (attachedCustomerId && erpState.customers?.[attachedCustomerId]) {
-    attachedCustomerName = erpState.customers[attachedCustomerId].name || currentBill.customerName || "";
-    attachedCustomerPhone = erpState.customers[attachedCustomerId].phone || currentBill.customerPhone || "";
-  } else if (payMethod === "credit" && payDetails.customerName) {
-    attachedCustomerName = payDetails.customerName;
-    attachedCustomerPhone = payDetails.customerPhone || "";
-  }
+// Registered Customer කෙනෙක් Link කර ඇත්නම් පමණක් Points ගණනය කරයි
+const earnedLoyaltyPoints = isRegisteredCustomer ? Math.floor(netTotal / loyaltyEarnRate) : 0;
+let customerPointsBalance = 0;
 
-  const invoiceData = {
+if (isRegisteredCustomer) {
+  const cust = erpState.customers[attachedCustomerId];
+  attachedCustomerName = cust.name || currentBill.customerName || "";
+  attachedCustomerPhone = cust.phone || currentBill.customerPhone || "";
+  customerPointsBalance = Math.max(0, parseFloat(cust.loyaltyPoints || 0) - loyaltyRedeemed + earnedLoyaltyPoints);
+} else if (payMethod === "credit" && payDetails.customerName) {
+  attachedCustomerName = payDetails.customerName;
+  attachedCustomerPhone = payDetails.customerPhone || "";
+}
+
+const activeCashierName = localStorage.getItem("current_cashier_name") || "Cashier";
+
+const invoiceData = {
     invoiceNumber: invoiceNumber,
     orderType: oType,
     tableNo: currentBill.tableNo || "N/A",
     waiterName: assignedWaiter,
+    cashierName: activeCashierName,
     customerId: attachedCustomerId,
     customerName: attachedCustomerName,
     customerPhone: attachedCustomerPhone,
@@ -1715,6 +1738,7 @@ export async function processOrder(sendWhatsApp = false) {
     loyaltyPointsRedeemed: loyaltyRedeemed || 0,
     loyaltyPointValue: pointRupeeValue || 1.0,
     loyaltyPointsEarned: earnedLoyaltyPoints || 0,
+    loyaltyPointsBalance: isRegisteredCustomer ? customerPointsBalance : null,
     scAmount: scAmount,
     vatAmount: vatAmount,
     cslAmount: cslAmount,
@@ -1958,28 +1982,44 @@ export async function processOrder(sendWhatsApp = false) {
   })();
 }
 
-// 🖨️ THERMAL RECEIPT PRINT ENGINE
+// 🖨️ THERMAL RECEIPT PRINT ENGINE (EXACT PHOTO REPLICA - DYNAMIC MULTI-RESTAURANT)
 export async function printThermalReceipt(inv) {
   const pr = erpState.settings?.printers || {};
   const p1Dev = (pr.p1?.device || "").trim();
   const targetDev = p1Dev || "";
-
-  const oId = document.getElementById("receiptOrderId");
-  const dEl = document.getElementById("receiptDate");
-  const tEl = document.getElementById("receiptType");
-
+  
+  // 1. Fully Dynamic Hotel Details & Tenant Logo (Per-Restaurant Aware)
+  const currentHotelName = currentTenantInfo?.hotelName || "RESTAURANT ERP";
   const rHotel = document.getElementById("receiptHotel");
   const rAddr = document.getElementById("receiptAddress");
   const rPhone = document.getElementById("receiptPhone");
   const rTax = document.getElementById("receiptTaxNo");
   const rFoot = document.getElementById("receiptFooterNote");
-
-  if (rHotel) rHotel.innerText = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   
-  const rawAddr = currentTenantInfo?.address || "Smart Restaurant POS";
-  if (rAddr) rAddr.innerText = rawAddr.replace(/,([^\s])/g, ', $1');
+  // Dynamic Logo Switcher: If tenant uploaded a logo, display it. Else show monogram initials!
+  const logoImgEl = document.getElementById("receiptLogoImg");
+  const fallbackMonogramEl = document.getElementById("receiptLogoFallbackMonogram");
   
-  if (rPhone) rPhone.innerText = currentTenantInfo?.phone ? `Tel: ${currentTenantInfo.phone}` : "";
+  if (currentTenantInfo?.logo && logoImgEl && fallbackMonogramEl) {
+    logoImgEl.src = currentTenantInfo.logo;
+    logoImgEl.style.display = "block";
+    fallbackMonogramEl.style.display = "none";
+  } else if (fallbackMonogramEl && logoImgEl) {
+    logoImgEl.style.display = "none";
+    fallbackMonogramEl.style.display = "flex";
+    const words = currentHotelName.trim().split(/\s+/);
+    let initials = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : currentHotelName.slice(0, 2).toUpperCase();
+    fallbackMonogramEl.innerText = initials || "ERP";
+  }
+  
+  if (rHotel) rHotel.innerText = currentHotelName.toUpperCase();
+  
+  if (rAddr) {
+    const rawAddr = currentTenantInfo?.address || "Address Line";
+    rAddr.innerHTML = rawAddr.replace(/,([^\s])/g, ', $1').replace(/,\s*/g, '<br>');
+  }
+  
+  if (rPhone) rPhone.innerText = currentTenantInfo?.phone ? `Hotline: ${currentTenantInfo.phone}` : "";
   
   if (rTax) {
     if (currentTenantInfo?.taxNo) {
@@ -1989,123 +2029,212 @@ export async function printThermalReceipt(inv) {
       rTax.style.display = "none";
     }
   }
+  
+  if (rFoot) rFoot.innerText = currentTenantInfo?.footerNote || "~~~Thank You~~~";
+  
+  // 2. Meta: Date, Time, Ticket No, Table, Cashier
+  const invDate = new Date(inv.createdAt || Date.now());
+  const dateStr = `${invDate.getMonth() + 1}/${invDate.getDate()}/${invDate.getFullYear()}`;
+  const timeStr = invDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  
+  const dEl = document.getElementById("receiptDate");
+  const tmEl = document.getElementById("receiptTime");
+  const oId = document.getElementById("receiptOrderId");
+  const tbEl = document.getElementById("receiptTable");
+  const csEl = document.getElementById("receiptCashier");
+  
+  if (dEl) dEl.innerText = ` ${dateStr}`;
+  if (tmEl) tmEl.innerText = ` ${timeStr}`;
+  
+  const ticketClean = (inv.invoiceNumber || "").replace(/^INV-/, "");
+  if (oId) oId.innerText = ` ${ticketClean}`;
+  
+  const cleanTableNo = String(inv.tableNo || "N/A").replace(/^Table-?/i, "").trim();
+if (tbEl) tbEl.innerText = cleanTableNo !== "N/A" ? `Table-${cleanTableNo}` : `${inv.orderType || 'Takeaway'}`;
 
-  if (rFoot) rFoot.innerText = currentTenantInfo?.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
-
-  if (oId) oId.innerText = `Invoice #${inv.invoiceNumber}`;
-  if (dEl) dEl.innerText = `Date: ${new Date(inv.createdAt || Date.now()).toLocaleString()}`;
-  if (tEl) tEl.innerText = `${inv.orderType} (Table: ${inv.tableNo || 'N/A'}${inv.waiterName ? ' | ' + inv.waiterName : ''}${inv.customerName ? ' | Cust: ' + inv.customerName : ''})`;
-
+const currentCashier = inv.cashierName || localStorage.getItem("current_cashier_name") || "Cashier";
+if (csEl) csEl.innerText = ` ${currentCashier}`;
+  
+  const custRow = document.getElementById("receiptCustomerRow");
+  const custNameEl = document.getElementById("receiptCustomer");
+  if (inv.customerName && custRow && custNameEl) {
+    custNameEl.innerText = inv.customerName;
+    custRow.style.display = "block";
+  } else if (custRow) {
+    custRow.style.display = "none";
+  }
+  
+  // 3. Line Items: Product on line 1, and "- Qty U/Price Net Value" on line 2
   const itemsContainer = document.getElementById("receiptItems");
   if (itemsContainer) {
     itemsContainer.innerHTML = "";
     (inv.items || []).forEach(i => {
-      const row = document.createElement("div");
-      row.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; padding: 2px 0; font-size: inherit; font-weight: 700; color: #000000; width: 100%; box-sizing: border-box;";
-      row.innerHTML = `
-        <span style="flex: 1.8; font-weight: 800; white-space: normal; word-break: break-word; padding-right: 4px; color: #000000;">${i.name} x${i.qty}</span>
-        <span style="flex: 1.1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: #000000;">${parseFloat(i.price).toFixed(2)}</span>
-        <span style="flex: 1.2; text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; color: #000000;">${(i.price * i.qty).toFixed(2)}</span>
+      const unitPrice = parseFloat(i.price || 0);
+      const lineTotal = unitPrice * (parseInt(i.qty) || 1);
+      
+      const itemDiv = document.createElement("div");
+      itemDiv.style.cssText = "margin-bottom: 3px; line-height: 1.25; color: #000000;";
+      itemDiv.innerHTML = `
+        <div style="font-weight: 500; font-size: 10.5px; word-break: break-word;">${i.name}</div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; padding-left: 2px;">
+          <span style="width: 14px; text-align: left; color: #000000;">-</span>
+          <span style="width: 28px; text-align: center; font-weight: 500;">${i.qty}</span>
+          <span style="width: 68px; text-align: right; font-weight: 500;">${unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span style="width: 75px; text-align: right; font-weight: 500;">${lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
       `;
-      itemsContainer.appendChild(row);
-
+      itemsContainer.appendChild(itemDiv);
+      
       if (i.note) {
         const noteDiv = document.createElement("div");
-        noteDiv.style.cssText = "font-size: 0.85em; font-weight: 800; padding-left: 2px; color: #000000; margin-bottom: 2px;";
-        noteDiv.innerText = `  >> NOTE: ${i.note}`;
+        noteDiv.style.cssText = "font-size: 9px; font-style: italic; padding-left: 12px; color: #000000;";
+        noteDiv.innerText = `>> Note: ${i.note}`;
         itemsContainer.appendChild(noteDiv);
       }
     });
   }
-
+  
+  // 4. Financial Calculations: Taxes, Discounts & Totals
+  const scAmount = parseFloat(inv.scAmount || 0);
+  const vatAmount = parseFloat(inv.vatAmount || 0);
+  const cslAmount = parseFloat(inv.cslAmount || 0);
+  const totalDiscounts = parseFloat(inv.discountAmount || 0) + parseFloat(inv.loyaltyDiscount || 0);
+  const netTotalVal = parseFloat(inv.netTotal || 0);
+  
+  const subRow = document.getElementById("receiptSubtotalRow");
   const subEl = document.getElementById("receiptSubtotal");
-  if (subEl) subEl.innerText = `Rs. ${parseFloat(inv.subtotal || 0).toFixed(2)}`;
-
+  if (subRow && subEl) {
+    if (scAmount > 0 || vatAmount > 0 || cslAmount > 0 || totalDiscounts > 0) {
+      subRow.style.display = "flex";
+      subEl.innerText = parseFloat(inv.subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else {
+      subRow.style.display = "none";
+    }
+  }
+  
   const discRow = document.getElementById("receiptDiscountRow");
-  const totalDiscounts = (parseFloat(inv.discountAmount || 0) + parseFloat(inv.loyaltyDiscount || 0));
-  if (discRow) {
+  const discVal = document.getElementById("receiptDiscountVal");
+  if (discRow && discVal) {
     if (totalDiscounts > 0) {
       discRow.style.display = "flex";
-      const discVal = document.getElementById("receiptDiscountVal");
-      let discBreakdownText = `-Rs. ${totalDiscounts.toFixed(2)}`;
-      if (inv.loyaltyDiscount > 0) {
-        discBreakdownText += ` (Pts: -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)})`;
-      }
-      if (discVal) discVal.innerText = discBreakdownText;
+      discVal.innerText = `-${totalDiscounts.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     } else {
       discRow.style.display = "none";
     }
   }
-
+  
   const scRow = document.getElementById("receiptScRow");
-  if (scRow) {
-    if (parseFloat(inv.scAmount || 0) > 0) {
+  const scLabel = document.getElementById("receiptScLabel");
+  const scVal = document.getElementById("receiptScVal");
+  if (scRow && scVal) {
+    if (scAmount > 0) {
       scRow.style.display = "flex";
-      const scVal = document.getElementById("receiptScVal");
-      if (scVal) scVal.innerText = `Rs. ${parseFloat(inv.scAmount).toFixed(2)}`;
+      const scRate = erpState.settings?.scRate || 10;
+      if (scLabel) scLabel.innerText = `Tax %${scRate}`;
+      scVal.innerText = scAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     } else {
       scRow.style.display = "none";
     }
   }
-
+  
   const vatRow = document.getElementById("receiptVatRow");
-  if (vatRow) {
-    if (parseFloat(inv.vatAmount || 0) > 0) {
+  const vatVal = document.getElementById("receiptVatVal");
+  if (vatRow && vatVal) {
+    if (vatAmount > 0) {
       vatRow.style.display = "flex";
-      const vatVal = document.getElementById("receiptVatVal");
-      if (vatVal) vatVal.innerText = `Rs. ${parseFloat(inv.vatAmount).toFixed(2)}`;
+      const vatRate = erpState.settings?.vatRate || 18;
+      const vatLabel = document.getElementById("receiptVatLabel");
+      if (vatLabel) vatLabel.innerText = `VAT %${vatRate}`;
+      vatVal.innerText = vatAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     } else {
       vatRow.style.display = "none";
     }
   }
-
+  
   const cslRow = document.getElementById("receiptCslRow");
-  if (cslRow) {
-    if (parseFloat(inv.cslAmount || 0) > 0) {
+  const cslVal = document.getElementById("receiptCslVal");
+  if (cslRow && cslVal) {
+    if (cslAmount > 0) {
       cslRow.style.display = "flex";
-      const cslVal = document.getElementById("receiptCslVal");
-      if (cslVal) cslVal.innerText = `Rs. ${parseFloat(inv.cslAmount).toFixed(2)}`;
+      const cslRate = erpState.settings?.cslRate || 2.5;
+      const cslLabel = document.getElementById("receiptCslLabel");
+      if (cslLabel) cslLabel.innerText = `SSCL %${cslRate}`;
+      cslVal.innerText = cslAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     } else {
       cslRow.style.display = "none";
     }
   }
-
-  const totEl = document.getElementById("receiptTotal");
-  if (totEl) totEl.innerText = `Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}`;
-
+  
+const totEl = document.getElementById("receiptTotal");
+if (totEl) totEl.innerText = `Rs.${netTotalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const p = inv.payment || { method: "cash" };
+  const cashRow = document.getElementById("receiptCashTenderedRow");
+  const cashLabel = document.getElementById("receiptCashLabel");
+  const cashVal = document.getElementById("receiptCashTendered");
+  const balRow = document.getElementById("receiptBalanceRow");
+  const balVal = document.getElementById("receiptBalance");
   const payDiv = document.getElementById("receiptPayDetails");
-  if (payDiv) {
-    const p = inv.payment || { method: "cash" };
-    let payText = `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: inherit; color: #000000;"><span>PAYMENT METHOD:</span><span>${(p.method || 'cash').toUpperCase()}</span></div>`;
-
-    if (p.method === "cash") {
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Cash Tendered:</span><span style="font-weight: 800;">Rs. ${parseFloat(p.cashTendered || inv.netTotal).toFixed(2)}</span></div>`;
-      payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; color: #000000;"><span>Cash Change:</span><span style="font-weight: 900;">Rs. ${parseFloat(p.change || 0).toFixed(2)}</span></div>`;
-    } else if (p.method === "card") {
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Card:</span><span style="font-weight: 800;">${p.cardType || 'Card'}${p.last4 ? ' (**** ' + p.last4 + ')' : ''}</span></div>`;
-    } else if (p.method === "transfer") {
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Ref / TXN ID:</span><span style="font-weight: 800;">${p.refNo || '-'}</span></div>`;
-    } else if (p.method === "split") {
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Cash:</span><span>Rs. ${parseFloat(p.splitCash || 0).toFixed(2)}</span></div>`;
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Split Card:</span><span>Rs. ${parseFloat(p.splitCard || 0).toFixed(2)} (${p.cardType || 'Card'})</span></div>`;
-    } else if (p.method === "credit") {
-      payText += `<div style="display: flex; justify-content: space-between; color: #000000; font-weight: 700;"><span>Customer:</span><span style="font-weight: 800;">${p.customerName || 'Customer'} (${p.customerPhone || 'N/A'})</span></div>`;
+  
+  if (p.method === "cash") {
+    const tendered = parseFloat(p.cashTendered || netTotalVal);
+    const balance = parseFloat(p.change || 0);
+    
+    if (cashRow) cashRow.style.display = "flex";
+    if (cashLabel) cashLabel.innerText = "Cash";
+    if (cashVal) cashVal.innerText = tendered.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    if (balRow) balRow.style.display = "flex";
+    if (balVal) balVal.innerText = balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    if (payDiv) payDiv.innerHTML = "";
+  } else if (p.method === "card") {
+    if (cashRow) cashRow.style.display = "flex";
+    if (cashLabel) cashLabel.innerText = `Card (${p.cardType || 'Visa'})`;
+    if (cashVal) cashVal.innerText = netTotalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    if (balRow) balRow.style.display = "flex";
+    if (balVal) balVal.innerText = "0.00";
+    
+    if (payDiv) {
+      payDiv.innerHTML = p.last4 ? `<div style="text-align: right; font-size: 9px; color: #333;">Card No: **** **** **** ${p.last4}</div>` : "";
     }
-
-    if (inv.loyaltyPointsEarned > 0 || inv.loyaltyPointsRedeemed > 0) {
-      payText += `<div style="border-top: 1.5px dashed #000000; padding-top: 2px; margin-top: 2px; color: #000000;">`;
-      if (inv.loyaltyPointsRedeemed > 0) {
-        payText += `<div style="display: flex; justify-content: space-between; font-size: 0.9em; font-weight: 700;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts (-Rs. ${inv.loyaltyDiscount})</span></div>`;
-      }
-      if (inv.loyaltyPointsEarned > 0) {
-        payText += `<div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 0.95em;"><span>⭐ Loyalty Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
-      }
-      payText += `</div>`;
+  } else if (p.method === "split") {
+    if (cashRow) cashRow.style.display = "flex";
+    if (cashLabel) cashLabel.innerText = "Cash Paid";
+    if (cashVal) cashVal.innerText = parseFloat(p.splitCash || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    if (balRow) balRow.style.display = "flex";
+    if (balVal) balVal.innerText = `Card: ${parseFloat(p.splitCard || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    
+    if (payDiv) payDiv.innerHTML = "";
+  } else {
+    if (cashRow) cashRow.style.display = "flex";
+    if (cashLabel) cashLabel.innerText = p.method.toUpperCase();
+    if (cashVal) cashVal.innerText = netTotalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    if (balRow) balRow.style.display = "flex";
+    if (balVal) balVal.innerText = "0.00";
+    
+    if (payDiv) {
+      payDiv.innerHTML = p.refNo ? `<div style="text-align: right; font-size: 9px;">Ref: ${p.refNo}</div>` : "";
     }
-
-    payDiv.innerHTML = payText;
   }
-
+  
+  if (payDiv && inv.customerId && (inv.loyaltyPointsEarned > 0 || inv.loyaltyPointsRedeemed > 0 || (inv.loyaltyPointsBalance !== undefined && inv.loyaltyPointsBalance !== null))) {
+  let loyaltyHtml = `<div style="border-top: 1px dashed #000000; padding-top: 3px; margin-top: 3px;">`;
+  if (inv.loyaltyPointsRedeemed > 0) {
+    loyaltyHtml += `<div style="display: flex; justify-content: space-between;"><span>Points Redeemed:</span><span>-${inv.loyaltyPointsRedeemed} Pts</span></div>`;
+  }
+  if (inv.loyaltyPointsEarned > 0) {
+    loyaltyHtml += `<div style="display: flex; justify-content: space-between;"><span>Points Earned:</span><span>+${inv.loyaltyPointsEarned} Pts</span></div>`;
+  }
+  if (inv.loyaltyPointsBalance !== undefined && inv.loyaltyPointsBalance !== null) {
+    loyaltyHtml += `<div style="display: flex; justify-content: space-between; font-weight: 700;"><span>Total Points Balance:</span><span>${inv.loyaltyPointsBalance} Pts</span></div>`;
+  }
+  loyaltyHtml += `</div>`;
+  payDiv.innerHTML += loyaltyHtml;
+}
+  
   const rawText = formatReceiptRawText(inv, "Counter");
   await sendDirectSilentPrint(targetDev, rawText, "receiptModal");
 }
