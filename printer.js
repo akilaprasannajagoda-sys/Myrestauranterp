@@ -44,108 +44,133 @@ function wrapText(text, maxLen) {
   return lines;
 }
 
-// 1. FORMAT RAW TEXT RECEIPT (ADAPTIVE 80MM / 58MM ESC/POS WITH AUTO-WRAP)
+// 1. FORMAT RAW TEXT RECEIPT (EXACT PHOTO REPLICA WITH LOGGED-IN CASHIER & CRISP TEXT)
 export function formatReceiptRawText(inv, stationLabel = "") {
   const hName = (currentTenantInfo?.hotelName || "RESTAURANT ERP").toUpperCase();
   const addr = currentTenantInfo?.address || "";
-  const tel = currentTenantInfo?.phone ? `Tel: ${currentTenantInfo.phone}` : "";
-  const tax = currentTenantInfo?.taxNo ? `TIN/VAT: ${currentTenantInfo.taxNo}` : "";
-  const footer = currentTenantInfo?.footerNote || "*** THANK YOU! PLEASE VISIT US AGAIN ***";
-  const dateStr = new Date(inv.createdAt || Date.now()).toLocaleString();
+  const tel = currentTenantInfo?.phone ? `Hotline: ${currentTenantInfo.phone}` : "";
+  const footer = currentTenantInfo?.footerNote || "~~~Thank You~~~";
   
-  // 🛡️ 80mm (48 chars) vs 58mm (32 chars) Dynamic Width Setup
+  const invDate = new Date(inv.createdAt || Date.now());
+  const dateStr = `${invDate.getMonth() + 1}/${invDate.getDate()}/${invDate.getFullYear()}`;
+  const timeStr = invDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  
   const is58 = (erpState.settings?.paperWidth === "58mm");
   const lineWidth = is58 ? 32 : 48;
-  const divider = "-".repeat(lineWidth) + "\n";
-  const doubleDivider = "=".repeat(lineWidth) + "\n";
+  const dashedDivider = "-".repeat(lineWidth) + "\n";
+  const starDivider = "*".repeat(lineWidth) + "\n";
   
   let text = CMD_INIT;
-  text += CMD_CENTER + CMD_BOLD_ON + `${hName}\n` + CMD_BOLD_OFF;
+  
+  // Header: Hotel Name and Address
+  text += CMD_CENTER + `${hName}\n`;
   if (addr) text += `${addr}\n`;
-  if (tel) text += `${tel}\n`;
-  if (tax) text += `${tax}\n`;
-  if (stationLabel) text += `[STATION: ${stationLabel}]\n`;
+  if (tel) text += `${tel}\n\n`;
   
-  text += `Invoice #${inv.invoiceNumber}\n`;
-  text += `Date: ${dateStr}\n`;
-  text += `Type: ${inv.orderType} (Table: ${inv.tableNo || 'N/A'})\n`;
-  if (inv.customerName) {
-    text += `Customer: ${inv.customerName} ${inv.customerPhone ? '(' + inv.customerPhone + ')' : ''}\n`;
-  }
-  text += CMD_LEFT + divider;
+  // Meta Section: Date, Ticket No, Table vs Time, Cashier
+  const ticketClean = (inv.invoiceNumber || "").replace(/^INV-/, "");
+  const cleanTableNo = String(inv.tableNo || "N/A").replace(/^Table-?/i, "").trim();
+  const tableLabel = cleanTableNo !== "N/A" ? `Table-${cleanTableNo}` : (inv.orderType || "Dine-in");
   
+  // 👤 Automatically picks the logged-in user's name as Cashier!
+  const cashierLabel = inv.cashierName || localStorage.getItem("current_cashier_name") || inv.waiterName || "Cashier";
+  
+  text += CMD_LEFT;
   if (is58) {
-    text += "ITEM / QTY          PRICE  TOTAL\n";
+    text += `Date:${dateStr}  Time:${timeStr}\n`;
+    text += `Ticket No:${ticketClean}  Cashier:${cashierLabel}\n`;
+    text += `Table: ${tableLabel}\n`;
   } else {
-    text += "ITEM / QTY                      PRICE      TOTAL\n";
+    const line1 = `Date:${dateStr}`.padEnd(24, " ") + `Time:${timeStr}`.padStart(24, " ");
+    const line2 = `Ticket No:${ticketClean}`.padEnd(24, " ") + `Cashier:${cashierLabel}`.padStart(24, " ");
+    const line3 = `Table: ${tableLabel}`;
+    text += `${line1}\n${line2}\n${line3}\n`;
   }
-  text += divider;
   
-  const nameLen = is58 ? 16 : 28;
-  const priceLen = is58 ? 7 : 9;
-  const totLen = is58 ? 7 : 9;
-
+  text += dashedDivider;
+  
+  // Table Column Headers
+  if (is58) {
+    text += "Product     Qty  U/Price Net Val\n";
+  } else {
+    text += "Product           Qty    U/Price       Net Value\n";
+  }
+  text += dashedDivider;
+  
+  // Items List (Product on line 1, - Qty U/Price Net Value on line 2)
   (inv.items || []).forEach(i => {
-    const fullName = `${i.name} x${i.qty}`;
-    const nameLines = wrapText(fullName, nameLen);
-    const pricePart = parseFloat(i.price || 0).toFixed(2).padStart(priceLen, " ");
-    const totPart = (parseFloat(i.price || 0) * (parseInt(i.qty) || 1)).toFixed(2).padStart(totLen, " ");
-
-    // First line: First chunk of item name + Price + Total on the right
-    text += `${(nameLines[0] || '').padEnd(nameLen, " ")} ${pricePart} ${totPart}\n`;
-
-    // Remaining lines of item name (wrapped cleanly without overwriting price/total)
-    for (let l = 1; l < nameLines.length; l++) {
-      text += `  ${nameLines[l]}\n`;
+    const unitPrice = parseFloat(i.price || 0).toFixed(2);
+    const lineTotal = (parseFloat(i.price || 0) * (parseInt(i.qty) || 1)).toFixed(2);
+    
+    text += `${i.name}\n`;
+    
+    if (is58) {
+      const qPart = String(i.qty).padStart(4, " ");
+      const uPart = unitPrice.padStart(9, " ");
+      const tPart = lineTotal.padStart(10, " ");
+      text += `-   ${qPart} ${uPart} ${tPart}\n`;
+    } else {
+      const qPart = String(i.qty).padStart(6, " ");
+      const uPart = unitPrice.padStart(12, " ");
+      const tPart = lineTotal.padStart(14, " ");
+      text += `-         ${qPart} ${uPart} ${tPart}\n`;
     }
-
+    
     if (i.note) {
-      text += `  * Note: ${i.note}\n`;
+      text += `  >> Note: ${i.note}\n`;
     }
   });
   
-  text += divider;
-  text += CMD_RIGHT;
-  text += `Subtotal: Rs. ${parseFloat(inv.subtotal || 0).toFixed(2)}\n`;
+  text += dashedDivider;
+  
+  // Taxes / Service Charges (Matching Photo layout)
+  const scAmount = parseFloat(inv.scAmount || 0);
+  const scRate = erpState.settings?.scRate || 10;
+  if (scAmount > 0) {
+    const scLbl = `Tax %${scRate}`;
+    const scValStr = scAmount.toFixed(2);
+    text += `${scLbl.padEnd(lineWidth - scValStr.length, " ")}${scValStr}\n`;
+  }
+  
+  if (parseFloat(inv.vatAmount || 0) > 0) {
+    const vatStr = parseFloat(inv.vatAmount).toFixed(2);
+    text += `VAT`.padEnd(lineWidth - vatStr.length, " ") + `${vatStr}\n`;
+  }
   
   if (parseFloat(inv.discountAmount || 0) > 0) {
-    text += `Discount: -Rs. ${parseFloat(inv.discountAmount).toFixed(2)}\n`;
-  }
-  if (parseFloat(inv.loyaltyDiscount || 0) > 0) {
-    text += `Points Disc (${inv.loyaltyPointsRedeemed || 0} Pts): -Rs. ${parseFloat(inv.loyaltyDiscount).toFixed(2)}\n`;
-  }
-  if (parseFloat(inv.scAmount || 0) > 0) {
-    text += `Tax(10%): Rs. ${parseFloat(inv.scAmount).toFixed(2)}\n`;
-  }
-  if (parseFloat(inv.vatAmount || 0) > 0) {
-    text += `VAT: Rs. ${parseFloat(inv.vatAmount).toFixed(2)}\n`;
-  }
-  if (parseFloat(inv.cslAmount || 0) > 0) {
-    text += `SSCL: Rs. ${parseFloat(inv.cslAmount).toFixed(2)}\n`;
+    const discStr = `-${parseFloat(inv.discountAmount).toFixed(2)}`;
+    text += `Discount`.padEnd(lineWidth - discStr.length, " ") + `${discStr}\n`;
   }
   
-  text += CMD_BOLD_ON + `NET TOTAL: Rs. ${parseFloat(inv.netTotal || 0).toFixed(2)}\n` + CMD_BOLD_OFF;
-  text += divider;
+  // Net Total
+  const netTotalStr = `Rs.${parseFloat(inv.netTotal || 0).toFixed(2)}`;
+  text += CMD_BOLD_ON;
+  text += `Total:`.padEnd(lineWidth - netTotalStr.length, " ") + `${netTotalStr}\n`;
+  text += CMD_BOLD_OFF;
   
+  // Payment Breakdown
   const p = inv.payment || { method: "cash" };
-  if (p.method === "split") {
-    text += `Payment: SPLIT (Cash: Rs. ${parseFloat(p.splitCash || 0).toFixed(2)} + Card: Rs. ${parseFloat(p.splitCard || 0).toFixed(2)})\n`;
+  if (p.method === "cash") {
+    const cashStr = parseFloat(p.cashTendered || inv.netTotal).toFixed(2);
+    const balStr = parseFloat(p.change || 0).toFixed(2);
+    text += `Cash`.padEnd(lineWidth - cashStr.length, " ") + `${cashStr}\n`;
+    text += `Balance:`.padEnd(lineWidth - balStr.length, " ") + `${balStr}\n`;
+  } else if (p.method === "card") {
+    const cardStr = parseFloat(inv.netTotal || 0).toFixed(2);
+    const cardLbl = `Card (${p.cardType || 'Visa'})`;
+    text += `${cardLbl}`.padEnd(lineWidth - cardStr.length, " ") + `${cardStr}\n`;
+    text += `Balance:`.padEnd(lineWidth - 4, " ") + `0.00\n`;
   } else {
-    text += `Payment: ${p.method.toUpperCase()}${p.cardType ? ' (' + p.cardType + ')' : ''}\n`;
-    if (p.method === "cash" && p.cashTendered) {
-      text += `Tendered: Rs. ${parseFloat(p.cashTendered).toFixed(2)} | Change: Rs. ${parseFloat(p.change || 0).toFixed(2)}\n`;
-    }
-  }
-
-  if (inv.loyaltyPointsEarned > 0) {
-    text += divider;
-    text += `⭐ Points Earned Today: +${inv.loyaltyPointsEarned} Pts\n`;
+    const netStr = parseFloat(inv.netTotal || 0).toFixed(2);
+    text += `${p.method.toUpperCase()}`.padEnd(lineWidth - netStr.length, " ") + `${netStr}\n`;
+    text += `Balance:`.padEnd(lineWidth - 4, " ") + `0.00\n`;
   }
   
-  text += CMD_CENTER + "\n" + footer + "\n";
+  text += starDivider;
+  text += CMD_CENTER + `\n${footer}\n`;
   text += "Software by systems.lk | Tel: 0760672029\n\n\n";
-  text += CMD_DRAWER; // Pop open cash drawer
-  text += CMD_CUT; // Cut paper cleanly
+  text += CMD_DRAWER;
+  text += CMD_CUT;
   
   return text;
 }
@@ -160,14 +185,14 @@ export function formatStationOrderTicket(ticket, stationType = "KOT") {
   const lineWidth = is58 ? 32 : 48;
   const doubleDivider = "=".repeat(lineWidth) + "\n";
   
-  let text = CMD_INIT;
-  text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
-  text += CMD_BOLD_ON + `TABLE: ${ticket.tableNo || 'N/A'}\n` + CMD_BOLD_OFF;
-  text += `Type: ${(ticket.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}\n`;
-  if (ticket.waiterName) {
-    text += `Waiter: ${ticket.waiterName}\n`;
-  }
-  text += CMD_LEFT + doubleDivider;
+  const staffName = ticket.cashierName || ticket.waiterName || localStorage.getItem("current_cashier_name") || "Staff";
+
+let text = CMD_INIT;
+text += CMD_CENTER + CMD_BOLD_ON + `${title}\n` + CMD_BOLD_OFF;
+text += CMD_BOLD_ON + `TABLE: ${ticket.tableNo || 'N/A'}\n` + CMD_BOLD_OFF;
+text += `Type: ${(ticket.orderType || 'Dine-in').toUpperCase()} | Time: ${new Date(ticket.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}\n`;
+text += `SERVER: ${staffName}\n`;
+text += CMD_LEFT + doubleDivider;
   
   if (is58) {
     text += CMD_BOLD_ON + "ITEM NAME                    QTY\n" + CMD_BOLD_OFF;
