@@ -2221,16 +2221,40 @@ visibility: visible;
             </div>
 
             <form id="hotelProfileForm" class="space-y-3 text-xs font-bold">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="text-[10px] text-gray-500 uppercase block mb-1">හෝටලයේ නම (Hotel / Restaurant Name)</label>
-                  <input type="text" id="profHotelName" required placeholder="Grand Ocean Restaurant" class="w-full p-2.5 border rounded-xl outline-none bg-gray-50">
-                </div>
-                <div>
-                  <label class="text-[10px] text-gray-500 uppercase block mb-1">දුරකථන අංක (Contact Tel / Mobile)</label>
-                  <input type="text" id="profPhone" placeholder="0112345678 / 0771234567" class="w-full p-2.5 border rounded-xl outline-none bg-gray-50">
-                </div>
-              </div>
+         <!-- Dynamic Restaurant Logo Upload & Preview -->
+<div class="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between gap-3">
+  <div class="flex items-center gap-3">
+    <div id="profLogoPreviewBox" class="w-14 h-14 rounded-xl bg-white border border-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-2xs">
+      <img id="profLogoPreviewImg" src="" class="hidden w-full h-full object-contain p-1">
+      <i id="profLogoPlaceholderIcon" class="fa-solid fa-image text-gray-300 text-xl"></i>
+    </div>
+    <div>
+      <label class="text-[11px] font-black text-gray-800 uppercase block">Restaurant Receipt Logo (බිල්පතේ ලාංඡනය)</label>
+      <p class="text-[9.5px] text-gray-500 font-normal">මෙම Restaurant එකට අදාළ Logo (PNG / JPG) එක තෝරන්න.</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-1.5">
+    <input type="file" id="profLogoFileInput" accept="image/*" class="hidden" onchange="handleRestaurantLogoUpload(event)">
+    <input type="hidden" id="profLogoBase64">
+    <button type="button" onclick="document.getElementById('profLogoFileInput').click()" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold cursor-pointer transition">
+      <i class="fa-solid fa-upload mr-1"></i> Choose Logo
+    </button>
+    <button type="button" onclick="removeRestaurantLogo()" title="Remove Logo" class="p-1.5 text-red-500 hover:text-red-700 cursor-pointer">
+      <i class="fa-solid fa-trash"></i>
+    </button>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  <div>
+    <label class="text-[10px] text-gray-500 uppercase block mb-1">හෝටලයේ නම (Hotel / Restaurant Name)</label>
+    <input type="text" id="profHotelName" required placeholder="Grand Ocean Restaurant" class="w-full p-2.5 border rounded-xl outline-none bg-gray-50 font-bold">
+  </div>
+  <div>
+    <label class="text-[10px] text-gray-500 uppercase block mb-1">දුරකථන අංක (Contact Tel / Mobile)</label>
+    <input type="text" id="profPhone" placeholder="0112345678 / 0771234567" class="w-full p-2.5 border rounded-xl outline-none bg-gray-50 font-bold">
+  </div>
+</div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -3020,13 +3044,16 @@ visibility: visible;
       <span id="kotPrintTable">TABLE: 01</span>
     </div>
     
-    <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: bold; margin-top: 3px; padding: 0 1mm;">
-      <span id="kotPrintType">TYPE: DINE-IN</span>
-      <span id="kotPrintTime">00:00:00 PM</span>
-    </div>
-  </div>
-  
-  <!-- කෑම සහ ප්‍රමාණය Header -->
+<div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: bold; margin-top: 3px; padding: 0 1mm;">
+  <span id="kotPrintType">TYPE: DINE-IN</span>
+  <span id="kotPrintTime">00:00:00 PM</span>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: 800; margin-top: 2px; padding: 0 1mm;">
+  <span id="kotPrintStaff">SERVER: Staff</span>
+</div>
+</div>
+
+<!-- කෑම සහ ප්‍රමාණය Header -->
   <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 900; border-bottom: 1px solid #000; padding: 2px 1mm; margin-bottom: 3px;">
     <span>ITEM NAME</span>
     <span style="padding-right: 2mm;">QTY</span>
@@ -3040,77 +3067,127 @@ visibility: visible;
   </div>
 </div>
 
-<!-- ⭐ HIGH-CONTRAST THERMAL BILL RECEIPT (SUPERMARKET GRADE - 100% PURE BLACK) -->
-<div id="receiptModal" style="display: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #000000; line-height: 1.35;">
+<!-- ⭐ DYNAMIC MULTI-RESTAURANT THERMAL RECEIPT (ACCURATE TO USER'S PHOTO) -->
+<div id="receiptModal" style="display: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #000000; line-height: 1.25; font-size: 11px;">
   
-  <!-- 1. Header & Hotel Branding -->
-  <div style="text-align: center; margin-bottom: 4px;">
-    <h2 id="receiptHotel" style="font-size: 17px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: #000000; margin-bottom: 2px;">HOTEL NAME</h2>
-    <p id="receiptAddress" style="font-size: 10.5px; font-weight: 600; color: #000000;">Address Line</p>
-    <p id="receiptPhone" style="font-size: 10.5px; font-weight: 700; color: #000000;">Tel: 0112345678</p>
-    <p id="receiptTaxNo" style="display: none; font-size: 10px; font-weight: 800; color: #000000;">TIN/VAT: ...</p>
+  <!-- 1. Header with Dynamic Restaurant Logo & Right-Aligned Address -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 4px;">
     
-    <div style="border-bottom: 2px solid #000000; margin: 4px 0 3px 0;"></div>
-    
-    <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: 800; color: #000000;">
-      <span id="receiptOrderId">Invoice #000000</span>
-      <span id="receiptType">Dine-in (Table: 01)</span>
-    </div>
-    <div style="text-align: left; font-size: 9.5px; font-weight: 600; color: #000000; margin-top: 1px;">
-      <span id="receiptDate">Date: 2026-00-00 00:00</span>
+    <!-- Dynamic Logo Container (Shows either Restaurant's uploaded logo or monogram) -->
+    <div id="receiptLogoWrapper" style="flex-shrink: 0; width: 62px; height: 62px; display: flex; align-items: center; justify-content: flex-start;">
+      <img id="receiptLogoImg" src="" style="display: none; width: 100%; height: 100%; object-fit: contain; filter: grayscale(100%) contrast(200%);">
+      <div id="receiptLogoFallbackMonogram" style="display: flex; width: 56px; height: 56px; border: 2px solid #000000; border-radius: 8px; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; font-family: Georgia, serif; letter-spacing: 1px;">
+        ERP
+      </div>
     </div>
     
-    <div style="border-bottom: 1.5px solid #000000; margin: 3px 0;"></div>
+    <!-- Hotel Address & Contact Details (100% Dynamic per Restaurant) -->
+    <div style="text-align: right; flex: 1; padding-left: 8px;">
+      <div id="receiptHotel" style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #000000; line-height: 1.2;">HOTEL NAME</div>
+      <div id="receiptAddress" style="font-size: 9.5px; font-weight: 500; color: #000000; line-height: 1.25; margin-top: 1px;">Restaurant Address</div>
+      <div id="receiptPhone" style="font-size: 9.5px; font-weight: 600; color: #000000; margin-top: 1px;">Hotline: 0112345678</div>
+      <div id="receiptTaxNo" style="display: none; font-size: 9px; font-weight: 600; color: #000000;">TIN/VAT: ...</div>
+    </div>
   </div>
   
-  <!-- 2. Items Table Header (Adaptive Flexbox for 58mm & 80mm) -->
-<div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 900; border-bottom: 1.5px solid #000000; padding: 2px 0 3px 0; margin-bottom: 3px; color: #000000; width: 100%;">
-  <span style="flex: 1.8; text-align: left; padding-right: 2px;">ITEM / QTY</span>
-  <span style="flex: 1.1; text-align: right;">PRICE</span>
-  <span style="flex: 1.2; text-align: right;">TOTAL</span>
+  <!-- 2. Meta Details (Date, Ticket No, Table vs Time, Cashier) -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; font-size: 10px; font-weight: 500; line-height: 1.35; padding: 2px 0;">
+  <div>
+    <div>Date:<span id="receiptDate" style="font-weight: 600;">11/20/2026</span></div>
+    <div>Ticket No:<span id="receiptOrderId" style="font-weight: 600;">40767</span></div>
+    <div>Table: <span id="receiptTable" style="font-weight: 600;">Table-21</span><span id="receiptType" style="display: none;"></span></div>
+  </div>
+  <div style="text-align: right;">
+    <div>Time:<span id="receiptTime" style="font-weight: 600;">4:25 PM</span></div>
+    <div>Cashier:<span id="receiptCashier" style="font-weight: 600;">Cashier</span></div>
+    <div id="receiptCustomerRow" style="display: none;">Cust: <span id="receiptCustomer" style="font-weight: 600;"></span></div>
+  </div>
 </div>
-  <!-- 3. Dynamic Items List -->
+  
+  <!-- Separator Line -->
+  <div style="border-bottom: 1px dashed #000000; margin: 4px 0 3px 0;"></div>
+  
+  <!-- 3. Table Column Headers -->
+  <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: 600; padding: 1px 0 2px 0;">
+    <span style="flex: 2; text-align: left;">Product</span>
+    <span style="width: 28px; text-align: center;">Qty</span>
+    <span style="width: 58px; text-align: right;">U/Price</span>
+    <span style="width: 65px; text-align: right;">Net Value</span>
+  </div>
+  
+  <!-- Separator Line -->
+  <div style="border-bottom: 1px dashed #000000; margin: 2px 0 3px 0;"></div>
+  
+  <!-- 4. Dynamic Order Items List (Product on line 1, - Qty Price Total on line 2) -->
   <div id="receiptItems" style="font-size: 10.5px; color: #000000;"></div>
   
-  <div style="border-bottom: 1.5px dashed #000000; margin: 4px 0;"></div>
+  <!-- Separator Line -->
+  <div style="border-bottom: 1px dashed #000000; margin: 3px 0;"></div>
   
-  <!-- 4. Subtotal, Discounts & Taxes Breakdown -->
-  <div style="font-size: 10.5px; font-weight: 700; line-height: 1.45; color: #000000;">
-    <div style="display: flex; justify-content: space-between;">
-      <span>Subtotal:</span>
-      <span id="receiptSubtotal" style="font-weight: 800;">Rs. 0.00</span>
+  <!-- 5. Taxes, Discounts & Totals Section -->
+  <div style="font-size: 10.5px; font-weight: 500; line-height: 1.35; color: #000000;">
+    
+    <!-- Subtotal (shown if discounts/taxes exist) -->
+    <div id="receiptSubtotalRow" style="display: none; justify-content: space-between;">
+      <span>Subtotal</span>
+      <span id="receiptSubtotal">0.00</span>
     </div>
-    <div id="receiptDiscountRow" style="display: none; justify-content: space-between; font-weight: 800;">
-      <span>Discounts:</span>
-      <span id="receiptDiscountVal">-Rs. 0.00</span>
+    
+    <!-- Discounts -->
+    <div id="receiptDiscountRow" style="display: none; justify-content: space-between;">
+      <span id="receiptDiscountLabel">Discount</span>
+      <span id="receiptDiscountVal">-0.00</span>
     </div>
+    
+    <!-- Taxes / Service Charges (Exact style matching "Tax %10") -->
     <div id="receiptScRow" style="display: none; justify-content: space-between;">
-      <span>Tax 10%:</span>
-      <span id="receiptScVal">Rs. 0.00</span>
+      <span id="receiptScLabel">Tax %10</span>
+      <span id="receiptScVal">0.00</span>
     </div>
     <div id="receiptVatRow" style="display: none; justify-content: space-between;">
-      <span>VAT:</span>
-      <span id="receiptVatVal">Rs. 0.00</span>
+      <span id="receiptVatLabel">VAT</span>
+      <span id="receiptVatVal">0.00</span>
     </div>
     <div id="receiptCslRow" style="display: none; justify-content: space-between;">
-      <span>SSCL:</span>
-      <span id="receiptCslVal">Rs. 0.00</span>
+      <span id="receiptCslLabel">SSCL</span>
+      <span id="receiptCslVal">0.00</span>
     </div>
+    
+    <!-- Prominent Total (Clean 700 bold, not blurry thick 900) -->
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0; font-size: 13.5px; font-weight: 700; color: #000000;">
+      <span>Total:</span>
+      <span id="receiptTotal" style="font-size: 14.5px; font-weight: 700;">Rs.0.00</span>
+    </div>
+    
+    <!-- Cash Tendered -->
+    <div id="receiptCashTenderedRow" style="display: flex; justify-content: space-between;">
+      <span id="receiptCashLabel">Cash</span>
+      <span id="receiptCashTendered">0.00</span>
+    </div>
+    
+    <!-- Balance / Change -->
+    <div id="receiptBalanceRow" style="display: flex; justify-content: space-between;">
+      <span id="receiptBalanceLabel">Balance:</span>
+      <span id="receiptBalance">0.00</span>
+    </div>
+    
+    <!-- Card / Split / Online Info -->
+    <div id="receiptPayDetails" style="font-size: 9.5px; padding-top: 2px;"></div>
   </div>
   
-  <!-- 5. 🌟 BOLD & PROMINENT NET TOTAL BOX -->
-  <div style="border-top: 2px solid #000000; border-bottom: 2px solid #000000; padding: 4px 0; margin: 5px 0; display: flex; justify-content: space-between; align-items: center; color: #000000;">
-    <span style="font-size: 13.5px; font-weight: 900; letter-spacing: 0.5px;">NET TOTAL:</span>
-    <span id="receiptTotal" style="font-size: 17px; font-weight: 900; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">Rs. 0.00</span>
+  <!-- 6. Bottom Asterisk Line -->
+  <div style="text-align: center; font-size: 10px; letter-spacing: 1.5px; margin: 4px 0 2px 0; overflow: hidden; white-space: nowrap;">
+    **************************************************
   </div>
   
-  <!-- 6. Payment & Change Settlement Details -->
-  <div id="receiptPayDetails" style="font-size: 10px; font-weight: 700; line-height: 1.4; color: #000000; padding: 2px 0;"></div>
-  
-  <!-- 7. Footer Note & Branding -->
-  <div style="border-top: 1.5px dashed #000000; margin-top: 4px; padding-top: 4px; text-align: center; color: #000000;">
-    <p id="receiptFooterNote" style="font-size: 10.5px; font-weight: 800; letter-spacing: 0.2px;">*** THANK YOU! PLEASE VISIT US AGAIN ***</p>
-    <p style="font-size: 9px; font-weight: 800; margin-top: 2px;">Software by systems.lk | Tel: 0760672029</p>
+  <!-- 7. Thank You Footer -->
+  <div style="text-align: center; margin-top: 2px; padding-bottom: 2px;">
+    <div id="receiptFooterNote" style="font-size: 13px; font-style: italic; font-weight: 500; font-family: 'Brush Script MT', 'Segoe Script', Georgia, serif; letter-spacing: 0.5px;">
+      ~~~Thank You~~~
+    </div>
+    <div style="font-size: 8px; color: #555555; margin-top: 2px; font-family: sans-serif;">
+      Software by systems.lk | Tel: 0760672029
+    </div>
   </div>
   
 </div>
