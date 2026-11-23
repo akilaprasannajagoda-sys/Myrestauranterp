@@ -250,43 +250,43 @@ export async function downloadCSVFile(csvContent, filename) {
   const previewRows = csvContent.trim().split("\n").slice(0, 15);
 
   const modal = document.createElement("div");
-  modal.id = "mobileCsvExportModal";
-  modal.style.zIndex = "9999";
-  modal.className = "fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-3";
-  modal.innerHTML = `
-    <div class="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden">
-      <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <div>
-          <h4 class="font-black text-sm text-gray-800 flex items-center gap-2">
-            <i class="fa-solid fa-file-excel text-green-600"></i> Excel / CSV Report Ready
+modal.id = "mobileCsvExportModal";
+modal.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; padding: 12px; box-sizing: border-box;";
+modal.innerHTML = `
+    <div style="background: #ffffff; border-radius: 20px; width: 100%; max-width: 520px; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb; flex-shrink: 0;">
+        <div style="min-width: 0; padding-right: 8px;">
+          <h4 style="margin: 0; font-weight: 900; font-size: 14px; color: #1f2937; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-file-excel" style="color: #16a34a;"></i> Excel / CSV Report Ready
           </h4>
-          <p class="text-[10px] text-gray-500 font-mono mt-0.5">${escapeHTML(filename)}</p>
+          <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(filename)}</p>
         </div>
-        <button type="button" id="closeMobileCsvBtn" class="w-8 h-8 rounded-xl bg-gray-200 hover:bg-red-600 text-gray-700 hover:text-white flex items-center justify-center cursor-pointer">
+        <button type="button" id="closeMobileCsvBtn" style="width: 34px; height: 34px; border-radius: 10px; background: #ef4444; color: #ffffff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 15px;">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
-      <div class="p-3 flex-1 overflow-auto bg-gray-50 text-[10px] font-mono text-gray-700 whitespace-pre">
+      <div style="padding: 12px; flex: 1 1 auto; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; background: #f8fafc; font-size: 10px; font-family: monospace; color: #334155; white-space: pre;">
 ${escapeHTML(previewRows.join("\n"))}${csvContent.trim().split("\n").length > 15 ? "\n... (තවත් පේළි ඇත)" : ""}
       </div>
 
-      <div class="p-3.5 border-t border-gray-200 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-bold">
-        <a href="${dataUri}" download="${escapeHTML(filename)}" id="mobCsvDownloadBtn" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-center flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
-          <i class="fa-solid fa-download"></i> Download CSV
+      <div style="padding: 10px 12px; border-top: 1px solid #e5e7eb; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 11px; font-weight: 700; flex-shrink: 0;">
+        <a href="${dataUri}" download="${escapeHTML(filename)}" id="mobCsvDownloadBtn" style="padding: 10px 6px; background: #2563eb; color: #ffffff; border-radius: 10px; text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;">
+          <i class="fa-solid fa-download"></i> CSV
         </a>
-        <button type="button" id="mobCsvShareBtn" class="py-2.5 px-3 bg-green-600 hover:bg-green-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
-          <i class="fa-solid fa-share-nodes"></i> Share / WhatsApp
+        <button type="button" id="mobCsvShareBtn" style="padding: 10px 6px; background: #16a34a; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+          <i class="fa-solid fa-share-nodes"></i> Share
         </button>
-        <button type="button" id="mobCsvCopyBtn" class="py-2.5 px-3 bg-gray-800 hover:bg-gray-900 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
-          <i class="fa-solid fa-copy"></i> Copy for Excel
+        <button type="button" id="mobCsvCopyBtn" style="padding: 10px 6px; background: #1e293b; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+          <i class="fa-solid fa-copy"></i> Copy
         </button>
       </div>
     </div>
   `;
-  document.body.appendChild(modal);
+document.body.appendChild(modal);
 
-  modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
+modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
 
   modal.querySelector("#mobCsvCopyBtn").onclick = async () => {
     try {
@@ -457,49 +457,49 @@ export async function generateReportPDF({
     const dataHtmlUri = `data:text/html;charset=utf-8;base64,${b64Html}`;
 
     const modal = document.createElement("div");
-    modal.id = "mobileReportViewerModal";
-    modal.style.zIndex = "9999";
-    modal.className = "fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-2 sm:p-4";
-    modal.innerHTML = `
-      <div class="bg-white rounded-3xl w-full max-w-4xl max-h-[94vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden">
-        <!-- Top Bar -->
-        <div class="p-3.5 border-b border-gray-200 flex justify-between items-center bg-gray-900 text-white shrink-0">
-          <div class="truncate pr-2">
-            <h4 class="font-black text-sm truncate flex items-center gap-2">
-              <i class="fa-solid fa-file-pdf text-red-400"></i> ${escapeHTML(reportTitle)}
+modal.id = "mobileReportViewerModal";
+modal.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.82); display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box;";
+modal.innerHTML = `
+      <div style="background: #ffffff; border-radius: 20px; width: 100%; max-width: 850px; height: 86vh; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+        <!-- Fixed Top Bar -->
+        <div style="padding: 12px 14px; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; background: #111827; color: #ffffff; flex-shrink: 0;">
+          <div style="min-width: 0; padding-right: 10px;">
+            <h4 style="margin: 0; font-weight: 900; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-file-pdf" style="color: #f87171;"></i> ${escapeHTML(reportTitle)}
             </h4>
-            <p class="text-[10px] text-gray-400 truncate">${escapeHTML(subtitle || printDate)}</p>
+            <p style="margin: 2px 0 0 0; font-size: 10px; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(subtitle || printDate)}</p>
           </div>
-          <button type="button" id="closeMobReportBtn" class="w-8 h-8 rounded-xl bg-gray-800 hover:bg-red-600 text-white flex items-center justify-center cursor-pointer shrink-0">
+          <button type="button" id="closeMobReportBtn" style="width: 34px; height: 34px; border-radius: 10px; background: #ef4444; color: #ffffff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 15px;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
 
-        <!-- Scrollable Full Report Body -->
-        <div class="p-4 flex-1 overflow-auto bg-white text-gray-900">
+        <!-- Smooth Scrollable Full Report Body -->
+        <div style="padding: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; background: #ffffff; color: #111827;">
           ${bodyInnerHtml}
         </div>
 
-        <!-- Action Buttons Bar -->
-        <div class="p-3 border-t border-gray-200 bg-gray-50 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold shrink-0">
-          <button type="button" id="mobRepShareBtn" class="py-2.5 px-3 bg-green-600 hover:bg-green-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+        <!-- Fixed Bottom Action Buttons Bar -->
+        <div style="padding: 10px 12px; border-top: 1px solid #e5e7eb; background: #f8fafc; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 11px; font-weight: 700; flex-shrink: 0;">
+          <button type="button" id="mobRepShareBtn" style="padding: 10px 8px; background: #16a34a; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
             <i class="fa-solid fa-share-nodes"></i> Share / WhatsApp
           </button>
-          <a href="${dataHtmlUri}" download="${escapeHTML(htmlFilename)}" id="mobRepDownloadBtn" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+          <a href="${dataHtmlUri}" download="${escapeHTML(htmlFilename)}" id="mobRepDownloadBtn" style="padding: 10px 8px; background: #2563eb; color: #ffffff; border-radius: 10px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px;">
             <i class="fa-solid fa-download"></i> Save Report
           </a>
-          <button type="button" id="mobRepPrintBtn" class="py-2.5 px-3 bg-red-600 hover:bg-red-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+          <button type="button" id="mobRepPrintBtn" style="padding: 10px 8px; background: #dc2626; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
             <i class="fa-solid fa-print"></i> Print / PDF
           </button>
-          <button type="button" id="mobRepCopyBtn" class="py-2.5 px-3 bg-gray-800 hover:bg-gray-900 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+          <button type="button" id="mobRepCopyBtn" style="padding: 10px 8px; background: #1f2937; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
             <i class="fa-solid fa-copy"></i> Copy Text
           </button>
         </div>
       </div>
     `;
-    document.body.appendChild(modal);
+document.body.appendChild(modal);
 
-    modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
+modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
 
     // Build clean plain text summary for WhatsApp / Copy
     const buildSummaryText = () => {
