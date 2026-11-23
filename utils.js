@@ -188,19 +188,134 @@ export function manualPurgeSystemMemory() {
   showLiveToast("🧹 RAM & Cache Cleaned", "පද්ධතියේ තාවකාලික මතකය (Cache) සාර්ථකව පිරිසිදු කරන ලදී.", "success", "fa-broom");
 }
 
-// 5. ACCURATE SINHALA UTF-8 BOM CSV EXPORT HELPER
-export function downloadCSVFile(csvContent, filename) {
-  const BOM = "\uFEFF";
-  const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
+// 🛡️ SINHALA UTF-8 SAFE BASE64 ENCODER (FOR MOBILE APK DOWNLOADS)
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
-// 📄 5.1 100% DIRECT DOWNLOAD VECTOR PDF REPORT GENERATOR (NO PRINT WINDOW!)
+// 📱 MOBILE & APK ENVIRONMENT DETECTOR
+function isMobileOrApkClient() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || !!(window.Capacitor || window.cordova);
+}
+
+// 5. ACCURATE SINHALA UTF-8 BOM CSV EXPORT HELPER (DESKTOP + MOBILE APK COMPATIBLE)
+export async function downloadCSVFile(csvContent, filename) {
+  const BOM = "\uFEFF";
+  const fullCsv = BOM + csvContent;
+
+  // 1. Desktop PC / Browser Standard Download
+  if (!isMobileOrApkClient() || (window.electronAPI && window.electronAPI.savePdf)) {
+    const blob = new Blob([fullCsv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    showLiveToast("📊 Report Exported", `${filename} සාර්ථකව Excel (CSV) ලෙස බාගත විය.`, "success", "fa-file-excel");
+    return;
+  }
+
+  // 2. Capacitor Native Mobile Filesystem + Share (If Capacitor Plugins Exist)
+  if (window.Capacitor?.Plugins?.Filesystem) {
+    try {
+      const fs = window.Capacitor.Plugins.Filesystem;
+      const b64 = utf8ToBase64(fullCsv);
+      const res = await fs.writeFile({
+        path: filename,
+        data: b64,
+        directory: 'DOCUMENTS'
+      });
+      showLiveToast("📊 Saved to Documents", `${filename} Documents ෆෝල්ඩරයට සේව් විය.`, "success", "fa-file-excel");
+      if (window.Capacitor?.Plugins?.Share) {
+        await window.Capacitor.Plugins.Share.share({ title: filename, url: res.uri });
+      }
+      return;
+    } catch (capErr) {
+      console.warn("Capacitor FS pass:", capErr);
+    }
+  }
+
+  // 3. Mobile APK / WebView Export Hub Modal (Never fails silently!)
+  const existing = document.getElementById("mobileCsvExportModal");
+  if (existing) existing.remove();
+
+  const b64Csv = utf8ToBase64(fullCsv);
+  const dataUri = `data:text/csv;charset=utf-8;base64,${b64Csv}`;
+  const previewRows = csvContent.trim().split("\n").slice(0, 15);
+
+  const modal = document.createElement("div");
+  modal.id = "mobileCsvExportModal";
+  modal.style.zIndex = "9999";
+  modal.className = "fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-3";
+  modal.innerHTML = `
+    <div class="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden">
+      <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        <div>
+          <h4 class="font-black text-sm text-gray-800 flex items-center gap-2">
+            <i class="fa-solid fa-file-excel text-green-600"></i> Excel / CSV Report Ready
+          </h4>
+          <p class="text-[10px] text-gray-500 font-mono mt-0.5">${escapeHTML(filename)}</p>
+        </div>
+        <button type="button" id="closeMobileCsvBtn" class="w-8 h-8 rounded-xl bg-gray-200 hover:bg-red-600 text-gray-700 hover:text-white flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-3 flex-1 overflow-auto bg-gray-50 text-[10px] font-mono text-gray-700 whitespace-pre">
+${escapeHTML(previewRows.join("\n"))}${csvContent.trim().split("\n").length > 15 ? "\n... (තවත් පේළි ඇත)" : ""}
+      </div>
+
+      <div class="p-3.5 border-t border-gray-200 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-bold">
+        <a href="${dataUri}" download="${escapeHTML(filename)}" id="mobCsvDownloadBtn" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-center flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+          <i class="fa-solid fa-download"></i> Download CSV
+        </a>
+        <button type="button" id="mobCsvShareBtn" class="py-2.5 px-3 bg-green-600 hover:bg-green-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+          <i class="fa-solid fa-share-nodes"></i> Share / WhatsApp
+        </button>
+        <button type="button" id="mobCsvCopyBtn" class="py-2.5 px-3 bg-gray-800 hover:bg-gray-900 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+          <i class="fa-solid fa-copy"></i> Copy for Excel
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
+
+  modal.querySelector("#mobCsvCopyBtn").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(csvContent);
+      showLiveToast("📋 Copied!", "සම්පූර්ණ Excel දත්ත Clipboard එකට Copy විය.", "success", "fa-copy");
+    } catch (e) {
+      showLiveToast("⚠️ Copy Failed", "Copy කිරීමට අවසර නැත.", "warning", "fa-triangle-exclamation");
+    }
+  };
+
+  modal.querySelector("#mobCsvShareBtn").onclick = async () => {
+    try {
+      const file = new File([fullCsv], filename, { type: "text/csv" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: filename, files: [file] });
+        return;
+      }
+      if (navigator.share) {
+        await navigator.share({ title: filename, text: csvContent });
+        return;
+      }
+    } catch (err) {
+      if (err.name === "AbortError") return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`*${filename}*\n\n` + previewRows.join("\n"))}`, "_blank");
+  };
+}
+
+// 📄 5.1 100% DIRECT DOWNLOAD VECTOR PDF REPORT GENERATOR (DESKTOP + MOBILE APK VIEWER)
 export async function generateReportPDF({
   reportTitle = "Official Report",
   subtitle = "",
@@ -253,79 +368,66 @@ export async function generateReportPDF({
     </tr>`;
   }).join("");
 
+  const bodyInnerHtml = `
+    <!-- REPORT HEADER -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+      <div>
+        <h1 style="margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: 0.5px;">${escapeHTML(hotelName)}</h1>
+        ${address ? `<div style="font-size: 10px; color: #475569; margin-top: 2px;">${escapeHTML(address)}</div>` : ''}
+        <div style="font-size: 10px; color: #475569; margin-top: 1px;">
+          ${phone ? `<span>${escapeHTML(phone)}</span> ` : ''}
+          ${taxNo ? `| <span>${escapeHTML(taxNo)}</span>` : ''}
+        </div>
+      </div>
+      <div style="text-align: right;">
+        <h2 style="margin: 0; font-size: 14px; font-weight: 900; color: #2563eb; text-transform: uppercase;">${escapeHTML(reportTitle)}</h2>
+        ${subtitle ? `<div style="font-size: 10px; font-weight: 700; color: #475569; margin-top: 2px;">${escapeHTML(subtitle)}</div>` : ''}
+        <div style="font-size: 9px; color: #94a3b8; margin-top: 3px; font-mono;">Generated: ${escapeHTML(printDate)}</div>
+      </div>
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    ${summaryHtml}
+
+    <!-- MAIN DATA TABLE -->
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+        <thead>${tableHeaderHtml}</thead>
+        <tbody>${tableRowsHtml}</tbody>
+      </table>
+    </div>
+
+    <!-- REPORT FOOTER -->
+    <div style="margin-top: 20px; padding-top: 8px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #64748b; flex-wrap: wrap; gap: 6px;">
+      <div>*** Official System Generated Document - Restaurant ERP ***</div>
+      <div style="font-weight: 800;">Powered by systems.lk | Hotline: 0760672029</div>
+    </div>
+  `;
+
   const fullHtml = `
     <!DOCTYPE html>
     <html lang="si">
     <head>
       <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${escapeHTML(reportTitle)}</title>
       <style>
-        @page {
-          size: ${pageSize};
-          margin: 12mm 10mm;
-        }
-        *, *::before, *::after {
-          box-sizing: border-box;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Sinhala", Arial, sans-serif;
-          color: #0f172a;
-          background: #ffffff;
-          margin: 0;
-          padding: 0;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 8px;
-        }
-        tr {
-          page-break-inside: avoid;
-        }
+        @page { size: ${pageSize}; margin: 12mm 10mm; }
+        *, *::before, *::after { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Sinhala", Arial, sans-serif; color: #0f172a; background: #ffffff; margin: 0; padding: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        tr { page-break-inside: avoid; }
       </style>
     </head>
-    <body>
-      <!-- REPORT HEADER -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px;">
-        <div>
-          <h1 style="margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: 0.5px;">${escapeHTML(hotelName)}</h1>
-          ${address ? `<div style="font-size: 10px; color: #475569; margin-top: 2px;">${escapeHTML(address)}</div>` : ''}
-          <div style="font-size: 10px; color: #475569; margin-top: 1px;">
-            ${phone ? `<span>${escapeHTML(phone)}</span> ` : ''}
-            ${taxNo ? `| <span>${escapeHTML(taxNo)}</span>` : ''}
-          </div>
-        </div>
-        <div style="text-align: right;">
-          <h2 style="margin: 0; font-size: 14px; font-weight: 900; color: #2563eb; text-transform: uppercase;">${escapeHTML(reportTitle)}</h2>
-          ${subtitle ? `<div style="font-size: 10px; font-weight: 700; color: #475569; margin-top: 2px;">${escapeHTML(subtitle)}</div>` : ''}
-          <div style="font-size: 9px; color: #94a3b8; margin-top: 3px; font-mono;">Generated: ${escapeHTML(printDate)}</div>
-        </div>
-      </div>
-
-      <!-- SUMMARY CARDS -->
-      ${summaryHtml}
-
-      <!-- MAIN DATA TABLE -->
-      <table>
-        <thead>${tableHeaderHtml}</thead>
-        <tbody>${tableRowsHtml}</tbody>
-      </table>
-
-      <!-- REPORT FOOTER -->
-      <div style="margin-top: 20px; padding-top: 8px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #64748b;">
-        <div>*** Official System Generated Document - Restaurant ERP ***</div>
-        <div style="font-weight: 800;">Powered by systems.lk | Hotline: 0760672029</div>
-      </div>
-    </body>
+    <body>${bodyInnerHtml}</body>
     </html>
   `;
 
   const cleanTitle = (reportTitle || "Report").replace(/[^\w\s\u0D80-\u0DFF-]/g, "").replace(/\s+/g, "_");
   const defaultFilename = `${cleanTitle}_${getLocalDateString()}.pdf`;
+  const htmlFilename = `${cleanTitle}_${getLocalDateString()}.html`;
 
-  // 1. ELECTRON NATIVE DIRECT PDF DOWNLOAD
+  // 1. ELECTRON DESKTOP APP (.exe) NATIVE DIRECT PDF SAVE
   if (window.electronAPI && window.electronAPI.savePdf) {
     try {
       showLiveToast("⏳ Generating PDF", "PDF ගොනුව සකස් කරමින් පවතී...", "info", "fa-spinner fa-spin");
@@ -346,7 +448,135 @@ export async function generateReportPDF({
     }
   }
 
-  // 2. BROWSER FALLBACK
+  // 2. MOBILE APK & WEB BROWSER INTERACTIVE VIEWER + EXPORT HUB
+  if (isMobileOrApkClient()) {
+    const existing = document.getElementById("mobileReportViewerModal");
+    if (existing) existing.remove();
+
+    const b64Html = utf8ToBase64(fullHtml);
+    const dataHtmlUri = `data:text/html;charset=utf-8;base64,${b64Html}`;
+
+    const modal = document.createElement("div");
+    modal.id = "mobileReportViewerModal";
+    modal.style.zIndex = "9999";
+    modal.className = "fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-2 sm:p-4";
+    modal.innerHTML = `
+      <div class="bg-white rounded-3xl w-full max-w-4xl max-h-[94vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden">
+        <!-- Top Bar -->
+        <div class="p-3.5 border-b border-gray-200 flex justify-between items-center bg-gray-900 text-white shrink-0">
+          <div class="truncate pr-2">
+            <h4 class="font-black text-sm truncate flex items-center gap-2">
+              <i class="fa-solid fa-file-pdf text-red-400"></i> ${escapeHTML(reportTitle)}
+            </h4>
+            <p class="text-[10px] text-gray-400 truncate">${escapeHTML(subtitle || printDate)}</p>
+          </div>
+          <button type="button" id="closeMobReportBtn" class="w-8 h-8 rounded-xl bg-gray-800 hover:bg-red-600 text-white flex items-center justify-center cursor-pointer shrink-0">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Scrollable Full Report Body -->
+        <div class="p-4 flex-1 overflow-auto bg-white text-gray-900">
+          ${bodyInnerHtml}
+        </div>
+
+        <!-- Action Buttons Bar -->
+        <div class="p-3 border-t border-gray-200 bg-gray-50 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold shrink-0">
+          <button type="button" id="mobRepShareBtn" class="py-2.5 px-3 bg-green-600 hover:bg-green-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+            <i class="fa-solid fa-share-nodes"></i> Share / WhatsApp
+          </button>
+          <a href="${dataHtmlUri}" download="${escapeHTML(htmlFilename)}" id="mobRepDownloadBtn" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+            <i class="fa-solid fa-download"></i> Save Report
+          </a>
+          <button type="button" id="mobRepPrintBtn" class="py-2.5 px-3 bg-red-600 hover:bg-red-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+            <i class="fa-solid fa-print"></i> Print / PDF
+          </button>
+          <button type="button" id="mobRepCopyBtn" class="py-2.5 px-3 bg-gray-800 hover:bg-gray-900 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer">
+            <i class="fa-solid fa-copy"></i> Copy Text
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
+
+    // Build clean plain text summary for WhatsApp / Copy
+    const buildSummaryText = () => {
+      let txt = `📊 *${hotelName}*\n*${reportTitle}*\n${subtitle}\n-------------------\n`;
+      if (summaryCards && summaryCards.length > 0) {
+        summaryCards.forEach(c => { txt += `▪️ ${c.label}: *${c.value}*\n`; });
+        txt += `-------------------\n`;
+      }
+      txt += columns.map(c => c.label).join(" | ") + "\n";
+      rows.slice(0, 40).forEach(r => { txt += r.join(" | ") + "\n"; });
+      if (rows.length > 40) txt += `... (+${rows.length - 40} more rows)\n`;
+      return txt;
+    };
+
+    modal.querySelector("#mobRepShareBtn").onclick = async () => {
+      // 1. Try Capacitor Filesystem + Share
+      if (window.Capacitor?.Plugins?.Filesystem && window.Capacitor?.Plugins?.Share) {
+        try {
+          const res = await window.Capacitor.Plugins.Filesystem.writeFile({
+            path: htmlFilename,
+            data: b64Html,
+            directory: 'CACHE'
+          });
+          await window.Capacitor.Plugins.Share.share({ title: reportTitle, url: res.uri });
+          return;
+        } catch (e) {}
+      }
+      // 2. Try Web Share API with File
+      try {
+        const file = new File([fullHtml], htmlFilename, { type: "text/html" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: reportTitle, files: [file] });
+          return;
+        }
+        if (navigator.share) {
+          await navigator.share({ title: reportTitle, text: buildSummaryText() });
+          return;
+        }
+      } catch (err) {
+        if (err.name === "AbortError") return;
+      }
+      // 3. Fallback: Open WhatsApp directly
+      window.open(`https://wa.me/?text=${encodeURIComponent(buildSummaryText())}`, "_blank");
+    };
+
+    modal.querySelector("#mobRepCopyBtn").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(buildSummaryText());
+        showLiveToast("📋 Copied!", "වාර්තාවේ දත්ත Copy විය.", "success", "fa-copy");
+      } catch (e) {
+        showLiveToast("⚠️ Copy Failed", "Copy කිරීමට අවසර නැත.", "warning", "fa-triangle-exclamation");
+      }
+    };
+
+    modal.querySelector("#mobRepPrintBtn").onclick = () => {
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(fullHtml);
+      doc.close();
+      iframe.contentWindow.focus();
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.print();
+        } catch (e) {
+          window.print();
+        } finally {
+          setTimeout(() => iframe.remove(), 2000);
+        }
+      }, 300);
+    };
+    return;
+  }
+
+  // 3. DESKTOP BROWSER FALLBACK
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
@@ -372,7 +602,6 @@ export async function generateReportPDF({
     }
   }, 350);
 }
-
 // 6. DEBOUNCE HELPER
 export function debounce(func, wait = 250) {
   let timeout;
