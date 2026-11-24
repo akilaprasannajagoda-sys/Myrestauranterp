@@ -63,11 +63,12 @@ jobs:
           # 🚀 AUTO-INJECT PACKAGE.JSON VERSION INTO APP.JS (PERMANENT FIX)
           VERSION=$(node -p "require('./package.json').version")
           sed -i "s/const CURRENT_MOBILE_VERSION = .*/const CURRENT_MOBILE_VERSION = \"$VERSION\";/g" dist-mobile/app.js
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/filesystem@latest @capacitor/share@latest @capgo/capacitor-pdf-generator@latest @capgo/capacitor-printer@latest
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/filesystem@latest @capacitor/share@latest
 
       - name: 🤖 Initialize Android Project & Sync
         run: |
           npx cap add android || true
+          sed -i 's/minSdkVersion = .*/minSdkVersion = 24/g' android/variables.gradle 2>/dev/null || true
           npx cap sync android
 
       - name: ⚙️ Build Debug APK with Gradle
