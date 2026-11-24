@@ -46,10 +46,10 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: 🟢 Setup Node.js 22
+      - name: 🟢 Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: 📦 Prepare Mobile Assets & Install Dependencies
         run: |
@@ -62,40 +62,20 @@ jobs:
           cp -r vendor dist-mobile/
           VERSION=$(node -p "require('./package.json').version")
           sed -i "s/const CURRENT_MOBILE_VERSION = .*/const CURRENT_MOBILE_VERSION = \"$VERSION\";/g" dist-mobile/app.js
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/filesystem@latest @capacitor/share@latest
+          npm install @capacitor/core@6.1.2 @capacitor/cli@6.1.2 @capacitor/android@6.1.2 @capacitor/filesystem@6.0.1 @capacitor/share@6.0.2
 
-      - name: 🤖 Initialize Android Project & Sync
+      - name: 🤖 Generate Clean Android Project & Sync
         run: |
-          npx cap add android || true
+          # පරණ ගැටුම් ඇතිවන android folder එක මකා අලුත්ම එකක් සාදයි (Zero Conflict)
+          rm -rf android
+          npx cap add android
           npx cap sync android
-
-          # 🛡️ 1. Android SDK Versions ගැළපීම (Capacitor 6/7 සඳහා API 34+ අනිවාර්යයි)
-          if [ -f "android/variables.gradle" ]; then
-            sed -i 's/minSdkVersion = .*/minSdkVersion = 24/g' android/variables.gradle
-            sed -i 's/compileSdkVersion = .*/compileSdkVersion = 34/g' android/variables.gradle
-            sed -i 's/targetSdkVersion = .*/targetSdkVersion = 34/g' android/variables.gradle
-          fi
-
-          # 🛡️ 2. AndroidManifest.xml හි Manifest Merger ගැටුම් සහ exported=true ස්වයංක්‍රීයව විසඳීම
-          if [ -f "android/app/src/main/AndroidManifest.xml" ]; then
-            sed -i 's/<manifest /<manifest xmlns:tools="http:\/\/schemas.android.com\/tools" /g' android/app/src/main/AndroidManifest.xml
-            sed -i 's/<application /<application tools:replace="android:allowBackup" /g' android/app/src/main/AndroidManifest.xml
-            sed -i 's/<activity/<activity android:exported="true"/g' android/app/src/main/AndroidManifest.xml
-            # අතිරික්ත tags ඉවත් කිරීම (Clean-up duplicates)
-            sed -i 's/xmlns:tools="http:\/\/schemas.android.com\/tools" xmlns:tools="http:\/\/schemas.android.com\/tools"/xmlns:tools="http:\/\/schemas.android.com\/tools"/g' android/app/src/main/AndroidManifest.xml
-            sed -i 's/tools:replace="android:allowBackup" tools:replace="android:allowBackup"/tools:replace="android:allowBackup"/g' android/app/src/main/AndroidManifest.xml
-            sed -i 's/android:exported="true" android:exported="true"/android:exported="true"/g' android/app/src/main/AndroidManifest.xml
-          fi
 
       - name: ⚙️ Build Debug APK with Gradle
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace || {
-            echo "❌ Build failed! Printing Manifest Merger report below:"
-            cat app/build/outputs/logs/manifest-merger-debug-report.txt 2>/dev/null || true
-            exit 1
-          }
+          ./gradlew assembleDebug
 
       - name: 🏷️ Get Version from package.json & Prepare APK
         id: prep_apk
