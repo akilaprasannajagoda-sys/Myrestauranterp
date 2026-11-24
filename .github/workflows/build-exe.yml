@@ -69,9 +69,6 @@ jobs:
         run: |
           npx cap add android || true
           npx cap sync android
-          if [ -f android/app/src/main/AndroidManifest.xml ] && ! grep -q "WRITE_EXTERNAL_STORAGE" android/app/src/main/AndroidManifest.xml; then
-            sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
-          fi
 
       - name: ⚙️ Build Debug APK with Gradle
         run: |
