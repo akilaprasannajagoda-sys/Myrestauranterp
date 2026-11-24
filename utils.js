@@ -203,7 +203,23 @@ function isMobileOrApkClient() {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || !!(window.Capacitor || window.cordova);
 }
 
-// 5. ACCURATE SINHALA UTF-8 BOM CSV EXPORT HELPER (DESKTOP + MOBILE APK COMPATIBLE)
+// 🔌 DYNAMIC CAPACITOR PLUGIN LOCATOR
+function findCapPlugin(keywords) {
+  const plugins = window.Capacitor?.Plugins;
+  if (!plugins) return null;
+  for (const k of keywords) {
+    if (plugins[k]) return plugins[k];
+  }
+  for (const key of Object.keys(plugins)) {
+    const lower = key.toLowerCase();
+    if (keywords.some(kw => lower.includes(kw.toLowerCase()))) {
+      return plugins[key];
+    }
+  }
+  return null;
+}
+
+// 5. ACCURATE SINHALA UTF-8 BOM CSV EXPORT HELPER (DESKTOP + NATIVE ANDROID APK)
 export async function downloadCSVFile(csvContent, filename) {
   const BOM = "\uFEFF";
   const fullCsv = BOM + csvContent;
@@ -221,45 +237,47 @@ export async function downloadCSVFile(csvContent, filename) {
     return;
   }
 
-  // 2. Capacitor Native Mobile Filesystem + Share (If Capacitor Plugins Exist)
-  if (window.Capacitor?.Plugins?.Filesystem) {
+  const CapFS = findCapPlugin(["Filesystem"]);
+  const CapShare = findCapPlugin(["Share"]);
+  const b64Csv = utf8ToBase64(fullCsv);
+
+  // 2. Try Direct Save to Device Documents in Mobile APK
+  let savedToDevice = false;
+  if (CapFS) {
     try {
-      const fs = window.Capacitor.Plugins.Filesystem;
-      const b64 = utf8ToBase64(fullCsv);
-      const res = await fs.writeFile({
+      await CapFS.writeFile({
         path: filename,
-        data: b64,
-        directory: 'DOCUMENTS'
+        data: b64Csv,
+        directory: "DOCUMENTS",
+        recursive: true
       });
-      showLiveToast("📊 Saved to Documents", `${filename} Documents ෆෝල්ඩරයට සේව් විය.`, "success", "fa-file-excel");
-      if (window.Capacitor?.Plugins?.Share) {
-        await window.Capacitor.Plugins.Share.share({ title: filename, url: res.uri });
-      }
-      return;
-    } catch (capErr) {
-      console.warn("Capacitor FS pass:", capErr);
+      savedToDevice = true;
+      showLiveToast("📊 Saved to Documents!", `${filename} ඔබේ Phone එකේ Documents ෆෝල්ඩරයට Save විය.`, "success", "fa-file-excel");
+    } catch (docErr) {
+      console.warn("Direct Documents write pass:", docErr);
     }
   }
 
-  // 3. Mobile APK / WebView Export Hub Modal (Never fails silently!)
+  // 3. Mobile APK / WebView Export Hub Modal (Save / Share Real CSV / Copy)
   const existing = document.getElementById("mobileCsvExportModal");
   if (existing) existing.remove();
 
-  const b64Csv = utf8ToBase64(fullCsv);
   const dataUri = `data:text/csv;charset=utf-8;base64,${b64Csv}`;
   const previewRows = csvContent.trim().split("\n").slice(0, 15);
 
   const modal = document.createElement("div");
-modal.id = "mobileCsvExportModal";
-modal.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; padding: 12px; box-sizing: border-box;";
-modal.innerHTML = `
+  modal.id = "mobileCsvExportModal";
+  modal.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; padding: 12px; box-sizing: border-box;";
+  modal.innerHTML = `
     <div style="background: #ffffff; border-radius: 20px; width: 100%; max-width: 520px; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
       <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb; flex-shrink: 0;">
         <div style="min-width: 0; padding-right: 8px;">
           <h4 style="margin: 0; font-weight: 900; font-size: 14px; color: #1f2937; display: flex; align-items: center; gap: 6px;">
             <i class="fa-solid fa-file-excel" style="color: #16a34a;"></i> Excel / CSV Report Ready
           </h4>
-          <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(filename)}</p>
+          <p style="margin: 2px 0 0 0; font-size: 10px; color: ${savedToDevice ? '#16a34a' : '#6b7280'}; font-weight: 700; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${savedToDevice ? '✅ Saved in Documents/' : ''}${escapeHTML(filename)}
+          </p>
         </div>
         <button type="button" id="closeMobileCsvBtn" style="width: 34px; height: 34px; border-radius: 10px; background: #ef4444; color: #ffffff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 15px;">
           <i class="fa-solid fa-xmark"></i>
@@ -272,10 +290,10 @@ ${escapeHTML(previewRows.join("\n"))}${csvContent.trim().split("\n").length > 15
 
       <div style="padding: 10px 12px; border-top: 1px solid #e5e7eb; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 11px; font-weight: 700; flex-shrink: 0;">
         <a href="${dataUri}" download="${escapeHTML(filename)}" id="mobCsvDownloadBtn" style="padding: 10px 6px; background: #2563eb; color: #ffffff; border-radius: 10px; text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;">
-          <i class="fa-solid fa-download"></i> CSV
+          <i class="fa-solid fa-download"></i> Save CSV
         </a>
         <button type="button" id="mobCsvShareBtn" style="padding: 10px 6px; background: #16a34a; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-          <i class="fa-solid fa-share-nodes"></i> Share
+          <i class="fa-solid fa-share-nodes"></i> Share File
         </button>
         <button type="button" id="mobCsvCopyBtn" style="padding: 10px 6px; background: #1e293b; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
           <i class="fa-solid fa-copy"></i> Copy
@@ -283,10 +301,28 @@ ${escapeHTML(previewRows.join("\n"))}${csvContent.trim().split("\n").length > 15
       </div>
     </div>
   `;
-document.body.appendChild(modal);
+  document.body.appendChild(modal);
 
-modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
+
+  modal.querySelector("#mobCsvDownloadBtn").onclick = async (e) => {
+    if (CapFS) {
+      e.preventDefault();
+      try {
+        await CapFS.writeFile({ path: filename, data: b64Csv, directory: "DOCUMENTS", recursive: true });
+        showLiveToast("📊 Saved!", `${filename} Documents ෆෝල්ඩරයට Save විය.`, "success", "fa-file-excel");
+        return;
+      } catch (err) {
+        if (CapShare) {
+          await CapFS.writeFile({ path: filename, data: b64Csv, directory: "CACHE" });
+          const uriRes = await CapFS.getUri({ directory: "CACHE", path: filename });
+          await CapShare.share({ title: filename, files: [uriRes.uri] });
+          return;
+        }
+      }
+    }
+  };
 
   modal.querySelector("#mobCsvCopyBtn").onclick = async () => {
     try {
@@ -298,6 +334,16 @@ modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
   };
 
   modal.querySelector("#mobCsvShareBtn").onclick = async () => {
+    if (CapFS && CapShare) {
+      try {
+        await CapFS.writeFile({ path: filename, data: b64Csv, directory: "CACHE" });
+        const uriRes = await CapFS.getUri({ directory: "CACHE", path: filename });
+        await CapShare.share({ title: filename, files: [uriRes.uri] });
+        return;
+      } catch (capShareErr) {
+        console.warn("Cap CSV share pass:", capShareErr);
+      }
+    }
     try {
       const file = new File([fullCsv], filename, { type: "text/csv" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -315,7 +361,7 @@ modal.querySelector("#closeMobileCsvBtn").onclick = () => modal.remove();
   };
 }
 
-// 📄 5.1 100% DIRECT DOWNLOAD VECTOR PDF REPORT GENERATOR (DESKTOP + MOBILE APK VIEWER)
+// 📄 5.1 100% DIRECT DOWNLOAD VECTOR PDF REPORT GENERATOR (DESKTOP + NATIVE ANDROID APK)
 export async function generateReportPDF({
   reportTitle = "Official Report",
   subtitle = "",
@@ -448,18 +494,23 @@ export async function generateReportPDF({
     }
   }
 
-  // 2. MOBILE APK & WEB BROWSER INTERACTIVE VIEWER + EXPORT HUB
+  // 2. MOBILE APK & WEB BROWSER INTERACTIVE VIEWER + NATIVE PDF EXPORT HUB
   if (isMobileOrApkClient()) {
     const existing = document.getElementById("mobileReportViewerModal");
     if (existing) existing.remove();
+
+    const CapFS = findCapPlugin(["Filesystem"]);
+    const CapShare = findCapPlugin(["Share"]);
+    const CapPdf = findCapPlugin(["PdfGenerator"]);
+    const CapPrinter = findCapPlugin(["Printer"]);
 
     const b64Html = utf8ToBase64(fullHtml);
     const dataHtmlUri = `data:text/html;charset=utf-8;base64,${b64Html}`;
 
     const modal = document.createElement("div");
-modal.id = "mobileReportViewerModal";
-modal.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.82); display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box;";
-modal.innerHTML = `
+    modal.id = "mobileReportViewerModal";
+    modal.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0,0,0,0.82); display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box;";
+    modal.innerHTML = `
       <div style="background: #ffffff; border-radius: 20px; width: 100%; max-width: 850px; height: 86vh; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
         <!-- Fixed Top Bar -->
         <div style="padding: 12px 14px; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; background: #111827; color: #ffffff; flex-shrink: 0;">
@@ -482,10 +533,10 @@ modal.innerHTML = `
         <!-- Fixed Bottom Action Buttons Bar -->
         <div style="padding: 10px 12px; border-top: 1px solid #e5e7eb; background: #f8fafc; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 11px; font-weight: 700; flex-shrink: 0;">
           <button type="button" id="mobRepShareBtn" style="padding: 10px 8px; background: #16a34a; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
-            <i class="fa-solid fa-share-nodes"></i> Share / WhatsApp
+            <i class="fa-solid fa-share-nodes"></i> Share PDF / WhatsApp
           </button>
           <a href="${dataHtmlUri}" download="${escapeHTML(htmlFilename)}" id="mobRepDownloadBtn" style="padding: 10px 8px; background: #2563eb; color: #ffffff; border-radius: 10px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            <i class="fa-solid fa-download"></i> Save Report
+            <i class="fa-solid fa-download"></i> Save PDF
           </a>
           <button type="button" id="mobRepPrintBtn" style="padding: 10px 8px; background: #dc2626; color: #ffffff; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
             <i class="fa-solid fa-print"></i> Print / PDF
@@ -496,10 +547,23 @@ modal.innerHTML = `
         </div>
       </div>
     `;
-document.body.appendChild(modal);
+    document.body.appendChild(modal);
 
-modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
+
+    // Helper: Generate Native Real PDF Base64 using Capgo PDF Generator
+    const generateRealPdfBase64 = async () => {
+      if (!CapPdf) return null;
+      const res = await CapPdf.fromData({
+        data: fullHtml,
+        documentSize: "A4",
+        orientation: isLandscape ? "landscape" : "portrait",
+        type: "base64",
+        fileName: defaultFilename
+      });
+      return res?.base64 || null;
+    };
 
     // Build clean plain text summary for WhatsApp / Copy
     const buildSummaryText = () => {
@@ -514,20 +578,57 @@ modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
       return txt;
     };
 
-    modal.querySelector("#mobRepShareBtn").onclick = async () => {
-      // 1. Try Capacitor Filesystem + Share
-      if (window.Capacitor?.Plugins?.Filesystem && window.Capacitor?.Plugins?.Share) {
+    // 📥 SAVE REAL PDF TO DEVICE DOCUMENTS
+    modal.querySelector("#mobRepDownloadBtn").onclick = async (e) => {
+      if (CapFS) {
+        e.preventDefault();
         try {
-          const res = await window.Capacitor.Plugins.Filesystem.writeFile({
-            path: htmlFilename,
-            data: b64Html,
-            directory: 'CACHE'
-          });
-          await window.Capacitor.Plugins.Share.share({ title: reportTitle, url: res.uri });
-          return;
-        } catch (e) {}
+          showLiveToast("⏳ Saving PDF...", "PDF ගොනුව සකස් කරමින් පවතී...", "info", "fa-spinner fa-spin");
+          const pdfB64 = await generateRealPdfBase64();
+          const targetName = pdfB64 ? defaultFilename : htmlFilename;
+          const targetData = pdfB64 || b64Html;
+
+          try {
+            await CapFS.writeFile({
+              path: targetName,
+              data: targetData,
+              directory: "DOCUMENTS",
+              recursive: true
+            });
+            showLiveToast("📄 Saved to Documents!", `${targetName} ඔබගේ Phone එකේ Documents ෆෝල්ඩරයට Save විය!`, "success", "fa-file-pdf");
+            return;
+          } catch (docErr) {
+            if (CapShare) {
+              await CapFS.writeFile({ path: targetName, data: targetData, directory: "CACHE" });
+              const uriRes = await CapFS.getUri({ directory: "CACHE", path: targetName });
+              await CapShare.share({ title: reportTitle, files: [uriRes.uri] });
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("Native PDF save fallback:", err);
+        }
       }
-      // 2. Try Web Share API with File
+      showLiveToast("ℹ️ Save Notice", "ගොනුව Save කිරීමට 'Share PDF / WhatsApp' හෝ 'Print / PDF' භාවිත කරන්න.", "info", "fa-circle-info");
+    };
+
+    // 📲 SHARE REAL PDF FILE (OR FALLBACK TO WHATSAPP TEXT)
+    modal.querySelector("#mobRepShareBtn").onclick = async () => {
+      if (CapFS && CapShare) {
+        try {
+          showLiveToast("⏳ Preparing PDF...", "PDF ගොනුව Share කිරීමට සූදානම් වේ...", "info", "fa-spinner fa-spin");
+          const pdfB64 = await generateRealPdfBase64();
+          const targetName = pdfB64 ? defaultFilename : htmlFilename;
+          const targetData = pdfB64 || b64Html;
+
+          await CapFS.writeFile({ path: targetName, data: targetData, directory: "CACHE" });
+          const uriRes = await CapFS.getUri({ directory: "CACHE", path: targetName });
+          await CapShare.share({ title: reportTitle, files: [uriRes.uri] });
+          return;
+        } catch (capErr) {
+          console.warn("Capacitor PDF share fallback:", capErr);
+        }
+      }
       try {
         const file = new File([fullHtml], htmlFilename, { type: "text/html" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -541,10 +642,10 @@ modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
       } catch (err) {
         if (err.name === "AbortError") return;
       }
-      // 3. Fallback: Open WhatsApp directly
       window.open(`https://wa.me/?text=${encodeURIComponent(buildSummaryText())}`, "_blank");
     };
 
+    // 📋 COPY TEXT
     modal.querySelector("#mobRepCopyBtn").onclick = async () => {
       try {
         await navigator.clipboard.writeText(buildSummaryText());
@@ -554,7 +655,16 @@ modal.querySelector("#closeMobReportBtn").onclick = () => modal.remove();
       }
     };
 
-    modal.querySelector("#mobRepPrintBtn").onclick = () => {
+    // 🖨️ NATIVE ANDROID PRINT MANAGER (SAVE AS PDF / WIFI PRINTER)
+    modal.querySelector("#mobRepPrintBtn").onclick = async () => {
+      if (CapPrinter) {
+        try {
+          await CapPrinter.printHtml({ name: reportTitle, html: fullHtml });
+          return;
+        } catch (printErr) {
+          console.warn("CapPrinter fallback:", printErr);
+        }
+      }
       const iframe = document.createElement("iframe");
       iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
       document.body.appendChild(iframe);
